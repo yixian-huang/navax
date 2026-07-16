@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -154,6 +155,12 @@ func (h *AuthHandler) register(w http.ResponseWriter, r *http.Request) {
 
 func (h *AuthHandler) writeAuthError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
+	case errors.Is(err, auth.ErrTooManyAttempts):
+		var throttled *auth.ThrottledError
+		if errors.As(err, &throttled) {
+			w.Header().Set("Retry-After", strconv.Itoa(max(1, int(throttled.RetryAfter.Seconds()))))
+		}
+		WriteError(w, r, http.StatusTooManyRequests, "RATE_LIMITED", "登录尝试过于频繁，请稍后再试", nil)
 	case errors.Is(err, auth.ErrInvalidCredentials):
 		WriteError(w, r, http.StatusUnauthorized, "INVALID_CREDENTIALS", "邮箱或密码错误", nil)
 	case errors.Is(err, auth.ErrAccountDisabled):

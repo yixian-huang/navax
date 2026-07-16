@@ -17,6 +17,7 @@ import (
 var (
 	ErrInvalidCredentials  = errors.New("invalid credentials")
 	ErrAccountDisabled     = errors.New("account disabled")
+	ErrTooManyAttempts     = errors.New("too many login attempts")
 	ErrAlreadyInitialized  = errors.New("instance already initialized")
 	ErrInvalidSetupToken   = errors.New("invalid setup token")
 	ErrInvitationInvalid   = errors.New("invitation is invalid")
@@ -24,6 +25,16 @@ var (
 	ErrInvitationExhausted = errors.New("invitation is exhausted")
 	ErrConflict            = errors.New("identity conflict")
 )
+
+// ThrottledError is returned by Login when the per-account backoff has engaged.
+// It carries the remaining wait so the HTTP layer can set a Retry-After header.
+type ThrottledError struct {
+	RetryAfter time.Duration
+}
+
+func (e *ThrottledError) Error() string { return "too many login attempts" }
+
+func (e *ThrottledError) Is(target error) bool { return target == ErrTooManyAttempts }
 
 type User struct {
 	ID           string
@@ -108,10 +119,11 @@ type Service struct {
 	setupToken string
 	sessionTTL time.Duration
 	now        func() time.Time
+	throttle   *loginThrottle
 }
 
 func NewService(store Store, setupToken string, sessionTTL time.Duration) *Service {
-	return &Service{store: store, setupToken: setupToken, sessionTTL: sessionTTL, now: time.Now}
+	return &Service{store: store, setupToken: setupToken, sessionTTL: sessionTTL, now: time.Now, throttle: newLoginThrottle()}
 }
 
 func (s *Service) Initialized(ctx context.Context) (bool, error) {
@@ -171,17 +183,25 @@ func (s *Service) Login(ctx context.Context, email, password, device string) (Se
 	if len(email) > 254 || len(password) < 1 || len(password) > 1024 {
 		return Session{}, "", ErrInvalidCredentials
 	}
-	user, err := s.store.UserByEmail(ctx, normalizeEmail(email))
+	key := normalizeEmail(email)
+	now := s.now()
+	if retryAfter, blocked := s.throttle.retryAfter(key, now); blocked {
+		return Session{}, "", &ThrottledError{RetryAfter: retryAfter}
+	}
+	user, err := s.store.UserByEmail(ctx, key)
 	if err != nil {
+		s.throttle.fail(key, now)
 		return Session{}, "", ErrInvalidCredentials
 	}
 	valid, verifyErr := security.VerifyPassword(user.PasswordHash, password)
 	if verifyErr != nil || !valid {
+		s.throttle.fail(key, now)
 		return Session{}, "", ErrInvalidCredentials
 	}
 	if user.Status != "active" {
 		return Session{}, "", ErrAccountDisabled
 	}
+	s.throttle.success(key)
 	return s.createSession(ctx, user, device)
 }
 

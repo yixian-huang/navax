@@ -105,6 +105,37 @@ func TestLoginRejectsWrongPasswordAndDisabledUser(t *testing.T) {
 	}
 }
 
+func TestLoginThrottleBlocksThenRecovers(t *testing.T) {
+	store := newFakeStore()
+	service := NewService(store, "01234567890123456789012345678901", time.Hour)
+	clock := time.Date(2026, 7, 16, 0, 0, 0, 0, time.UTC)
+	service.now = func() time.Time { return clock }
+	if _, _, err := service.Bootstrap(context.Background(), "01234567890123456789012345678901", BootstrapInput{
+		Username: "admin", Email: "admin@example.com", Password: "strong password", InstanceName: "nav.ax", PublicBaseURL: "https://nav.ax",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < service.throttle.threshold; i++ {
+		if _, _, err := service.Login(context.Background(), "admin@example.com", "wrong", "test"); !errors.Is(err, ErrInvalidCredentials) {
+			t.Fatalf("attempt %d error = %v", i, err)
+		}
+	}
+	// Even the correct password is refused while the account is locked.
+	_, _, err := service.Login(context.Background(), "admin@example.com", "strong password", "test")
+	if !errors.Is(err, ErrTooManyAttempts) {
+		t.Fatalf("locked login error = %v, want ErrTooManyAttempts", err)
+	}
+	var throttled *ThrottledError
+	if !errors.As(err, &throttled) || throttled.RetryAfter <= 0 {
+		t.Fatalf("throttled error carries no retry-after: %v", err)
+	}
+	// After the window elapses, the correct password succeeds and clears state.
+	clock = clock.Add(service.throttle.baseLock + time.Second)
+	if _, _, err := service.Login(context.Background(), "admin@example.com", "strong password", "test"); err != nil {
+		t.Fatalf("login after lock window = %v", err)
+	}
+}
+
 func TestRegisterUsesInvitationHashAndCreatesPersonalPage(t *testing.T) {
 	store := newFakeStore()
 	service := NewService(store, "01234567890123456789012345678901", time.Hour)
