@@ -53,7 +53,7 @@ import { cn } from '@/lib/utils';
 import SiteTable, { type FlatSite } from '@/pages/app/links/components/SiteTable';
 import BatchLinkChecker from '@/pages/app/links/components/BatchLinkChecker';
 import IconRenderer from '@/components/base/IconRenderer';
-import type { NavigationPage, Category, Site } from '@/api/types';
+import type { NavigationPage, Category, Site, Density } from '@/api/types';
 
 type Viewport = 'desktop' | 'tablet' | 'mobile';
 
@@ -448,11 +448,14 @@ export default function LinksPage() {
   // ---- Layout settings ----
   const setDensity = useCallback(
     (d: string) => {
-      if (!page) return;
-      setLocalPage(prev => ({
-        ...(prev || page),
-        layout: { ...(prev || page).layout, density: d as NavigationPage['layout']['density'] },
-      }));
+      if (!page?.settings) return;
+      setLocalPage(prev => {
+        const base = prev || page;
+        return {
+          ...base,
+          settings: { ...base.settings, layout: { ...base.settings.layout, density: d as Density } },
+        };
+      });
       setHasLayoutChanges(true);
     },
     [page],
@@ -460,11 +463,14 @@ export default function LinksPage() {
 
   const setColumns = useCallback(
     (c: number) => {
-      if (!page) return;
-      setLocalPage(prev => ({
-        ...(prev || page),
-        layout: { ...(prev || page).layout, columns: c },
-      }));
+      if (!page?.settings) return;
+      setLocalPage(prev => {
+        const base = prev || page;
+        return {
+          ...base,
+          settings: { ...base.settings, layout: { ...base.settings.layout, columns: c } },
+        };
+      });
       setHasLayoutChanges(true);
     },
     [page],
@@ -475,8 +481,7 @@ export default function LinksPage() {
     markSaving();
     saveComposition.mutate({
       categories: page.categories.map(category => ({ id: category.id, siteIds: category.sites.map(site => site.id) })),
-      layout: page.layout,
-      template: homeLayout,
+      settings: page.settings,
     }, {
       onSuccess: () => {
         markSaved();
@@ -485,7 +490,7 @@ export default function LinksPage() {
       },
       onError: () => markError('保存布局失败'),
     });
-  }, [page, homeLayout, saveComposition, markSaving, markSaved, markError]);
+  }, [page, saveComposition, markSaving, markSaved, markError]);
 
   // ---- Loading ----
   if (isLoading) return <LoadingSkeleton count={4} />;
@@ -880,7 +885,7 @@ export default function LinksPage() {
                   onClick={() => setDensity(d)}
                   className={cn(
                     'flex-1 py-1 rounded text-[10px] font-medium transition-colors duration-150 whitespace-nowrap',
-                    page.layout.density === d
+                    page.settings.layout.density === d
                       ? 'bg-white text-foreground-900 shadow-sm'
                       : 'text-foreground-400 hover:text-foreground-600',
                   )}
@@ -894,13 +899,13 @@ export default function LinksPage() {
           <div className="space-y-1">
             <div className="flex items-center justify-between">
               <span className="text-[10px] text-foreground-400">列数</span>
-              <span className="text-[10px] font-mono text-foreground-600">{page.layout.columns}</span>
+              <span className="text-[10px] font-mono text-foreground-600">{page.settings.layout.columns}</span>
             </div>
             <input
               type="range"
               min={4}
               max={12}
-              value={page.layout.columns}
+              value={page.settings.layout.columns}
               onChange={e => setColumns(Number(e.target.value))}
               className="w-full accent-primary-500 h-1"
             />
@@ -991,8 +996,8 @@ export default function LinksPage() {
                       <SortableCategoryBlock
                         key={cat.id}
                         category={cat}
-                        density={page.layout.density}
-                        columns={page.layout.columns}
+                        density={page.settings.layout.density}
+                        columns={page.settings.layout.columns}
                         isOver={overCategoryId === cat.id}
                       />
                     ))}

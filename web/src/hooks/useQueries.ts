@@ -12,7 +12,6 @@ import type {
   CreateCategoryRequest,
   CreateSiteRequest,
   UpdateSiteRequest,
-  LayoutConfig,
   PageKind,
   PageSettings,
   PublicationSettingsUpdate,
@@ -111,40 +110,6 @@ export function useMyPage(scopeOverride?: PageKind) {
   });
 }
 
-export function useUpdateLayout() {
-  const qc = useQueryClient();
-  const scope = usePageScope();
-  const { data: page } = useMyPage(scope);
-  return useMutation({
-    mutationFn: async (layout: LayoutConfig) => {
-      if (!page) throw new Error('导航页尚未加载');
-      const settings = page.settings;
-      if (!settings) throw new Error('页面设置缺失');
-      return navigationApi.forPage(page.id).replaceSettings({
-        ...settings,
-        layout: {
-          ...settings.layout,
-          density: layout.density,
-          columns: layout.columns,
-          categoryStyle: layout.categoryStyle,
-        },
-        display: {
-          ...settings.display,
-          showClock: layout.showClock,
-          showDate: layout.showDate,
-        },
-        expectedRevision: page.draftRevision ?? 0,
-      });
-    },
-    onSuccess: async () => {
-      await Promise.all([
-        qc.invalidateQueries({ queryKey: ['navigation', 'page', scope] }),
-        qc.invalidateQueries({ queryKey: ['navigation', 'publication', scope] }),
-      ]);
-    },
-  });
-}
-
 export function useUpdatePageSettings() {
   const qc = useQueryClient();
   const scope = usePageScope();
@@ -161,22 +126,6 @@ export function useUpdatePageSettings() {
   });
 }
 
-export function useReplaceContentOrder() {
-  const qc = useQueryClient();
-  const scope = usePageScope();
-  const { data: page } = useMyPage(scope);
-  return useMutation({
-    mutationFn: async (categories: { id: string; siteIds: string[] }[]) => {
-      if (!page) throw new Error('导航页尚未加载');
-      return navigationApi.forPage(page.id).replaceContentOrder({
-        expectedRevision: page.draftRevision ?? 0,
-        categories,
-      });
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['navigation', 'page', scope] }),
-  });
-}
-
 export function useSavePageComposition() {
   const queryClient = useQueryClient();
   const scope = usePageScope();
@@ -184,8 +133,7 @@ export function useSavePageComposition() {
   return useMutation({
     mutationFn: async (input: {
       categories: { id: string; siteIds: string[] }[];
-      layout: LayoutConfig;
-      template: PageSettings['layout']['template'];
+      settings: PageSettings;
     }) => {
       if (!page?.settings) throw new Error('页面设置尚未加载');
       const api = navigationApi.forPage(page.id);
@@ -194,19 +142,7 @@ export function useSavePageComposition() {
         categories: input.categories,
       });
       return api.replaceSettings({
-        ...page.settings,
-        layout: {
-          ...page.settings.layout,
-          template: input.template,
-          density: input.layout.density,
-          columns: input.layout.columns,
-          categoryStyle: input.layout.categoryStyle,
-        },
-        display: {
-          ...page.settings.display,
-          showClock: input.layout.showClock,
-          showDate: input.layout.showDate,
-        },
+        ...input.settings,
         expectedRevision: orderResponse.data.draftRevision,
       });
     },

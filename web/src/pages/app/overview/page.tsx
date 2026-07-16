@@ -47,7 +47,7 @@ export default function AppOverview() {
   const domainSubdomain = subdomainData?.label ?? subdomainData?.subdomain ?? '';
   const publication = page.publication;
   const isPublished = publication?.published ?? false;
-  const slug = publication?.slug ?? page.slug;
+  const slug = publication?.slug ?? '';
   const withScope = (path: string) => `${path}?scope=${scope}`;
 
   const quickActions = [

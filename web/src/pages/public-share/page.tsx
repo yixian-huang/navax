@@ -237,7 +237,7 @@ export default function PublicSharePage() {
             {page.subdomainStatus === 'none' && (
               <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-background-100 border border-background-200/70 text-[11px] text-foreground-400">
                 <Globe className="w-3 h-3" />
-                {window.location.hostname}/u/{page.slug}
+                {window.location.hostname}/u/{slug}
               </div>
             )}
           </div>

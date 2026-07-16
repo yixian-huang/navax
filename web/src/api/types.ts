@@ -191,32 +191,12 @@ export interface NavigationPageContract {
  * 迁移期页面模型。新代码应优先读取 settings/publication/sites。
  * API 适配层会将 OpenAPI 草稿模型归一化为此页面模型；兼容字段仅服务显式开发 Mock。
  */
-export interface NavigationPage extends Partial<NavigationPageContract> {
-  id: string;
-  ownerId: string | null;
-  ownerName: string;
-  /** @deprecated 草稿契约不返回作者头像。 */
-  ownerAvatar?: string;
-  title: string;
-  description: string;
+// UI 草稿页模型：等价于契约，仅把 categories 换成内嵌 sites 的结构。
+// 其余字段（settings、publication、draftRevision 等）直接来自契约。
+export interface NavigationPage extends Omit<NavigationPageContract, 'categories'> {
   categories: Category[];
-  draftUpdatedAt: string;
-  /** @deprecated 使用 publication.slug。 */
-  slug: string;
-  /** @deprecated 使用 publication.published。 */
-  isPublished: boolean;
-  /** @deprecated 使用 settings.appearance.themeId。 */
-  themeId: string;
-  /** @deprecated 使用 settings.layout/display。 */
-  layout: LayoutConfig;
-  /** @deprecated OpenAPI v1 不再提供 widgets。 */
-  widgets: Widget[];
-  /** @deprecated 使用 publication。 */
-  publishSettings: PublishSettings;
-  /** @deprecated 使用 publication.publishedAt。 */
-  publishedAt: string;
-  /** @deprecated 使用 publication.hasUnpublishedChanges。 */
-  hasUnpublishedChanges: boolean;
+  /** 草稿契约不返回作者头像，规范化时补空串。 */
+  ownerAvatar?: string;
 }
 
 /** @deprecated 使用 Publication/PublicationSettingsUpdate。 */
@@ -229,23 +209,19 @@ export interface PublishSettings {
   showAuthor: boolean;
 }
 
+// UI 已发布页模型：契约字段 + owner 展平后的便捷字段。
 export interface PublishedNavigationPage {
   id: string;
   snapshotId?: string;
   kind?: PageKind;
   visibility?: Exclude<Visibility, 'private'>;
-  owner?: { name: string; avatarUrl: string; visible: boolean };
   settings?: PageSettings;
   etag?: string;
   ownerName: string;
   ownerAvatar: string;
   title: string;
-  slug: string;
   description: string;
-  themeId: string;
-  layout: LayoutConfig;
   categories: Category[];
-  widgets: Widget[];
   subdomain: string;
   subdomainStatus: SubdomainStatus | LegacySubdomainStatus;
   publishedAt: string;

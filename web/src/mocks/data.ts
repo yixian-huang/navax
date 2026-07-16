@@ -7,8 +7,9 @@ import type {
   UserProfile,
   AuthSession,
   Invitation,
-  NavigationPage,
-  PublishedNavigationPage,
+  LayoutConfig,
+  PageSettings,
+  PublishSettings,
   Category,
   Site,
   Widget,
@@ -21,8 +22,51 @@ import type {
   SystemSettings,
   PaginatedResponse,
   SubdomainInfo,
+  SubdomainStatus,
+  LegacySubdomainStatus,
   AdminLink,
 } from '@/api/types';
+
+// ---- Mock-internal page state ----
+// Mock 用扁平可变结构作为内部“数据库”，响应时再投影为契约形状。
+// 该结构仅存在于 dev mock 层，不属于生产契约。
+export interface MockPageState {
+  id: string;
+  ownerId: string;
+  ownerName: string;
+  ownerAvatar: string;
+  title: string;
+  slug: string;
+  description: string;
+  isPublished: boolean;
+  themeId: string;
+  layout: LayoutConfig;
+  background?: PageSettings['appearance']['background'];
+  categories: Category[];
+  widgets: Widget[];
+  publishSettings: PublishSettings;
+  draftUpdatedAt: string;
+  publishedAt: string;
+  updatedAt?: string;
+  hasUnpublishedChanges: boolean;
+}
+
+export interface MockPublishedPage {
+  id: string;
+  ownerName: string;
+  ownerAvatar: string;
+  title: string;
+  slug: string;
+  description: string;
+  themeId: string;
+  layout: LayoutConfig;
+  categories: Category[];
+  widgets: Widget[];
+  subdomain: string;
+  subdomainStatus: SubdomainStatus | LegacySubdomainStatus;
+  publishedAt: string;
+  updatedAt: string;
+}
 
 // ---- Current mock user ----
 type MockAuthenticatedSession = AuthSession & { authenticated: true; user: User };
@@ -166,7 +210,7 @@ export const mockWidgets: Widget[] = [
 ];
 
 // ---- Mock Navigation Page (Personal) ----
-export const mockNavigationPage: NavigationPage = {
+export const mockNavigationPage: MockPageState = {
   id: 'page_001',
   ownerId: 'usr_001',
   ownerName: 'lucaspeng',
@@ -280,7 +324,7 @@ export const mockSystemWidgets: Widget[] = [
 ];
 
 // ---- System Navigation Page ----
-export const mockSystemPage: NavigationPage = {
+export const mockSystemPage: MockPageState = {
   id: 'page_system',
   ownerId: 'system',
   ownerName: 'nav.ax',
@@ -300,7 +344,7 @@ export const mockSystemPage: NavigationPage = {
 };
 
 // ---- Mock Published Page ----
-export const mockPublishedPage: PublishedNavigationPage = {
+export const mockPublishedPage: MockPublishedPage = {
   id: 'page_001',
   ownerName: 'lucaspeng',
   ownerAvatar: mockAuthUser.user.avatarUrl,

@@ -16,7 +16,6 @@ import type {
   ImportPreview,
   ImportResult,
   LinkCheckResult,
-  LayoutConfig,
   NavigationPage,
   NavigationPageContract,
   PageKind,
@@ -28,124 +27,49 @@ import type {
   PublicationSettingsUpdate,
   PublishedNavigationPage,
   PublishedPageContract,
-  PublishSettings,
   ReorderRequest,
   Site,
   SubdomainInfo,
   SubdomainRequest,
   Theme,
   UpdateSiteRequest,
-  Widget,
 } from './types';
 
 type PageScope = PageKind;
 type DeleteCategoryMode = 'reject-if-not-empty' | 'delete-sites' | 'move-to-uncategorized';
 
-function withLegacyCategory(category: CategoryContract, sites: Site[] = []): Category {
+// 契约把分类与站点分开返回；UI 需要 category.sites 嵌套结构。
+function nestCategory(category: CategoryContract, sites: Site[] = []): Category {
   return { ...category, sites: sites.filter(site => site.categoryId === category.id) };
 }
 
-function defaultSettings(page: NavigationPage): PageSettings {
-  return {
-    layout: {
-      template: 'full',
-      density: page.layout.density,
-      columns: page.layout.columns,
-      categoryStyle: page.layout.categoryStyle,
-    },
-    appearance: {
-      themeId: page.themeId,
-      background: { type: 'none', value: '', opacity: 1 },
-    },
-    search: { defaultEngine: 'google', showEngineSelector: true },
-    display: {
-      showClock: page.layout.showClock,
-      showDate: page.layout.showDate,
-      showGreeting: true,
-    },
-    preferences: {
-      locale: 'zh-CN',
-      timezone: 'Asia/Shanghai',
-      openLinksInNewTab: true,
-    },
-  };
-}
-
-function withLegacyPage(page: NavigationPageContract | NavigationPage): NavigationPage {
-  if ('layout' in page && page.layout) return page as NavigationPage;
-
-  const contract = page as NavigationPageContract;
-  const categories = contract.categories.map(category => withLegacyCategory(category, contract.sites));
-  const publication = contract.publication;
-  const settings = contract.settings;
-
+// 草稿页：契约 → UI 模型，只做分类嵌套，其余字段直接读契约（settings/publication）。
+function normalizePage(contract: NavigationPageContract): NavigationPage {
   return {
     ...contract,
-    categories,
     ownerAvatar: '',
-    slug: publication.slug,
-    isPublished: publication.published,
-    themeId: settings.appearance.themeId,
-    layout: {
-      density: settings.layout.density,
-      showClock: settings.display.showClock,
-      showDate: settings.display.showDate,
-      columns: settings.layout.columns,
-      categoryStyle: settings.layout.categoryStyle,
-    },
-    widgets: [],
-    publishSettings: {
-      title: contract.title,
-      slug: publication.slug,
-      description: contract.description,
-      isPublished: publication.published,
-      customDomain: publication.canonicalUrl ?? '',
-      showAuthor: publication.showAuthor,
-    },
-    publishedAt: publication.publishedAt ?? '',
-    hasUnpublishedChanges: publication.hasUnpublishedChanges,
+    categories: contract.categories.map(category => nestCategory(category, contract.sites)),
   };
 }
 
-function withLegacyPublishedPage(page: PublishedPageContract | PublishedNavigationPage): PublishedNavigationPage {
-  if ('ownerName' in page) return page;
+// 已发布页：契约已内嵌分类，仅把 owner 展平为 UI 直接读取的字段。
+function normalizePublishedPage(page: PublishedPageContract): PublishedNavigationPage {
   return {
-    ...page,
+    id: page.id,
+    snapshotId: page.snapshotId,
+    kind: page.kind,
+    visibility: page.visibility,
+    settings: page.settings,
+    etag: page.etag,
     ownerName: page.owner.name,
     ownerAvatar: page.owner.avatarUrl,
-    themeId: page.settings.appearance.themeId,
-    layout: {
-      density: page.settings.layout.density,
-      showClock: page.settings.display.showClock,
-      showDate: page.settings.display.showDate,
-      columns: page.settings.layout.columns,
-      categoryStyle: page.settings.layout.categoryStyle,
-    },
-    widgets: [],
+    title: page.title,
+    description: page.description,
+    categories: page.categories,
     subdomain: page.subdomain ?? '',
     subdomainStatus: page.subdomain ? 'approved' : 'none',
+    publishedAt: page.publishedAt,
     updatedAt: page.publishedAt,
-  };
-}
-
-function legacyPublication(settings: PublishSettings, current: Publication): PublicationSettingsUpdate {
-  return {
-    visibility: settings.isPublished ? (current.visibility === 'private' ? 'unlisted' : current.visibility) : 'private',
-    slug: settings.slug,
-    showAuthor: settings.showAuthor,
-    seoTitle: settings.title,
-    seoDescription: settings.description,
-  };
-}
-
-function toLegacyPublishSettings(page: NavigationPage, publication: Publication): PublishSettings {
-  return {
-    title: publication.seoTitle || page.title,
-    slug: publication.slug,
-    description: publication.seoDescription || page.description,
-    isPublished: publication.published,
-    customDomain: publication.canonicalUrl ?? '',
-    showAuthor: publication.showAuthor,
   };
 }
 
@@ -154,8 +78,8 @@ function envelope<T, U>(response: ApiResponse<T>, data: U): ApiResponse<U> {
 }
 
 async function fetchPage(pageId: string): Promise<ApiResponse<NavigationPage>> {
-  const response = await request<ApiResponse<NavigationPageContract | NavigationPage>>(`/pages/${encodeURIComponent(pageId)}`);
-  return envelope(response, withLegacyPage(response.data));
+  const response = await request<ApiResponse<NavigationPageContract>>(`/pages/${encodeURIComponent(pageId)}`);
+  return envelope(response, normalizePage(response.data));
 }
 
 /** 新代码的页面作用域 API；所有写操作显式绑定 pageId。 */
@@ -167,7 +91,7 @@ export function createPageNavigationApi(pageId: string) {
 
     updatePage: (data: { expectedRevision: number; title?: string; description?: string }) =>
       request<ApiResponse<NavigationPageContract>>(base, { method: 'PATCH', body: data })
-        .then(response => envelope(response, withLegacyPage(response.data))),
+        .then(response => envelope(response, normalizePage(response.data))),
 
     getCategories: () =>
       request<ApiResponse<CategoryContract[]>>(`${base}/categories`),
@@ -244,8 +168,8 @@ export function createPageNavigationApi(pageId: string) {
 let currentPageRequest: Promise<ApiResponse<NavigationPage>> | undefined;
 
 async function getCurrentPage(scope: PageScope = 'personal'): Promise<ApiResponse<NavigationPage>> {
-  const response = await request<ApiResponse<NavigationPageContract | NavigationPage>>('/pages/current', { params: { scope } });
-  return envelope(response, withLegacyPage(response.data));
+  const response = await request<ApiResponse<NavigationPageContract>>('/pages/current', { params: { scope } });
+  return envelope(response, normalizePage(response.data));
 }
 
 function currentPage(scope: PageScope = 'personal'): Promise<ApiResponse<NavigationPage>> {
@@ -271,35 +195,22 @@ export const navigationApi = {
 
   getMyPage: () => currentPage(),
 
-  updateLayout: async (layout: LayoutConfig) => {
-    const { page, api } = await currentScopedApi();
-    const settings = page.data.settings ?? defaultSettings(page.data);
-    await api.replaceSettings({
-      ...settings,
-      layout: { ...settings.layout, density: layout.density, columns: layout.columns, categoryStyle: layout.categoryStyle },
-      display: { ...settings.display, showClock: layout.showClock, showDate: layout.showDate },
-      expectedRevision: page.data.draftRevision ?? 0,
-    });
-    currentPageRequest = undefined;
-    return fetchPage(page.data.id);
-  },
-
   getCategories: async () => {
     const { api } = await currentScopedApi();
     const response = await api.getCategories();
-    return envelope(response, response.data.map(category => withLegacyCategory(category)));
+    return envelope(response, response.data.map(category => nestCategory(category)));
   },
   createCategory: async (data: CreateCategoryRequest) => {
     const { api } = await currentScopedApi();
     const response = await api.createCategory(data);
     currentPageRequest = undefined;
-    return envelope(response, withLegacyCategory(response.data));
+    return envelope(response, nestCategory(response.data));
   },
   updateCategory: async (id: string, data: Partial<CreateCategoryRequest>) => {
     const { api } = await currentScopedApi();
     const response = await api.updateCategory(id, data);
     currentPageRequest = undefined;
-    return envelope(response, withLegacyCategory(response.data));
+    return envelope(response, nestCategory(response.data));
   },
   deleteCategory: async (id: string) => {
     const { api } = await currentScopedApi();
@@ -355,28 +266,6 @@ export const navigationApi = {
     return envelope(response, null);
   },
 
-  /** @deprecated OpenAPI v1 不再提供通用 widgets。 */
-  getWidgets: async (): Promise<ApiResponse<Widget[]>> => {
-    const page = await currentPage();
-    return envelope(page, page.data.widgets);
-  },
-  /** @deprecated OpenAPI v1 不再提供通用 widgets。 */
-  updateWidget: async (_id: string, _data: Partial<Widget>): Promise<ApiResponse<Widget>> => {
-    throw new Error('OpenAPI v1 不支持通用小组件更新，请迁移到 PageSettings.display');
-  },
-
-  getPublishSettings: async () => {
-    const { page, api } = await currentScopedApi();
-    const response = await api.getPublication();
-    return envelope(response, toLegacyPublishSettings(page.data, response.data));
-  },
-  updatePublishSettings: async (data: PublishSettings) => {
-    const { page, api } = await currentScopedApi();
-    const current = page.data.publication ?? (await api.getPublication()).data;
-    const response = await api.replacePublication(legacyPublication(data, current));
-    currentPageRequest = undefined;
-    return envelope(response, toLegacyPublishSettings(page.data, response.data));
-  },
   publish: async () => {
     const { page, api } = await currentScopedApi();
     await api.publish(page.data.draftRevision ?? 0);
@@ -392,23 +281,11 @@ export const navigationApi = {
 
   getPublicPage: async (slug: string) => {
     const endpoint = slug === 'nav' ? '/public/home' : `/public/pages/${encodeURIComponent(slug)}`;
-    const response = await request<ApiResponse<PublishedPageContract | PublishedNavigationPage>>(endpoint);
-    return envelope(response, withLegacyPublishedPage(response.data));
+    const response = await request<ApiResponse<PublishedPageContract>>(endpoint);
+    return envelope(response, normalizePublishedPage(response.data));
   },
 
   getThemes: () => request<ApiResponse<Theme[]>>('/themes'),
-
-  setTheme: async (themeId: string) => {
-    const { page, api } = await currentScopedApi();
-    const settings = page.data.settings ?? defaultSettings(page.data);
-    await api.replaceSettings({
-      ...settings,
-      appearance: { ...settings.appearance, themeId },
-      expectedRevision: page.data.draftRevision ?? 0,
-    });
-    currentPageRequest = undefined;
-    return fetchPage(page.data.id);
-  },
 
   getPlatformSites: async (params?: { category?: string; search?: string; page?: number; pageSize?: number }) => {
     const response = await request<ApiResponse<PlatformSite[]>>('/public/directory', {

@@ -30,6 +30,7 @@ import {
 } from '@/mocks/data';
 import { mockAnalyticsResponse, getDailyStatsForDays, getTopSitesForLimit } from '@/mocks/analytics';
 import { mockDiscoveredPages } from '@/mocks/discover';
+import type { MockPageState, MockPublishedPage } from '@/mocks/data';
 import type { AuthSession, CreateCategoryRequest, UpdateSiteRequest, ReorderRequest, Category, Site, CreateSiteRequest, User } from '@/api/types';
 
 type MockAuthenticatedSession = AuthSession & { authenticated: true; user: User };
@@ -116,6 +117,61 @@ function syncPageCategories() {
   } else {
     mockNavigationPage.categories = [...mockCategories];
   }
+}
+
+// 把扁平内部状态投影为草稿页契约（NavigationPageContract）：
+// 分类去掉内嵌 sites，站点单独扁平列出，供前端 normalizePage 重新嵌套。
+function contractPageResponse() {
+  const page = activePage();
+  const categories = activeCategories();
+  const sites = categories.flatMap(category => category.sites);
+  return {
+    id: page.id,
+    kind: isEditingSystem() ? 'system' : 'personal',
+    ownerId: page.ownerId,
+    ownerName: page.ownerName,
+    title: page.title,
+    description: page.description,
+    draftRevision: 0,
+    settings: activePageSettings(),
+    categories: categories.map(({ sites: _sites, ...rest }) => rest),
+    sites,
+    publication: activePublication(),
+    draftUpdatedAt: page.draftUpdatedAt,
+    createdAt: '2026-01-01T00:00:00Z',
+    updatedAt: page.updatedAt ?? page.draftUpdatedAt,
+  };
+}
+
+// 把已发布页投影为公开契约（PublishedPageContract）：分类内嵌 sites，owner 独立对象。
+// settings 从来源自身的 themeId/layout 构造，不依赖当前编辑作用域。
+function contractPublishedResponse(source: MockPublishedPage | MockPageState, kind: 'system' | 'personal', subdomain: string) {
+  return {
+    id: source.id,
+    snapshotId: `snapshot_${source.id}`,
+    kind,
+    title: source.title,
+    description: source.description,
+    slug: source.slug,
+    visibility: 'public',
+    owner: { name: source.ownerName, avatarUrl: source.ownerAvatar, visible: true },
+    settings: {
+      layout: {
+        template: 'full',
+        density: source.layout.density,
+        columns: source.layout.columns,
+        categoryStyle: source.layout.categoryStyle,
+      },
+      appearance: { themeId: source.themeId, background: { type: 'none', value: '', opacity: 1 } },
+      search: { defaultEngine: 'google', showEngineSelector: true },
+      display: { showClock: source.layout.showClock, showDate: source.layout.showDate, showGreeting: true },
+      preferences: { locale: 'zh-CN', timezone: 'Asia/Shanghai', openLinksInNewTab: true },
+    },
+    categories: source.categories,
+    subdomain: subdomain || null,
+    publishedAt: source.publishedAt,
+    etag: `"mock-${source.id}"`,
+  };
 }
 
 // ---- Subdomain for system page ----
@@ -334,8 +390,8 @@ handlers.push((url, init) => {
   }
   if (url === `${API_BASE}/navigation/page`) {
     syncPageCategories();
-    // 新代码（如主题设置页）读取契约字段 settings，随旧页面模型一并返回
-    return Promise.resolve(jsonResponse({ code: 'OK', data: { ...activePage(), settings: activePageSettings() }, meta: { message: '', detail: '' } }));
+    // 返回契约形状（NavigationPageContract），与真实后端一致，由前端 normalizePage 处理。
+    return Promise.resolve(jsonResponse({ code: 'OK', data: contractPageResponse(), meta: { message: '', detail: '' } }));
   }
   if (url === `${API_BASE}/navigation/page/layout`) {
     const body = JSON.parse(init?.body || '');
@@ -531,25 +587,17 @@ handlers.push((url, init) => {
   if (url.startsWith(`${API_BASE}/navigation/public/`)) {
     const slug = url.split('/').pop() || '';
     if (slug === 'nav') {
-      // System page public view
-      const sysPub = {
-        ...mockSystemPage,
-        ownerName: 'nav.ax',
-        ownerAvatar: '',
-        subdomain: mockSystemSubdomain.subdomain,
-        subdomainStatus: mockSystemSubdomain.status,
-        publishedAt: mockSystemPage.publishedAt,
-        updatedAt: mockSystemPage.updatedAt,
-      };
+      // 系统页公开视图（契约形状）
+      const sysPub = contractPublishedResponse(
+        { ...mockSystemPage, ownerName: 'nav.ax', ownerAvatar: '' },
+        'system',
+        mockSystemSubdomain.subdomain,
+      );
       return Promise.resolve(jsonResponse({ code: 'OK', data: sysPub, meta: { message: '', detail: '' } }));
     }
-    // Personal page public view
+    // 个人页公开视图（契约形状）
     const currentSub = getMockSubdomain();
-    const published = {
-      ...mockPublishedPage,
-      subdomain: currentSub?.subdomain || '',
-      subdomainStatus: currentSub?.status || 'none',
-    };
+    const published = contractPublishedResponse(mockPublishedPage, 'personal', currentSub?.subdomain || '');
     return Promise.resolve(jsonResponse({ code: 'OK', data: published, meta: { message: '', detail: '' } }));
   }
   if (url === `${API_BASE}/navigation/themes`) {
