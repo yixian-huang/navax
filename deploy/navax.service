@@ -1,0 +1,25 @@
+[Unit]
+Description=nav.ax
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=navax
+Group=navax
+WorkingDirectory=/opt/navax
+EnvironmentFile=/opt/navax/.env
+ExecStart=/opt/navax/bin/navax
+Restart=always
+RestartSec=2
+# 与应用优雅停机窗口对齐（NAVAX_SHUTDOWN_TIMEOUT 默认 15s）
+TimeoutStopSec=20
+
+# 加固：仅数据目录可写，其余只读
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/navax/data
+
+[Install]
+WantedBy=multi-user.target
