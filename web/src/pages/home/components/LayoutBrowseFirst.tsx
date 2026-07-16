@@ -1,0 +1,60 @@
+import { SearchSection, SitesSection, FooterActions } from './SharedSections';
+import type { Density, Site } from '@/api/types';
+import type { SearchEngine } from '@/components/base/SearchBar';
+
+interface LayoutProps {
+  query: string;
+  onQueryChange: (v: string) => void;
+  engine: SearchEngine;
+  onEngineChange: (e: SearchEngine) => void;
+  onSearch: (q: string, e: SearchEngine) => void;
+  categories: any[];
+  activeCategory: string;
+  onCategoryChange: (id: string) => void;
+  activeSites: Site[];
+  density: Density;
+  onDensityChange: (d: Density) => void;
+  totalSites: number;
+  onSiteOpen: (s: Site) => void;
+  searchSuggestions?: string[];
+}
+
+export default function LayoutBrowseFirst({
+  query, onQueryChange, engine, onEngineChange, onSearch,
+  categories, activeCategory, onCategoryChange,
+  activeSites, density, onDensityChange, totalSites, onSiteOpen,
+  searchSuggestions,
+}: LayoutProps) {
+  return (
+    <div className="mx-auto max-w-4xl px-6 md:px-8 pt-12 md:pt-16 pb-24">
+      {/* Inline compact search at top — secondary priority */}
+      <div className="mb-10 rise-in">
+        <SearchSection
+          query={query} onQueryChange={onQueryChange} engine={engine}
+          onEngineChange={onEngineChange} onSearch={onSearch} delay={0}
+          size="md"
+          suggestions={searchSuggestions}
+        />
+      </div>
+
+      {/* Sites first — the star of this layout */}
+      <div className="mb-8 rise-in" style={{ animationDelay: '40ms' }}>
+        <h2 className="font-heading text-lg text-foreground-900 tracking-tight mb-1">
+          我的收藏
+        </h2>
+        <p className="text-xs text-foreground-400 mb-4">
+          快速访问你最常用的站点
+        </p>
+      </div>
+
+      <SitesSection
+        categories={categories} activeCategory={activeCategory}
+        onCategoryChange={onCategoryChange} activeSites={activeSites}
+        density={density} onDensityChange={onDensityChange}
+        totalSites={totalSites} query={query} onSiteOpen={onSiteOpen} delay={80}
+      />
+
+      <FooterActions />
+    </div>
+  );
+}

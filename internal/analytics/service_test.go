@@ -1,0 +1,126 @@
+package analytics
+
+import (
+	"bytes"
+	"context"
+	"testing"
+	"time"
+
+	"github.com/yixian-huang/navax/internal/auth"
+	"github.com/yixian-huang/navax/internal/database"
+	"github.com/yixian-huang/navax/internal/navigation"
+)
+
+func TestRecordAndReadPrivacyPreservingAnalytics(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	db, err := database.OpenAndMigrate(ctx, database.Config{Path: ":memory:", MaxOpenConns: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	authService := auth.NewService(auth.NewSQLStore(db), "01234567890123456789012345678901", time.Hour)
+	session, _, err := authService.Bootstrap(ctx, "01234567890123456789012345678901", auth.BootstrapInput{
+		Username: "owner", Email: "owner@example.com", Password: "strong password",
+		InstanceName: "nav.ax", PublicBaseURL: "https://nav.ax",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	actor := navigation.Actor{UserID: session.User.ID, Username: session.User.Username, Role: session.User.Role}
+	navigationService := navigation.NewService(navigation.NewSQLStore(db))
+	page, err := navigationService.CurrentPage(ctx, actor, navigation.PageKindPersonal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	category, err := navigationService.CreateCategory(ctx, actor, page.ID, navigation.CategoryInput{Name: "开发"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	site, err := navigationService.CreateSite(ctx, actor, page.ID, navigation.SiteInput{
+		CategoryID: category.ID, Title: "Go", URL: "https://go.dev",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, err = navigationService.PageDraft(ctx, actor, page.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := navigationService.Publish(ctx, actor, page.ID, page.DraftRevision, "https://nav.ax"); err != nil {
+		t.Fatal(err)
+	}
+	published, err := navigationService.PublicBySlug(ctx, session.User.Username)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	service, err := NewService(db, bytes.Repeat([]byte{0x42}, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	common := Event{
+		PageID: page.ID, SnapshotID: published.SnapshotID,
+		ClientAddress: "203.0.113.42", UserAgent: "Mozilla/5.0 (iPhone; Mobile)",
+		Referrer: "https://search.example/results?q=nav",
+	}
+	view := common
+	view.Type = "page_view"
+	view.ClientEventID = "event-page-view-0001"
+	if err := service.Record(ctx, view); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.Record(ctx, view); err != nil {
+		t.Fatalf("idempotent record: %v", err)
+	}
+	click := common
+	click.Type = "site_click"
+	click.SiteID = site.ID
+	click.ClientEventID = "event-site-click-0001"
+	if err := service.Record(ctx, click); err != nil {
+		t.Fatal(err)
+	}
+
+	var count int
+	var visitorHash []byte
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*), visitor_hash FROM analytics_events").Scan(&count, &visitorHash); err != nil {
+		t.Fatal(err)
+	}
+	if count != 2 || bytes.Contains(visitorHash, []byte(common.ClientAddress)) {
+		t.Fatalf("events=%d visitor hash persisted raw address=%v", count, visitorHash)
+	}
+	var rawAddressColumns int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM pragma_table_info('analytics_events') WHERE name IN ('ip', 'address', 'user_agent')`).Scan(&rawAddressColumns); err != nil {
+		t.Fatal(err)
+	}
+	if rawAddressColumns != 0 {
+		t.Fatalf("analytics schema contains raw identifying columns: %d", rawAddressColumns)
+	}
+
+	overview, err := service.Overview(ctx, session.User.ID, 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if overview.TotalPV != 1 || overview.TotalUV != 1 || overview.TodayPV != 1 || overview.TodayUV != 1 {
+		t.Fatalf("overview = %+v", overview)
+	}
+	trends, err := service.Trends(ctx, session.User.ID, 7)
+	if err != nil || len(trends) != 7 || trends[6].PV != 1 || trends[6].UV != 1 {
+		t.Fatalf("trends = %+v, err = %v", trends, err)
+	}
+	breakdown, err := service.Breakdown(ctx, session.User.ID, 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(breakdown.TopSites) != 1 || breakdown.TopSites[0].Key != site.ID || len(breakdown.RecentVisits) != 1 {
+		t.Fatalf("breakdown = %+v", breakdown)
+	}
+	service.now = func() time.Time { return time.Now().UTC().AddDate(0, 0, 91) }
+	if err := service.PurgeExpired(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM analytics_events").Scan(&count); err != nil || count != 0 {
+		t.Fatalf("expired analytics count = %d, %v", count, err)
+	}
+}

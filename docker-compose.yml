@@ -1,0 +1,46 @@
+services:
+  navax:
+    image: ${NAVAX_IMAGE:-ghcr.io/yixian-huang/navax:latest}
+    build:
+      context: .
+      args:
+        VERSION: ${NAVAX_VERSION:-dev}
+        COMMIT: ${NAVAX_COMMIT:-unknown}
+        BUILT_AT: ${NAVAX_BUILT_AT:-1970-01-01T00:00:00Z}
+        DEPLOYMENT: container
+    environment:
+      NAVAX_ADDR: ":8080"
+      NAVAX_DATA_DIR: /data
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8080}
+      ROOT_DOMAIN: ${ROOT_DOMAIN:-}
+      INSTANCE_NAME: ${INSTANCE_NAME:-nav.ax}
+      NAVAX_SETUP_TOKEN: ${NAVAX_SETUP_TOKEN:-}
+      NAVAX_MASTER_KEY: ${NAVAX_MASTER_KEY:-}
+      NAVAX_SECURE_COOKIES: ${NAVAX_SECURE_COOKIES:-false}
+      NAVAX_SESSION_TTL: ${NAVAX_SESSION_TTL:-720h}
+      NAVAX_SHUTDOWN_TIMEOUT: ${NAVAX_SHUTDOWN_TIMEOUT:-15s}
+      NAVAX_UPDATE_MANIFEST_URL: ${NAVAX_UPDATE_MANIFEST_URL:-}
+      NAVAX_UPDATE_PUBLIC_KEY: ${NAVAX_UPDATE_PUBLIC_KEY:-}
+    ports:
+      - "${NAVAX_PORT:-8080}:8080"
+    volumes:
+      - navax-data:/data
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/readyz"]
+      interval: 30s
+      timeout: 3s
+      start_period: 10s
+      retries: 3
+
+volumes:
+  navax-data:
+    name: navax-data

@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.25.x"
+          cache: true
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Static checks
+        run: make check
+      - name: Tests
+        run: make test
+      - name: Embedded production build
+        run: make build VERSION="${GITHUB_SHA::12}" COMMIT="${GITHUB_SHA}" DEPLOYMENT=ci
+      - name: Smoke-test binary
+        run: test -x bin/navax
+
+  container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build production image
+        run: |
+          docker build \
+            --build-arg VERSION=ci \
+            --build-arg COMMIT="$GITHUB_SHA" \
+            --build-arg BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --build-arg DEPLOYMENT=container \
+            -t navax:ci .
+      - name: Smoke-test non-root container
+        run: |
+          docker run -d --rm --name navax-ci \
+            --read-only --tmpfs /tmp:rw,noexec,nosuid,size=64m \
+            --cap-drop ALL --security-opt no-new-privileges:true \
+            -p 127.0.0.1:18080:8080 \
+            -e PUBLIC_BASE_URL=http://127.0.0.1:18080 \
+            -e NAVAX_SETUP_TOKEN=0123456789abcdef0123456789abcdef \
+            navax:ci
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:18080/readyz >/dev/null; then break; fi
+            if [ "$attempt" -eq 30 ]; then docker logs navax-ci; exit 1; fi
+            sleep 1
+          done
+          test "$(docker inspect --format '{{.Config.User}}' navax-ci)" = "10001:10001"
+          curl -fsS http://127.0.0.1:18080/api/v1/version | grep -q '"deployment":"container"'
+      - name: Stop smoke-test container
+        if: always()
+        run: docker rm -f navax-ci >/dev/null 2>&1 || true

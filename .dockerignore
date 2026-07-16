@@ -1,0 +1,17 @@
+.git
+.github
+.DS_Store
+.env
+.env.*
+!.env.example
+bin
+data
+web/node_modules
+web/out
+internal/webui/dist
+*.log
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3

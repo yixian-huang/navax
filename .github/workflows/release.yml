@@ -1,0 +1,144 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Build frontend
+        working-directory: web
+        run: npm ci && npm run type-check && npm run lint && npm run build
+      - uses: actions/upload-artifact@v6
+        with:
+          name: frontend
+          path: web/out
+          if-no-files-found: error
+          retention-days: 1
+
+  binaries:
+    needs: frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+          - goos: windows
+            goarch: arm64
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.25.x"
+          cache: true
+      - uses: actions/download-artifact@v5
+        with:
+          name: frontend
+          path: internal/webui/dist
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          built_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          suffix=""
+          if [ "$GOOS" = "windows" ]; then suffix=".exe"; fi
+          output="navax_${version}_${GOOS}_${GOARCH}${suffix}"
+          mkdir -p dist
+          go build -trimpath -buildvcs=false \
+            -ldflags="-s -w -X main.version=${version} -X main.commit=${GITHUB_SHA} -X main.builtAt=${built_at} -X main.deployment=binary" \
+            -o "dist/${output}" ./cmd/navax
+      - uses: actions/upload-artifact@v6
+        with:
+          name: binary-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: binaries
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: binary-*
+          path: dist
+          merge-multiple: true
+      - name: Generate checksums
+        working-directory: dist
+        run: sha256sum navax_* > SHA256SUMS
+      - name: Generate signed update manifest
+        working-directory: dist
+        env:
+          NAVAX_UPDATE_SIGNING_KEY_DER: ${{ secrets.NAVAX_UPDATE_SIGNING_KEY_DER }}
+        run: |
+          if [ -z "$NAVAX_UPDATE_SIGNING_KEY_DER" ]; then
+            echo "NAVAX_UPDATE_SIGNING_KEY_DER is not configured; skipping update manifest"
+            exit 0
+          fi
+          version="${GITHUB_REF_NAME#v}"
+          assets_file="$(mktemp)"
+          for file in navax_${version}_*; do
+            name="$(basename "$file")"
+            platform="${name#navax_${version}_}"
+            platform="${platform%.exe}"
+            os="${platform%_*}"
+            arch="${platform##*_}"
+            sha256="$(sha256sum "$file" | cut -d' ' -f1)"
+            size="$(wc -c < "$file" | tr -d ' ')"
+            jq -nc \
+              --arg os "$os" --arg arch "$arch" \
+              --arg url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/${name}" \
+              --arg sha256 "$sha256" --argjson size "$size" \
+              '{os:$os,arch:$arch,url:$url,sha256:$sha256,size:$size}' >> "$assets_file"
+          done
+          assets="$(jq -sc '.' "$assets_file")"
+          payload="$(jq -nc \
+            --arg version "$version" \
+            --arg publishedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --argjson assets "$assets" \
+            '{version:$version,releaseNotes:"",publishedAt:$publishedAt,assets:$assets}')"
+          printf '%s' "$NAVAX_UPDATE_SIGNING_KEY_DER" | base64 -d > signing-key.der
+          printf '%s' "$payload" > update-payload.json
+          openssl pkeyutl -sign -rawin -keyform DER -inkey signing-key.der \
+            -in update-payload.json -out update-signature.bin
+          signature="$(base64 -w0 update-signature.bin)"
+          printf '{"payload":%s,"signature":"%s"}\n' "$payload" "$signature" > update-manifest.json
+          rm -f signing-key.der update-payload.json update-signature.bin "$assets_file"
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --generate-notes --title "$GITHUB_REF_NAME"
+          fi
