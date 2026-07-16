@@ -118,12 +118,16 @@ type Service struct {
 	store      Store
 	setupToken string
 	sessionTTL time.Duration
+	resetTTL   time.Duration
 	now        func() time.Time
 	throttle   *loginThrottle
 }
 
 func NewService(store Store, setupToken string, sessionTTL time.Duration) *Service {
-	return &Service{store: store, setupToken: setupToken, sessionTTL: sessionTTL, now: time.Now, throttle: newLoginThrottle()}
+	return &Service{
+		store: store, setupToken: setupToken, sessionTTL: sessionTTL,
+		resetTTL: time.Hour, now: time.Now, throttle: newLoginThrottle(),
+	}
 }
 
 func (s *Service) Initialized(ctx context.Context) (bool, error) {

@@ -7,6 +7,7 @@ import (
 	"image/color"
 	"image/png"
 	"net/http"
+	"net/url"
 	"testing"
 )
 
@@ -32,6 +33,7 @@ func TestAPIContract(t *testing.T) {
 		userSlug     string
 		inviteToken  string
 		categoryID   string
+		userID       string
 	)
 
 	t.Run("系统端点", func(t *testing.T) {
@@ -250,6 +252,8 @@ func TestAPIContract(t *testing.T) {
 			"/api/v1/auth/invitations/"+inviteToken+"/register",
 			map[string]any{"username": "member01", "email": userEmail, "password": userPassword})
 		mustStatus(t, registered, http.StatusCreated, "邀请注册")
+		account, _ := registered.data()["user"].(map[string]any)
+		userID = stringField(t, account, "id", "注册用户")
 	})
 
 	t.Run("用户编辑与发布", func(t *testing.T) {
@@ -341,6 +345,44 @@ func TestAPIContract(t *testing.T) {
 	t.Run("越权访问管理端", func(t *testing.T) {
 		denied := user.call(t, http.MethodGet, "/api/v1/admin/overview", nil)
 		mustStatus(t, denied, http.StatusForbidden, "普通用户访问管理端")
+	})
+
+	// Placed last: a completed reset revokes the member's sessions.
+	t.Run("密码找回", func(t *testing.T) {
+		// Self-service forgot always returns a generic success (no enumeration).
+		forgot := guest.call(t, http.MethodPost, "/api/v1/auth/password/forgot",
+			map[string]any{"email": userEmail})
+		mustStatus(t, forgot, http.StatusOK, "忘记密码")
+		unknown := guest.call(t, http.MethodPost, "/api/v1/auth/password/forgot",
+			map[string]any{"email": "nobody@example.com"})
+		mustStatus(t, unknown, http.StatusOK, "忘记密码-未知邮箱")
+
+		// Admin generates a reset link, which works without SMTP configured.
+		link := admin.call(t, http.MethodPost, "/api/v1/admin/users/"+userID+"/password-reset", nil)
+		mustStatus(t, link, http.StatusOK, "生成重置链接")
+		resetURL := stringField(t, link.data(), "resetUrl", "重置链接")
+		parsed, err := url.Parse(resetURL)
+		if err != nil {
+			t.Fatalf("解析重置链接: %v", err)
+		}
+		token := parsed.Query().Get("token")
+		if token == "" {
+			t.Fatal("重置链接缺少 token")
+		}
+
+		reset := guest.call(t, http.MethodPost, "/api/v1/auth/password/reset",
+			map[string]any{"token": token, "password": "Recovered-Pass-2026!"})
+		mustStatus(t, reset, http.StatusOK, "重置密码")
+
+		// The token is single-use.
+		reused := guest.call(t, http.MethodPost, "/api/v1/auth/password/reset",
+			map[string]any{"token": token, "password": "Another-Pass-2026!"})
+		mustStatus(t, reused, http.StatusBadRequest, "重复使用重置链接")
+
+		// The new password authenticates.
+		relogin := guest.call(t, http.MethodPost, "/api/v1/auth/login",
+			map[string]any{"email": userEmail, "password": "Recovered-Pass-2026!"})
+		mustStatus(t, relogin, http.StatusOK, "新密码登录")
 	})
 }
 

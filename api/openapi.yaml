@@ -182,6 +182,34 @@ paths:
       responses:
         '200': { $ref: '#/components/responses/EmptyResponse' }
         '401': { $ref: '#/components/responses/ErrorResponse' }
+  /api/v1/auth/password/forgot:
+    post:
+      tags: [Auth]
+      operationId: forgotPassword
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ForgotPasswordRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/MessageResponse' }
+        '429': { $ref: '#/components/responses/ErrorResponse' }
+  /api/v1/auth/password/reset:
+    post:
+      tags: [Auth]
+      operationId: resetPassword
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResetPasswordRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/MessageResponse' }
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '422': { $ref: '#/components/responses/ErrorResponse' }
+        '429': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/auth/invitations/{token}:
     parameters:
       - in: path
@@ -756,6 +784,18 @@ paths:
         '200': { $ref: '#/components/responses/EmptyResponse' }
         '401': { $ref: '#/components/responses/ErrorResponse' }
         '403': { $ref: '#/components/responses/ErrorResponse' }
+  /api/v1/admin/users/{userId}/password-reset:
+    post:
+      tags: [Admin]
+      operationId: resetUserPassword
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200': { $ref: '#/components/responses/PasswordResetLinkResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/admin/invitations:
     get:
       tags: [Admin]
@@ -1244,6 +1284,8 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorEnvelope' }
     EmptyResponse: { description: 操作成功, content: { application/json: { schema: { $ref: '#/components/schemas/EmptyEnvelope' } } } }
+    MessageResponse: { description: 通用提示消息, content: { application/json: { schema: { $ref: '#/components/schemas/MessageEnvelope' } } } }
+    PasswordResetLinkResponse: { description: 管理员生成的密码重置链接, content: { application/json: { schema: { $ref: '#/components/schemas/PasswordResetLinkEnvelope' } } } }
     HealthResponse: { description: 健康状态, content: { application/json: { schema: { $ref: '#/components/schemas/Health' } } } }
     VersionResponse: { description: 版本信息, content: { application/json: { schema: { $ref: '#/components/schemas/VersionEnvelope' } } } }
     BootstrapStatusResponse: { description: 初始化状态, content: { application/json: { schema: { $ref: '#/components/schemas/BootstrapStatusEnvelope' } } } }
@@ -1330,7 +1372,7 @@ components:
       type: object
       required: [code, data, meta]
       properties:
-        code: { type: string, enum: [MALFORMED_REQUEST, VALIDATION_FAILED, AUTH_REQUIRED, INVALID_CREDENTIALS, SESSION_EXPIRED, FORBIDDEN, ADMIN_REQUIRED, ACCOUNT_DISABLED, NOT_FOUND, METHOD_NOT_ALLOWED, INSTANCE_ALREADY_INITIALIZED, EMAIL_CONFLICT, USERNAME_CONFLICT, SLUG_CONFLICT, CATEGORY_NOT_EMPTY, INVITATION_EXPIRED, INVITATION_REVOKED, INVITATION_EXHAUSTED, INVITATION_NOT_FOUND, DRAFT_REVISION_MISMATCH, IDEMPOTENCY_CONFLICT, IMPORT_TOO_LARGE, IMPORT_CONFLICT, IMPORT_PREVIEW_EXPIRED, INVALID_IMPORT, INVALID_URL, IMPORT_INVALID, PAYLOAD_TOO_LARGE, UNSUPPORTED_MEDIA_TYPE, LINK_CHECK_BUSY, RATE_LIMITED, SETUP_REQUIRED, SERVICE_UNAVAILABLE, CONFLICT, INTERNAL_ERROR] }
+        code: { type: string, enum: [MALFORMED_REQUEST, VALIDATION_FAILED, AUTH_REQUIRED, INVALID_CREDENTIALS, SESSION_EXPIRED, FORBIDDEN, ADMIN_REQUIRED, ACCOUNT_DISABLED, NOT_FOUND, METHOD_NOT_ALLOWED, INSTANCE_ALREADY_INITIALIZED, EMAIL_CONFLICT, USERNAME_CONFLICT, SLUG_CONFLICT, CATEGORY_NOT_EMPTY, INVITATION_EXPIRED, INVITATION_REVOKED, INVITATION_EXHAUSTED, INVITATION_NOT_FOUND, INVALID_RESET_TOKEN, DRAFT_REVISION_MISMATCH, IDEMPOTENCY_CONFLICT, IMPORT_TOO_LARGE, IMPORT_CONFLICT, IMPORT_PREVIEW_EXPIRED, INVALID_IMPORT, INVALID_URL, IMPORT_INVALID, PAYLOAD_TOO_LARGE, UNSUPPORTED_MEDIA_TYPE, LINK_CHECK_BUSY, RATE_LIMITED, SETUP_REQUIRED, SERVICE_UNAVAILABLE, CONFLICT, INTERNAL_ERROR] }
         data: { type: 'null' }
         meta: { $ref: '#/components/schemas/ErrorMeta' }
     EmptyEnvelope:
@@ -1424,6 +1466,42 @@ components:
         username: { type: string, pattern: '^[a-zA-Z0-9_-]{3,32}$' }
         email: { type: string, format: email, maxLength: 254 }
         password: { type: string, format: password, minLength: 12, maxLength: 1024 }
+    ForgotPasswordRequest:
+      type: object
+      required: [email]
+      properties:
+        email: { type: string, format: email, maxLength: 254 }
+    ResetPasswordRequest:
+      type: object
+      required: [token, password]
+      properties:
+        token: { type: string, minLength: 24, maxLength: 256 }
+        password: { type: string, format: password, minLength: 12, maxLength: 1024 }
+    PasswordResetLink:
+      type: object
+      required: [resetUrl, expiresAt, emailSent]
+      properties:
+        resetUrl: { type: string, format: uri }
+        expiresAt: { $ref: '#/components/schemas/Timestamp' }
+        emailSent: { type: boolean, description: 是否已通过已配置的 SMTP 将链接发送给用户 }
+    MessageEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/EnvelopeBase'
+        - type: object
+          required: [data]
+          properties:
+            data:
+              type: object
+              required: [message]
+              properties:
+                message: { type: string }
+    PasswordResetLinkEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/EnvelopeBase'
+        - type: object
+          required: [data]
+          properties:
+            data: { $ref: '#/components/schemas/PasswordResetLink' }
     InvitationValidation:
       type: object
       required: [valid, inviterName, expiresAt]

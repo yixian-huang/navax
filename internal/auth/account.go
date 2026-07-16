@@ -12,10 +12,11 @@ import (
 )
 
 var (
-	ErrNotFound        = errors.New("not found")
-	ErrInvalidInput    = errors.New("invalid input")
-	ErrCurrentPassword = errors.New("current password is invalid")
-	ErrAccountStore    = errors.New("account operations are unavailable")
+	ErrNotFound          = errors.New("not found")
+	ErrInvalidInput      = errors.New("invalid input")
+	ErrCurrentPassword   = errors.New("current password is invalid")
+	ErrAccountStore      = errors.New("account operations are unavailable")
+	ErrInvalidResetToken = errors.New("password reset token is invalid or expired")
 )
 
 var usernamePattern = regexp.MustCompile(`^[a-zA-Z0-9_-]{3,32}$`)
@@ -47,6 +48,17 @@ type AccountStore interface {
 	UpdatePassword(context.Context, string, string, string, bool, time.Time) error
 	SessionsByUser(context.Context, string, string, time.Time) ([]SessionInfo, error)
 	RevokeOwnedSession(context.Context, string, string, time.Time) error
+	CreatePasswordResetToken(context.Context, PasswordResetInsert) error
+	ConsumePasswordResetToken(context.Context, string, string, time.Time) error
+}
+
+// PasswordResetInsert is a new single-use password reset token to persist.
+type PasswordResetInsert struct {
+	ID        string
+	UserID    string
+	TokenHash string
+	ExpiresAt time.Time
+	CreatedAt time.Time
 }
 
 func (s *Service) Profile(ctx context.Context, userID string) (User, error) {

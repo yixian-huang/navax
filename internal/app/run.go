@@ -82,18 +82,19 @@ func Run(ctx context.Context, cfg config.Config, build BuildInfo) error {
 	if !initialized {
 		slog.Warn("instance setup is required", "setup_token", cfg.SetupToken, "endpoint", "/api/v1/bootstrap")
 	}
-	authHandler := httpapi.NewAuthHandler(authService, httpapi.AuthHandlerOptions{
-		SecureCookies: cfg.SecureCookies,
-		InstanceName:  cfg.InstanceName,
-		PublicBaseURL: cfg.PublicBaseURL,
-		Version:       build.Version,
-	})
-	accountHandler := httpapi.NewAccountHandler(authService)
 	adminService := adminpkg.NewService(adminpkg.NewSQLStore(db))
 	providerService, err := integrations.NewService(db, cfg.MasterKey)
 	if err != nil {
 		return fmt.Errorf("initialize provider configuration: %w", err)
 	}
+	authHandler := httpapi.NewAuthHandler(authService, httpapi.AuthHandlerOptions{
+		SecureCookies: cfg.SecureCookies,
+		InstanceName:  cfg.InstanceName,
+		PublicBaseURL: cfg.PublicBaseURL,
+		Version:       build.Version,
+		Mailer:        providerService,
+	})
+	accountHandler := httpapi.NewAccountHandler(authService)
 	adminHandler := httpapi.NewAdminHandler(authService, adminService, httpapi.AdminHandlerOptions{
 		Version: build.Version, StartedAt: startedAt, InstanceName: cfg.InstanceName, Mailer: providerService,
 	})

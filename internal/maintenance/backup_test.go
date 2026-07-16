@@ -51,7 +51,7 @@ func TestCreateBackupProducesValidSQLite(t *testing.T) {
 		t.Fatalf("integrity_check = %q, %v", integrity, err)
 	}
 	var migrationCount int
-	if err := copyDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM schema_migrations").Scan(&migrationCount); err != nil || migrationCount != 3 {
+	if err := copyDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM schema_migrations").Scan(&migrationCount); err != nil || migrationCount != 4 {
 		t.Fatalf("migration count = %d, %v", migrationCount, err)
 	}
 }

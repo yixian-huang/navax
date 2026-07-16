@@ -33,6 +33,8 @@ func AbuseProtection() func(http.Handler) http.Handler {
 	limiter := &abuseLimiter{entries: make(map[string]rateEntry), now: time.Now, maxKeys: 50_000}
 	rules := []rateRule{
 		{http.MethodPost, exactPath("/api/v1/auth/login"), 10, 5 * time.Minute},
+		{http.MethodPost, exactPath("/api/v1/auth/password/forgot"), 5, 15 * time.Minute},
+		{http.MethodPost, exactPath("/api/v1/auth/password/reset"), 10, 15 * time.Minute},
 		{http.MethodPost, exactPath("/api/v1/bootstrap"), 5, 10 * time.Minute},
 		{http.MethodPost, func(path string) bool {
 			return strings.HasPrefix(path, "/api/v1/auth/invitations/") && strings.HasSuffix(path, "/register")

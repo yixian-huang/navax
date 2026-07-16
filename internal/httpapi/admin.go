@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"runtime"
 	"strconv"
 	"strings"
@@ -67,6 +68,7 @@ func (h *AdminHandler) MountRoutes(management chi.Router) {
 	management.Get("/users/{userId}", h.user)
 	management.Patch("/users/{userId}", h.updateUserStatus)
 	management.Delete("/users/{userId}/sessions", h.revokeUserSessions)
+	management.Post("/users/{userId}/password-reset", h.resetUserPassword)
 	management.Get("/invitations", h.invitations)
 	management.Post("/invitations", h.createInvitation)
 	management.Delete("/invitations/{invitationId}", h.revokeInvitation)
@@ -229,6 +231,46 @@ func (h *AdminHandler) maybeSendInvite(ctx context.Context, requested bool, crea
 		return false
 	}
 	return true
+}
+
+// resetUserPassword issues a single-use reset link for a user. It works without
+// SMTP: the link is always returned to the administrator (to share out-of-band)
+// and additionally emailed to the user when a provider is configured.
+func (h *AdminHandler) resetUserPassword(w http.ResponseWriter, r *http.Request) {
+	actor := actorFromRequest(r)
+	userID := chi.URLParam(r, "userId")
+	// Authorize the admin and confirm the target user exists (404 otherwise).
+	if _, err := h.service.User(r.Context(), actor, userID); err != nil {
+		h.writeError(w, r, err)
+		return
+	}
+	settings, err := h.service.Settings(r.Context(), actor)
+	if err != nil {
+		h.writeError(w, r, err)
+		return
+	}
+	result, err := h.auth.IssuePasswordReset(r.Context(), userID)
+	if err != nil {
+		h.writeError(w, r, err)
+		return
+	}
+	resetURL := strings.TrimRight(settings.PublicBaseURL, "/") + "/reset-password?token=" + url.QueryEscape(result.Token)
+	emailSent := false
+	if h.mailer != nil && h.mailer.MailConfigured(r.Context()) {
+		message := passwordResetMessage(h.instanceName, result.User.Email, resetURL, result.ExpiresAt)
+		if sendErr := h.mailer.SendMail(r.Context(), message); sendErr != nil {
+			slog.Warn("send admin password reset email", "error", sendErr, "user", userID)
+		} else {
+			emailSent = true
+		}
+	}
+	if auditErr := h.service.WriteAudit(r.Context(), actor, "user.password.reset", "user", userID,
+		map[string]any{"emailSent": emailSent}, middleware.GetReqID(r.Context())); auditErr != nil {
+		slog.Warn("write password reset audit", "error", auditErr, "user", userID)
+	}
+	WriteJSON(w, r, http.StatusOK, map[string]any{
+		"resetUrl": resetURL, "expiresAt": result.ExpiresAt, "emailSent": emailSent,
+	})
 }
 
 func (h *AdminHandler) revokeInvitation(w http.ResponseWriter, r *http.Request) {

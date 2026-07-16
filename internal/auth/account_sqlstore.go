@@ -115,6 +115,58 @@ func (s *SQLStore) SessionsByUser(ctx context.Context, userID, currentSessionID 
 	return sessions, rows.Err()
 }
 
+func (s *SQLStore) CreatePasswordResetToken(ctx context.Context, insert PasswordResetInsert) error {
+	return database.WithinTx(ctx, s.db, nil, func(tx *sql.Tx) error {
+		// Invalidate any earlier unused token so only the most recent link works.
+		if _, err := tx.ExecContext(ctx,
+			"UPDATE password_reset_tokens SET used_at = ? WHERE user_id = ? AND used_at IS NULL",
+			dbTime(insert.CreatedAt), insert.UserID,
+		); err != nil {
+			return fmt.Errorf("invalidate prior reset tokens: %w", err)
+		}
+		_, err := tx.ExecContext(ctx, `
+			INSERT INTO password_reset_tokens(id, user_id, token_hash, expires_at, used_at, created_at)
+			VALUES (?, ?, ?, ?, NULL, ?)`,
+			insert.ID, insert.UserID, insert.TokenHash, dbTime(insert.ExpiresAt), dbTime(insert.CreatedAt),
+		)
+		return err
+	})
+}
+
+func (s *SQLStore) ConsumePasswordResetToken(ctx context.Context, tokenHash, passwordHash string, now time.Time) error {
+	return database.WithinTx(ctx, s.db, nil, func(tx *sql.Tx) error {
+		var id, userID string
+		err := tx.QueryRowContext(ctx, `
+			SELECT id, user_id FROM password_reset_tokens
+			WHERE token_hash = ? AND used_at IS NULL AND expires_at > ?`,
+			tokenHash, dbTime(now),
+		).Scan(&id, &userID)
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrInvalidResetToken
+		}
+		if err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx,
+			"UPDATE password_reset_tokens SET used_at = ? WHERE id = ?", dbTime(now), id,
+		); err != nil {
+			return fmt.Errorf("consume reset token: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx,
+			"UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?", passwordHash, dbTime(now), userID,
+		); err != nil {
+			return fmt.Errorf("update password: %w", err)
+		}
+		// A completed reset revokes every existing session for the account.
+		if _, err := tx.ExecContext(ctx,
+			"UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL", dbTime(now), userID,
+		); err != nil {
+			return fmt.Errorf("revoke sessions after reset: %w", err)
+		}
+		return nil
+	})
+}
+
 func (s *SQLStore) RevokeOwnedSession(ctx context.Context, userID, sessionID string, now time.Time) error {
 	result, err := s.db.ExecContext(ctx, `
 		UPDATE sessions SET revoked_at = ?

@@ -3,7 +3,9 @@ package httpapi
 import (
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -20,6 +22,7 @@ type AuthHandler struct {
 	instanceName  string
 	publicBaseURL string
 	version       string
+	mailer        Mailer
 }
 
 type AuthHandlerOptions struct {
@@ -27,12 +30,13 @@ type AuthHandlerOptions struct {
 	InstanceName  string
 	PublicBaseURL string
 	Version       string
+	Mailer        Mailer
 }
 
 func NewAuthHandler(service *auth.Service, options AuthHandlerOptions) *AuthHandler {
 	return &AuthHandler{
 		service: service, secureCookies: options.SecureCookies, instanceName: options.InstanceName,
-		publicBaseURL: options.PublicBaseURL, version: options.Version,
+		publicBaseURL: options.PublicBaseURL, version: options.Version, mailer: options.Mailer,
 	}
 }
 
@@ -42,6 +46,8 @@ func (h *AuthHandler) Mount(router chi.Router) {
 	router.Get("/auth/session", h.currentSession)
 	router.Post("/auth/login", h.login)
 	router.Post("/auth/logout", h.logout)
+	router.Post("/auth/password/forgot", h.forgotPassword)
+	router.Post("/auth/password/reset", h.resetPassword)
 	router.Get("/auth/invitations/{token}", h.validateInvitation)
 	router.Post("/auth/invitations/{token}/register", h.register)
 }
@@ -113,6 +119,48 @@ func (h *AuthHandler) login(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, r, http.StatusOK, authSessionData(session))
 }
 
+// forgotPassword starts self-service recovery. It always responds identically so
+// the endpoint cannot be used to probe which emails are registered; a reset link
+// is emailed only when the account exists and an SMTP provider is configured.
+func (h *AuthHandler) forgotPassword(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		Email string `json:"email"`
+	}
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+	result, err := h.service.RequestPasswordReset(r.Context(), request.Email)
+	if err != nil {
+		WriteError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "服务器内部错误", nil)
+		return
+	}
+	if result.Sent && h.mailer != nil && h.mailer.MailConfigured(r.Context()) {
+		resetURL := strings.TrimRight(h.publicBaseURL, "/") + "/reset-password?token=" + url.QueryEscape(result.Token)
+		message := passwordResetMessage(h.instanceName, result.User.Email, resetURL, result.ExpiresAt)
+		if sendErr := h.mailer.SendMail(r.Context(), message); sendErr != nil {
+			slog.Warn("send password reset email", "error", sendErr)
+		}
+	}
+	WriteJSON(w, r, http.StatusOK, map[string]any{"message": "如果该邮箱对应有效账号，我们已发送密码重置邮件。"})
+}
+
+// resetPassword completes recovery by consuming a reset token and setting a new
+// password. The token machinery revokes every existing session for the account.
+func (h *AuthHandler) resetPassword(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		Token    string `json:"token"`
+		Password string `json:"password"`
+	}
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+	if err := h.service.ResetPassword(r.Context(), request.Token, request.Password); err != nil {
+		h.writeAuthError(w, r, err)
+		return
+	}
+	WriteJSON(w, r, http.StatusOK, map[string]any{"message": "密码已重置，请使用新密码登录。"})
+}
+
 func (h *AuthHandler) logout(w http.ResponseWriter, r *http.Request) {
 	if err := h.service.Logout(r.Context(), readSessionCookie(r)); err != nil {
 		WriteError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "退出失败", nil)
@@ -177,6 +225,8 @@ func (h *AuthHandler) writeAuthError(w http.ResponseWriter, r *http.Request, err
 		WriteError(w, r, http.StatusNotFound, "INVITATION_NOT_FOUND", "邀请不存在", nil)
 	case errors.Is(err, auth.ErrConflict):
 		WriteError(w, r, http.StatusConflict, "CONFLICT", "用户名、邮箱或页面地址已存在", nil)
+	case errors.Is(err, auth.ErrInvalidResetToken):
+		WriteError(w, r, http.StatusBadRequest, "INVALID_RESET_TOKEN", "重置链接无效或已过期", nil)
 	case errors.Is(err, auth.ErrInvalidInput):
 		WriteError(w, r, http.StatusUnprocessableEntity, "VALIDATION_FAILED", "用户名、邮箱、密码或实例信息无效", nil)
 	default:
