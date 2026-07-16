@@ -69,6 +69,9 @@ function activeWidgets() {
   return isEditingSystem() ? mockSystemWidgets : mockNavigationPage.widgets;
 }
 
+// 背景图不属于旧页面模型，单独按页面存储，避免每次合成时被重置
+const pageBackgrounds = new Map<string, { type: string; value: string; opacity: number }>();
+
 function activePageSettings() {
   const page = activePage();
   return {
@@ -80,7 +83,7 @@ function activePageSettings() {
     },
     appearance: {
       themeId: page.themeId,
-      background: { type: 'none', value: '', opacity: 1 },
+      background: pageBackgrounds.get(page.id) ?? { type: 'none', value: '', opacity: 1 },
     },
     search: { defaultEngine: 'google', showEngineSelector: true },
     display: { showClock: page.layout.showClock, showDate: page.layout.showDate, showGreeting: true },
@@ -240,6 +243,7 @@ handlers.push((url, init) => {
         showDate: body.display?.showDate ?? page.layout.showDate,
       };
       page.themeId = body.appearance?.themeId ?? page.themeId;
+      if (body.appearance?.background) pageBackgrounds.set(page.id, body.appearance.background);
       page.hasUnpublishedChanges = true;
       page.draftUpdatedAt = new Date().toISOString();
     }
@@ -293,7 +297,8 @@ handlers.push((url, init) => {
   }
   if (url === `${API_BASE}/navigation/page`) {
     syncPageCategories();
-    return Promise.resolve(jsonResponse({ code: 'OK', data: activePage(), meta: { message: '', detail: '' } }));
+    // 新代码（如主题设置页）读取契约字段 settings，随旧页面模型一并返回
+    return Promise.resolve(jsonResponse({ code: 'OK', data: { ...activePage(), settings: activePageSettings() }, meta: { message: '', detail: '' } }));
   }
   if (url === `${API_BASE}/navigation/page/layout`) {
     const body = JSON.parse(init?.body || '');
