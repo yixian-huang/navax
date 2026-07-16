@@ -8,7 +8,7 @@ export default function PrivacyPage() {
   return (
     <LegalLayout title="隐私政策" updated="2026-07-16">
       <p className="text-sm text-foreground-600 leading-relaxed">
-        本隐私政策说明 [运营方名称]（以下称“我们”）在你使用本站（[网站地址]，基于开源项目 nav.ax 搭建）时如何收集、使用与保护你的信息。
+        本隐私政策说明 NavAx（以下称“我们”）在你使用本站（https://nav.ax，基于开源项目 nav.ax 搭建）时如何收集、使用与保护你的信息。
       </p>
 
       <Section title="一、我们收集的信息">
@@ -44,11 +44,11 @@ export default function PrivacyPage() {
       </Section>
 
       <Section title="六、你的权利">
-        <p>在适用法律允许的范围内，你有权访问、更正或删除你的个人信息，或撤回此前的同意。你可在账号设置中管理资料，或通过 <strong>[联系邮箱]</strong> 联系我们行使上述权利。</p>
+        <p>在适用法律允许的范围内，你有权访问、更正或删除你的个人信息，或撤回此前的同意。你可在账号设置中管理资料，或通过 <strong>no-reply@nav.ax</strong> 联系我们行使上述权利。</p>
       </Section>
 
       <Section title="七、未成年人">
-        <p>本站不面向 [最低年龄，如 14] 周岁以下的未成年人。若你认为未成年人向我们提供了信息，请联系我们删除。</p>
+        <p>本站不面向 14 周岁以下的未成年人。若你认为未成年人向我们提供了信息，请联系我们删除。</p>
       </Section>
 
       <Section title="八、政策变更">
@@ -56,7 +56,7 @@ export default function PrivacyPage() {
       </Section>
 
       <Section title="九、联系我们">
-        <p>如对本隐私政策有任何疑问，请联系：<strong>[运营方名称]</strong>，邮箱 <strong>[联系邮箱]</strong>。</p>
+        <p>如对本隐私政策有任何疑问，请联系：<strong>NavAx</strong>，邮箱 <strong>no-reply@nav.ax</strong>。</p>
       </Section>
     </LegalLayout>
   );

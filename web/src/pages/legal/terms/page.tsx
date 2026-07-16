@@ -8,7 +8,7 @@ export default function TermsPage() {
   return (
     <LegalLayout title="服务条款" updated="2026-07-16">
       <p className="text-sm text-foreground-600 leading-relaxed">
-        欢迎使用本站（[网站地址]，由 [运营方名称] 运营，基于开源项目 nav.ax 搭建）。使用本站即表示你已阅读、理解并同意本服务条款。
+        欢迎使用本站（https://nav.ax，由 NavAx 运营，基于开源项目 nav.ax 搭建）。使用本站即表示你已阅读、理解并同意本服务条款。
       </p>
 
       <Section title="一、账号与资格">
@@ -46,11 +46,11 @@ export default function TermsPage() {
       </Section>
 
       <Section title="七、开源许可">
-        <p>本站基于开源项目 nav.ax 构建，该项目以 GNU AGPL-3.0 许可证发布。本服务条款约束的是你与 [运营方名称] 之间的服务关系，与项目源码的开源许可相互独立。</p>
+        <p>本站基于开源项目 nav.ax 构建，该项目以 GNU AGPL-3.0 许可证发布。本服务条款约束的是你与 NavAx 之间的服务关系，与项目源码的开源许可相互独立。</p>
       </Section>
 
-      <Section title="八、适用法律">
-        <p>本条款的订立、解释与争议解决适用 <strong>[司法辖区/所在地区]</strong> 法律。因本条款引起的争议，双方应先友好协商解决。</p>
+      <Section title="八、争议解决">
+        <p>因本条款引起或与之相关的争议，双方应先本着诚信原则友好协商解决；协商不成的，可依据适用的法律通过有管辖权的机构处理。</p>
       </Section>
 
       <Section title="九、条款变更">
@@ -58,7 +58,7 @@ export default function TermsPage() {
       </Section>
 
       <Section title="十、联系我们">
-        <p>如对本服务条款有任何疑问，请联系：<strong>[运营方名称]</strong>，邮箱 <strong>[联系邮箱]</strong>。</p>
+        <p>如对本服务条款有任何疑问，请联系：<strong>NavAx</strong>，邮箱 <strong>no-reply@nav.ax</strong>。</p>
       </Section>
     </LegalLayout>
   );

@@ -8,7 +8,7 @@ export default function CookiesPage() {
   return (
     <LegalLayout title="Cookie 说明" updated="2026-07-16">
       <p className="text-sm text-foreground-600 leading-relaxed">
-        本站（[网站地址]）在 Cookie 使用上力求克制。我们<strong>不使用</strong>任何第三方广告或跨站追踪 Cookie。
+        本站（https://nav.ax）在 Cookie 使用上力求克制。我们<strong>不使用</strong>任何第三方广告或跨站追踪 Cookie。
       </p>
 
       <Section title="一、我们使用的 Cookie">
@@ -50,7 +50,7 @@ export default function CookiesPage() {
       </Section>
 
       <Section title="五、联系我们">
-        <p>如对 Cookie 使用有任何疑问，请联系 <strong>[运营方名称]</strong>，邮箱 <strong>[联系邮箱]</strong>。</p>
+        <p>如对 Cookie 使用有任何疑问，请联系 <strong>NavAx</strong>，邮箱 <strong>no-reply@nav.ax</strong>。</p>
       </Section>
     </LegalLayout>
   );
