@@ -52,6 +52,13 @@ setup('初始化实例并准备账号', async ({ request: adminAPI, baseURL }) =
   });
   expect(published.status(), await published.text()).toBe(200);
 
+  // 启用短域名功能，供子域名申请/审核 E2E 使用
+  const domainSettings = await adminAPI.patch('/api/v1/admin/settings', {
+    headers: origin,
+    data: { domain: { rootDomain: 'nav.test', subdomainsEnabled: true } },
+  });
+  expect(domainSettings.status(), await domainSettings.text()).toBe(200);
+
   await adminAPI.storageState({ path: '.auth/admin.json' });
 
   // 邀请并注册普通用户

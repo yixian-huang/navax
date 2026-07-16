@@ -3,6 +3,7 @@ import { test, expect } from '@playwright/test';
 import { USER } from './accounts';
 
 const BACKGROUND_PNG = fileURLToPath(new URL('../fixtures/background.png', import.meta.url));
+const BOOKMARKS_HTML = fileURLToPath(new URL('../fixtures/bookmarks.html', import.meta.url));
 
 // 用户关键路径：登录、编辑导航、发布、查看公开页、切换主题。
 test.describe('用户登录', () => {
@@ -59,6 +60,27 @@ test.describe('用户工作台', () => {
     await expect(page.getByText('Slate Dark').first()).toBeVisible();
     await page.getByRole('button', { name: /Slate Dark/ }).click();
     await expect(page.getByText('主题已切换为「Slate Dark」')).toBeVisible();
+  });
+
+  test('导入书签并导出备份', async ({ page }) => {
+    await page.goto('/app/import-export');
+
+    // 隐藏 file input 由「选择文件」按钮触发；直接设置书签 HTML。
+    await page.locator('input[type="file"]').setInputFiles(BOOKMARKS_HTML);
+    await page.getByRole('button', { name: '预检文件' }).click();
+
+    // 预检成功后展示来源分类，全部有效且非重复的站点默认勾选。
+    await expect(page.getByText('E2E 导入分类')).toBeVisible();
+    const commit = page.getByRole('button', { name: /导入已选 \d+ 项/ });
+    await expect(commit).toBeEnabled();
+    await commit.click();
+    await expect(page.getByText(/已导入 \d+ 个站点/)).toBeVisible();
+
+    // 导出 JSON 备份：应触发下载并提示成功。
+    const download = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'nav.ax JSON' }).click();
+    expect((await download).suggestedFilename()).toMatch(/\.json$/);
+    await expect(page.getByText('导出文件已生成')).toBeVisible();
   });
 
   test('上传本地背景图', async ({ page }) => {
