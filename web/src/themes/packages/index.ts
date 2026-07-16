@@ -1,5 +1,6 @@
 import { themeRegistry } from '@/themes/registry';
 import { slateTheme } from '@/themes/packages/slate';
+import { slateDarkTheme } from '@/themes/packages/slate-dark';
 import { kyotoTheme } from '@/themes/packages/kyoto';
 import { noirTheme } from '@/themes/packages/noir';
 import { terracottaTheme } from '@/themes/packages/terracotta';
@@ -10,6 +11,7 @@ import { monoTheme } from '@/themes/packages/mono';
 
 themeRegistry.registerAll([
   slateTheme,
+  slateDarkTheme,
   kyotoTheme,
   noirTheme,
   terracottaTheme,

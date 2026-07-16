@@ -6,7 +6,6 @@
 import { useState, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import type { Site, Density } from '@/api/types';
-import IconRenderer from '@/components/base/IconRenderer';
 import { useContextMenu, createSiteContextActions } from '@/components/base/ContextMenu';
 import { useToast } from '@/components/base/Toast';
 
@@ -25,6 +24,22 @@ function getDomain(url: string): string {
   } catch {
     return url.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
   }
+}
+
+function getFaviconUrl(url: string): string {
+  return `https://www.google.com/s2/favicons?domain=${getDomain(url)}&sz=64`;
+}
+
+function Favicon({ url, className }: { url: string; className: string }) {
+  return (
+    <img
+      src={getFaviconUrl(url)}
+      alt=""
+      loading="lazy"
+      className={`${className} object-contain`}
+      onError={e => { (e.target as HTMLImageElement).style.visibility = 'hidden'; }}
+    />
+  );
 }
 
 function HighlightText({ text, query }: { text: string; query: string }) {
@@ -138,11 +153,9 @@ export default function SiteCard({ site, density, onOpen, onEdit, onDelete, sear
   if (density === 'list') {
     return (
       <CardWrapper {...shared} className="flex items-center gap-3.5 px-3 py-2.5 rounded-lg hover:bg-background-100 transition-colors duration-200 focus-visible:outline-offset-[-2px]">
-        <span className="w-9 h-9 flex items-center justify-center rounded-lg bg-background-200 text-foreground-500 group-hover:bg-primary-500 group-hover:text-background-50 transition-all duration-300 flex-shrink-0">
-          <IconRenderer icon={site.icon} className="text-base" />
-        </span>
+        <Favicon url={site.url} className="w-5 h-5 flex-shrink-0" />
         <span className="min-w-0 flex-1">
-          <span className="block text-sm font-medium text-foreground-800 truncate group-hover:text-foreground-950 transition-colors duration-200">
+          <span className="block text-sm font-medium text-foreground-800 truncate group-hover:text-accent-500 transition-colors duration-200">
             <HighlightText text={site.title} query={q} />
           </span>
           <span className="block text-[11px] text-foreground-300 truncate font-mono">
@@ -157,10 +170,8 @@ export default function SiteCard({ site, density, onOpen, onEdit, onDelete, sear
   if (density === 'compact') {
     return (
       <CardWrapper {...shared} className="material-card flex flex-col items-center gap-2 p-3">
-        <span className="w-9 h-9 flex items-center justify-center rounded-lg bg-background-200 text-foreground-600 group-hover:bg-primary-500 group-hover:text-background-50 transition-all duration-300">
-          <IconRenderer icon={site.icon} className="text-lg" />
-        </span>
-        <span className="text-[11px] font-medium text-foreground-700 text-center truncate w-full leading-tight group-hover:text-foreground-950 transition-colors duration-200">
+        <Favicon url={site.url} className="w-6 h-6" />
+        <span className="text-[11px] font-medium text-foreground-700 text-center truncate w-full leading-tight group-hover:text-accent-500 transition-colors duration-200">
           <HighlightText text={site.title} query={q} />
         </span>
       </CardWrapper>
@@ -171,15 +182,13 @@ export default function SiteCard({ site, density, onOpen, onEdit, onDelete, sear
   return (
     <CardWrapper {...shared} className="material-card flex flex-col gap-3 p-4">
       <div className="flex items-center justify-between">
-        <span className="w-11 h-11 flex items-center justify-center rounded-xl bg-background-200 text-foreground-600 group-hover:bg-primary-500 group-hover:text-background-50 transition-all duration-300">
-          <IconRenderer icon={site.icon} className="text-xl" />
-        </span>
+        <Favicon url={site.url} className="w-7 h-7" />
         <div className="flex items-center gap-1.5">
           <i className="ri-arrow-right-up-line text-base text-foreground-200 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300" />
         </div>
       </div>
       <div className="min-w-0">
-        <h3 className="text-sm font-semibold text-foreground-900 truncate group-hover:text-primary-600 transition-colors duration-200">
+        <h3 className="text-sm font-semibold text-foreground-900 truncate group-hover:text-accent-500 transition-colors duration-200">
           <HighlightText text={site.title} query={q} />
         </h3>
         <p className="text-[11px] text-foreground-300 truncate font-mono mt-0.5">

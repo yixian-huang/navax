@@ -38,7 +38,7 @@ export default function CategoryTabs({
     const containerRect = container.getBoundingClientRect();
     const tabRect = activeBtn.getBoundingClientRect();
 
-    indicator.style.width = `${tabRect.width}px`;
+    indicator.style.width = '16px';
     indicator.style.transform = `translateX(${tabRect.left - containerRect.left}px)`;
   }, [activeId]);
 
@@ -78,7 +78,7 @@ export default function CategoryTabs({
             onKeyDown={(e) => handleKeyDown(e, idx)}
             className={cn(
               'flex-shrink-0 text-sm font-medium transition-colors duration-200 whitespace-nowrap focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-400/50 pb-1',
-              activeId === '' ? 'text-primary-500' : 'text-foreground-400 hover:text-foreground-600'
+              activeId === '' ? 'text-foreground-950' : 'text-foreground-400 hover:text-foreground-600'
             )}
           >
             {allLabel}
@@ -98,14 +98,14 @@ export default function CategoryTabs({
               onKeyDown={(e) => handleKeyDown(e, tabIdx)}
               className={cn(
                 'flex-shrink-0 flex items-center gap-2 text-sm font-medium transition-colors duration-200 whitespace-nowrap focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-400/50 pb-1',
-                isActive ? 'text-primary-500' : 'text-foreground-400 hover:text-foreground-600'
+                isActive ? 'text-foreground-950' : 'text-foreground-400 hover:text-foreground-600'
               )}
             >
               <IconRenderer icon={cat.icon} className="text-base" />
               {cat.name}
               <span className={cn(
                 'text-xs ml-0.5',
-                isActive ? 'text-primary-400/60' : 'text-foreground-200'
+                isActive ? 'text-accent-500/70' : 'text-foreground-200'
               )}>
                 {cat.sites.length}
               </span>
@@ -119,7 +119,7 @@ export default function CategoryTabs({
         <div className="absolute inset-0 bg-secondary-100/25 rounded-full" />
         <div
           ref={indicatorRef}
-          className="absolute top-0 left-0 h-[2px] bg-primary-500 rounded-full transition-all duration-300 ease-out"
+          className="absolute top-0 left-0 h-[2px] bg-accent-500 rounded-full transition-all duration-300 ease-out"
           style={{ width: 0 }}
         />
       </div>

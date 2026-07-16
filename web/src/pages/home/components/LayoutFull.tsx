@@ -64,6 +64,9 @@ export default function LayoutFull({
             <span className="text-[11px] text-foreground-300 tracking-wide mt-1 font-mono tabular-nums">
               {secondsStr} SEC
             </span>
+            <span className="text-[10px] text-foreground-300 tracking-wide mt-3 font-mono tabular-nums">
+              {totalSites} 个站点 · {categories.length} 个分类
+            </span>
           </div>}
         </div>
       </header>
