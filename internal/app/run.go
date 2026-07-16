@@ -181,9 +181,10 @@ func Run(ctx context.Context, cfg config.Config, build BuildInfo) error {
 			Version: build.Version, Commit: build.Commit, BuiltAt: build.BuiltAt,
 			GoVersion: build.GoVersion, Deployment: build.Deployment,
 		},
-		PublicBaseURL: cfg.PublicBaseURL,
-		Ready:         db.PingContext,
-		Web:           webHandler,
+		PublicBaseURL:  cfg.PublicBaseURL,
+		TrustedProxies: cfg.TrustedProxies,
+		Ready:          db.PingContext,
+		Web:            webHandler,
 		MountAPI: func(router chi.Router) {
 			authHandler.Mount(router)
 			accountHandler.Mount(router)

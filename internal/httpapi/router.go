@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"net/http"
+	"net/netip"
 	"strings"
 	"time"
 
@@ -19,16 +20,18 @@ type VersionInfo struct {
 }
 
 type RouterOptions struct {
-	Version       VersionInfo
-	PublicBaseURL string
-	Ready         func(context.Context) error
-	MountAPI      func(chi.Router)
-	Web           http.Handler
+	Version        VersionInfo
+	PublicBaseURL  string
+	TrustedProxies []netip.Prefix
+	Ready          func(context.Context) error
+	MountAPI       func(chi.Router)
+	Web            http.Handler
 }
 
 func NewRouter(options RouterOptions) http.Handler {
 	router := chi.NewRouter()
 	router.Use(middleware.RequestID)
+	router.Use(RealIP(options.TrustedProxies))
 	router.Use(AbuseProtection())
 	router.Use(accessLog)
 	router.Use(recoverer)

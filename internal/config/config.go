@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -35,6 +36,9 @@ type Config struct {
 	ShutdownTimeout   time.Duration
 	UpdateManifestURL string
 	UpdatePublicKey   []byte
+	// TrustedProxies lists CIDRs/IPs of reverse proxies whose X-Forwarded-For
+	// may be trusted to derive the real client IP. Empty ⇒ trust none (use RemoteAddr).
+	TrustedProxies []netip.Prefix
 }
 
 // Load reads and validates environment configuration.
@@ -92,6 +96,10 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	trustedProxies, err := parseTrustedProxies(os.Getenv("NAVAX_TRUSTED_PROXIES"))
+	if err != nil {
+		return Config{}, err
+	}
 
 	return Config{
 		Addr:              env("NAVAX_ADDR", defaultAddr),
@@ -107,7 +115,29 @@ func Load() (Config, error) {
 		ShutdownTimeout:   shutdownTimeout,
 		UpdateManifestURL: strings.TrimSpace(os.Getenv("NAVAX_UPDATE_MANIFEST_URL")),
 		UpdatePublicKey:   updatePublicKey,
+		TrustedProxies:    trustedProxies,
 	}, nil
+}
+
+// parseTrustedProxies accepts a comma-separated list of CIDRs or bare IPs.
+func parseTrustedProxies(raw string) ([]netip.Prefix, error) {
+	var prefixes []netip.Prefix
+	for _, part := range strings.Split(raw, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		if prefix, err := netip.ParsePrefix(part); err == nil {
+			prefixes = append(prefixes, prefix.Masked())
+			continue
+		}
+		addr, err := netip.ParseAddr(part)
+		if err != nil {
+			return nil, fmt.Errorf("NAVAX_TRUSTED_PROXIES contains an invalid entry %q", part)
+		}
+		prefixes = append(prefixes, netip.PrefixFrom(addr, addr.BitLen()))
+	}
+	return prefixes, nil
 }
 
 func env(name, fallback string) string {
