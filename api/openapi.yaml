@@ -181,6 +181,7 @@ paths:
       security: [{ sessionCookie: [] }]
       responses:
         '200': { $ref: '#/components/responses/EmptyResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/auth/invitations/{token}:
     parameters:
       - in: path
@@ -222,6 +223,7 @@ paths:
       security: [{ sessionCookie: [] }]
       responses:
         '200': { $ref: '#/components/responses/UserResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
     patch:
       tags: [Auth]
       operationId: updateMyProfile
@@ -233,6 +235,7 @@ paths:
             schema: { $ref: '#/components/schemas/ProfilePatch' }
       responses:
         '200': { $ref: '#/components/responses/UserResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
         '409': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/me/password:
     patch:
@@ -254,6 +257,7 @@ paths:
       security: [{ sessionCookie: [] }]
       responses:
         '200': { $ref: '#/components/responses/SessionsResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/me/sessions/{sessionId}:
     delete:
       tags: [Auth]
@@ -263,6 +267,7 @@ paths:
         - $ref: '#/components/parameters/SessionId'
       responses:
         '200': { $ref: '#/components/responses/EmptyResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
         '404': { $ref: '#/components/responses/ErrorResponse' }
 
   /api/v1/pages/current:
@@ -278,6 +283,7 @@ paths:
           description: system 仅管理员可访问。
       responses:
         '200': { $ref: '#/components/responses/NavigationPageResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
         '403': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/pages/{pageId}:
     parameters:
@@ -288,6 +294,7 @@ paths:
       security: [{ sessionCookie: [] }]
       responses:
         '200': { $ref: '#/components/responses/NavigationPageResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
         '403': { $ref: '#/components/responses/ErrorResponse' }
         '404': { $ref: '#/components/responses/ErrorResponse' }
     patch:
@@ -301,6 +308,7 @@ paths:
             schema: { $ref: '#/components/schemas/PagePatch' }
       responses:
         '200': { $ref: '#/components/responses/NavigationPageResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
         '412': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/pages/{pageId}/categories:
     parameters:
@@ -311,6 +319,7 @@ paths:
       security: [{ sessionCookie: [] }]
       responses:
         '200': { $ref: '#/components/responses/CategoriesResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
     post:
       tags: [Pages]
       operationId: createCategory
@@ -322,6 +331,7 @@ paths:
             schema: { $ref: '#/components/schemas/CategoryInput' }
       responses:
         '201': { $ref: '#/components/responses/CategoryResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
         '409': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/pages/{pageId}/categories/{categoryId}:
     parameters:
@@ -338,6 +348,7 @@ paths:
             schema: { $ref: '#/components/schemas/CategoryPatch' }
       responses:
         '200': { $ref: '#/components/responses/CategoryResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
     delete:
       tags: [Pages]
       operationId: deleteCategory
@@ -349,6 +360,7 @@ paths:
           schema: { type: string, enum: [reject-if-not-empty, delete-sites, move-to-uncategorized] }
       responses:
         '200': { $ref: '#/components/responses/EmptyResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
         '409': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/pages/{pageId}/sites:
     parameters:
@@ -364,6 +376,7 @@ paths:
         - $ref: '#/components/parameters/Search'
       responses:
         '200': { $ref: '#/components/responses/SitesResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
     post:
       tags: [Pages]
       operationId: createSite
@@ -375,6 +388,7 @@ paths:
             schema: { $ref: '#/components/schemas/SiteInput' }
       responses:
         '201': { $ref: '#/components/responses/SiteResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
         '422': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/pages/{pageId}/sites/{siteId}:
     parameters:
@@ -391,6 +405,7 @@ paths:
             schema: { $ref: '#/components/schemas/SitePatch' }
       responses:
         '200': { $ref: '#/components/responses/SiteResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
         '422': { $ref: '#/components/responses/ErrorResponse' }
     delete:
       tags: [Pages]
@@ -398,6 +413,7 @@ paths:
       security: [{ sessionCookie: [] }]
       responses:
         '200': { $ref: '#/components/responses/EmptyResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/pages/{pageId}/content-order:
     put:
       tags: [Pages]
@@ -412,6 +428,8 @@ paths:
             schema: { $ref: '#/components/schemas/ContentOrderRequest' }
       responses:
         '200': { $ref: '#/components/responses/RevisionResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
         '412': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/pages/{pageId}/settings:
     parameters:
@@ -422,6 +440,7 @@ paths:
       security: [{ sessionCookie: [] }]
       responses:
         '200': { $ref: '#/components/responses/PageSettingsResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
     put:
       tags: [Pages]
       operationId: replacePageSettings
@@ -433,6 +452,7 @@ paths:
             schema: { $ref: '#/components/schemas/PageSettingsUpdate' }
       responses:
         '200': { $ref: '#/components/responses/PageSettingsResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
         '412': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/pages/{pageId}/preview:
     get:
@@ -443,6 +463,7 @@ paths:
         - $ref: '#/components/parameters/PageId'
       responses:
         '200': { $ref: '#/components/responses/PublishedPageResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/pages/{pageId}/publication:
     parameters:
       - $ref: '#/components/parameters/PageId'
@@ -452,6 +473,7 @@ paths:
       security: [{ sessionCookie: [] }]
       responses:
         '200': { $ref: '#/components/responses/PublicationResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
     put:
       tags: [Pages]
       operationId: replacePublicationSettings
@@ -463,6 +485,7 @@ paths:
             schema: { $ref: '#/components/schemas/PublicationSettingsUpdate' }
       responses:
         '200': { $ref: '#/components/responses/PublicationResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
         '409': { $ref: '#/components/responses/ErrorResponse' }
     delete:
       tags: [Pages]
@@ -470,6 +493,7 @@ paths:
       security: [{ sessionCookie: [] }]
       responses:
         '200': { $ref: '#/components/responses/PublicationResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
         '403': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/pages/{pageId}/publish:
     post:
@@ -486,8 +510,10 @@ paths:
             schema: { $ref: '#/components/schemas/PublishRequest' }
       responses:
         '200': { $ref: '#/components/responses/PublicationResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
         '409': { $ref: '#/components/responses/ErrorResponse' }
         '412': { $ref: '#/components/responses/ErrorResponse' }
+        '422': { $ref: '#/components/responses/ErrorResponse' }
 
   /api/v1/pages/{pageId}/imports/preview:
     post:
@@ -508,6 +534,7 @@ paths:
                 file: { type: string, format: binary }
       responses:
         '200': { $ref: '#/components/responses/ImportPreviewResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
         '413': { $ref: '#/components/responses/ErrorResponse' }
         '422': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/pages/{pageId}/imports:
@@ -525,6 +552,7 @@ paths:
             schema: { $ref: '#/components/schemas/ImportCommitRequest' }
       responses:
         '200': { $ref: '#/components/responses/ImportResultResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
         '409': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/pages/{pageId}/export:
     get:
@@ -545,6 +573,7 @@ paths:
           content:
             application/json: { schema: { $ref: '#/components/schemas/PortableExport' } }
             text/html: { schema: { type: string } }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/pages/{pageId}/link-checks:
     post:
       tags: [Data]
@@ -559,6 +588,7 @@ paths:
             schema: { $ref: '#/components/schemas/LinkCheckRequest' }
       responses:
         '200': { $ref: '#/components/responses/LinkCheckResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
         '429': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/assets:
     post:
@@ -577,6 +607,7 @@ paths:
                 file: { type: string, format: binary }
       responses:
         '201': { $ref: '#/components/responses/AssetResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
         '413': { $ref: '#/components/responses/ErrorResponse' }
         '415': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/me/subdomain:
@@ -586,6 +617,7 @@ paths:
       security: [{ sessionCookie: [] }]
       responses:
         '200': { $ref: '#/components/responses/SubdomainResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
     post:
       tags: [Pages]
       operationId: requestSubdomain
@@ -598,6 +630,7 @@ paths:
             schema: { $ref: '#/components/schemas/SubdomainRequestInput' }
       responses:
         '201': { $ref: '#/components/responses/SubdomainResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
         '409': { $ref: '#/components/responses/ErrorResponse' }
     delete:
       tags: [Pages]
@@ -605,6 +638,7 @@ paths:
       security: [{ sessionCookie: [] }]
       responses:
         '200': { $ref: '#/components/responses/EmptyResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
 
   /api/v1/me/analytics/overview:
     get:
@@ -615,6 +649,7 @@ paths:
         - $ref: '#/components/parameters/Period'
       responses:
         '200': { $ref: '#/components/responses/AnalyticsOverviewResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/me/analytics/trends:
     get:
       tags: [Analytics]
@@ -624,6 +659,7 @@ paths:
         - $ref: '#/components/parameters/Period'
       responses:
         '200': { $ref: '#/components/responses/AnalyticsTrendsResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/me/analytics/breakdown:
     get:
       tags: [Analytics]
@@ -633,6 +669,7 @@ paths:
         - $ref: '#/components/parameters/Period'
       responses:
         '200': { $ref: '#/components/responses/AnalyticsBreakdownResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
 
   /api/v1/admin/overview:
     get:
@@ -641,6 +678,7 @@ paths:
       security: [{ sessionCookie: [] }]
       responses:
         '200': { $ref: '#/components/responses/AdminOverviewResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
         '403': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/admin/users:
     get:
@@ -656,6 +694,8 @@ paths:
         - $ref: '#/components/parameters/PageSize'
       responses:
         '200': { $ref: '#/components/responses/UsersResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/admin/users/{userId}:
     parameters:
       - $ref: '#/components/parameters/UserId'
@@ -665,6 +705,8 @@ paths:
       security: [{ sessionCookie: [] }]
       responses:
         '200': { $ref: '#/components/responses/UserResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
     patch:
       tags: [Admin]
       operationId: updateUserStatus
@@ -681,6 +723,8 @@ paths:
                 reason: { type: string, maxLength: 300 }
       responses:
         '200': { $ref: '#/components/responses/UserResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
         '409': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/admin/users/{userId}/sessions:
     delete:
@@ -691,6 +735,8 @@ paths:
         - $ref: '#/components/parameters/UserId'
       responses:
         '200': { $ref: '#/components/responses/EmptyResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/admin/invitations:
     get:
       tags: [Admin]
@@ -701,6 +747,8 @@ paths:
         - $ref: '#/components/parameters/PageSize'
       responses:
         '200': { $ref: '#/components/responses/InvitationsResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
     post:
       tags: [Admin]
       operationId: createInvitation
@@ -712,6 +760,8 @@ paths:
             schema: { $ref: '#/components/schemas/InvitationCreateRequest' }
       responses:
         '201': { $ref: '#/components/responses/InvitationCreatedResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/admin/invitations/{invitationId}:
     delete:
       tags: [Admin]
@@ -721,6 +771,8 @@ paths:
         - $ref: '#/components/parameters/InvitationId'
       responses:
         '200': { $ref: '#/components/responses/InvitationResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/admin/directory/categories:
     get:
       tags: [Admin]
@@ -728,6 +780,8 @@ paths:
       security: [{ sessionCookie: [] }]
       responses:
         '200': { $ref: '#/components/responses/DirectoryCategoriesResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
     post:
       tags: [Admin]
       operationId: createDirectoryCategory
@@ -739,6 +793,8 @@ paths:
             schema: { $ref: '#/components/schemas/DirectoryCategoryInput' }
       responses:
         '201': { $ref: '#/components/responses/DirectoryCategoryResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/admin/directory/categories/{categoryId}:
     parameters:
       - $ref: '#/components/parameters/CategoryId'
@@ -753,12 +809,16 @@ paths:
             schema: { $ref: '#/components/schemas/DirectoryCategoryInput' }
       responses:
         '200': { $ref: '#/components/responses/DirectoryCategoryResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
     delete:
       tags: [Admin]
       operationId: deleteDirectoryCategory
       security: [{ sessionCookie: [] }]
       responses:
         '200': { $ref: '#/components/responses/EmptyResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
         '409': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/admin/directory/sites:
     get:
@@ -774,6 +834,8 @@ paths:
         - $ref: '#/components/parameters/PageSize'
       responses:
         '200': { $ref: '#/components/responses/DirectoryResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
     post:
       tags: [Admin]
       operationId: createDirectorySite
@@ -785,6 +847,8 @@ paths:
             schema: { $ref: '#/components/schemas/DirectorySiteInput' }
       responses:
         '201': { $ref: '#/components/responses/DirectorySiteResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/admin/directory/sites/{siteId}:
     parameters:
       - $ref: '#/components/parameters/SiteId'
@@ -799,12 +863,16 @@ paths:
             schema: { $ref: '#/components/schemas/DirectorySitePatch' }
       responses:
         '200': { $ref: '#/components/responses/DirectorySiteResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
     delete:
       tags: [Admin]
       operationId: deleteDirectorySite
       security: [{ sessionCookie: [] }]
       responses:
         '200': { $ref: '#/components/responses/EmptyResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/admin/themes:
     get:
       tags: [Admin]
@@ -812,6 +880,8 @@ paths:
       security: [{ sessionCookie: [] }]
       responses:
         '200': { $ref: '#/components/responses/ThemesResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/admin/themes/{themeId}:
     patch:
       tags: [Admin]
@@ -831,6 +901,8 @@ paths:
               minProperties: 1
       responses:
         '200': { $ref: '#/components/responses/ThemeResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
         '409': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/admin/settings:
     get:
@@ -839,6 +911,8 @@ paths:
       security: [{ sessionCookie: [] }]
       responses:
         '200': { $ref: '#/components/responses/SystemSettingsResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
     patch:
       tags: [Admin]
       operationId: updateSystemSettings
@@ -850,6 +924,8 @@ paths:
             schema: { $ref: '#/components/schemas/SystemSettingsPatch' }
       responses:
         '200': { $ref: '#/components/responses/SystemSettingsResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/admin/subdomains:
     get:
       tags: [Admin]
@@ -863,6 +939,8 @@ paths:
         - $ref: '#/components/parameters/PageSize'
       responses:
         '200': { $ref: '#/components/responses/SubdomainsResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/admin/subdomains/{requestId}:
     patch:
       tags: [Admin]
@@ -880,6 +958,8 @@ paths:
             schema: { $ref: '#/components/schemas/SubdomainReviewRequest' }
       responses:
         '200': { $ref: '#/components/responses/SubdomainResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
         '409': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/admin/links:
     get:
@@ -895,6 +975,8 @@ paths:
         - $ref: '#/components/parameters/PageSize'
       responses:
         '200': { $ref: '#/components/responses/AdminLinksResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/admin/links/{siteId}:
     delete:
       tags: [Admin]
@@ -913,6 +995,8 @@ paths:
                 reason: { type: string, minLength: 1, maxLength: 300 }
       responses:
         '200': { $ref: '#/components/responses/EmptyResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/admin/audit:
     get:
       tags: [Admin]
@@ -926,6 +1010,8 @@ paths:
         - $ref: '#/components/parameters/PageSize'
       responses:
         '200': { $ref: '#/components/responses/AuditResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
 
   /api/v1/admin/providers:
     get:
@@ -934,6 +1020,8 @@ paths:
       security: [{ sessionCookie: [] }]
       responses:
         '200': { $ref: '#/components/responses/ProvidersResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/admin/providers/{kind}:
     parameters:
       - $ref: '#/components/parameters/ProviderKind'
@@ -943,6 +1031,8 @@ paths:
       security: [{ sessionCookie: [] }]
       responses:
         '200': { $ref: '#/components/responses/ProviderResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
     patch:
       tags: [Providers]
       operationId: updateProviderConfig
@@ -954,6 +1044,8 @@ paths:
             schema: { $ref: '#/components/schemas/ProviderConfigUpdate' }
       responses:
         '200': { $ref: '#/components/responses/ProviderResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
         '422': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/admin/providers/{kind}/test:
     post:
@@ -971,6 +1063,8 @@ paths:
                 recipient: { type: string, format: email, description: SMTP 测试收件人 }
       responses:
         '200': { $ref: '#/components/responses/ProviderTestResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
         '422': { $ref: '#/components/responses/ErrorResponse' }
 
   /api/v1/admin/update:
@@ -980,6 +1074,8 @@ paths:
       security: [{ sessionCookie: [] }]
       responses:
         '200': { $ref: '#/components/responses/UpdateStateResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
     patch:
       tags: [Maintenance]
       operationId: updateUpdateSettings
@@ -991,6 +1087,8 @@ paths:
             schema: { $ref: '#/components/schemas/UpdateSettingsPatch' }
       responses:
         '200': { $ref: '#/components/responses/UpdateStateResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/admin/update/check:
     post:
       tags: [Maintenance]
@@ -998,6 +1096,8 @@ paths:
       security: [{ sessionCookie: [] }]
       responses:
         '200': { $ref: '#/components/responses/UpdateStateResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/admin/update/apply:
     post:
       tags: [Maintenance]
@@ -1017,6 +1117,8 @@ paths:
                 confirmation: { type: string, const: APPLY_UPDATE }
       responses:
         '202': { $ref: '#/components/responses/UpdateStateResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
         '409': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/admin/backups:
     get:
@@ -1025,12 +1127,16 @@ paths:
       security: [{ sessionCookie: [] }]
       responses:
         '200': { $ref: '#/components/responses/BackupsResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
     post:
       tags: [Maintenance]
       operationId: createBackup
       security: [{ sessionCookie: [] }]
       responses:
         '201': { $ref: '#/components/responses/BackupResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/admin/backups/{backupId}:
     get:
       tags: [Maintenance]
@@ -1043,6 +1149,8 @@ paths:
           description: 备份归档
           content:
             application/octet-stream: { schema: { type: string, format: binary } }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/admin/backups/{backupId}/restore-token:
     post:
       tags: [Maintenance]
@@ -1062,6 +1170,7 @@ paths:
       responses:
         '200': { $ref: '#/components/responses/RestoreTokenResponse' }
         '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/admin/backups/{backupId}/restore:
     post:
       tags: [Maintenance]
@@ -1081,6 +1190,8 @@ paths:
                 confirmation: { type: string, const: RESTORE_BACKUP }
       responses:
         '202': { $ref: '#/components/responses/EmptyResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
         '409': { $ref: '#/components/responses/ErrorResponse' }
 
 components:
@@ -1170,6 +1281,12 @@ components:
 
   schemas:
     Id: { type: string, minLength: 8, maxLength: 64 }
+    ThemeId:
+      type: string
+      description: 主题包 slug，如 slate、slate-dark。
+      pattern: '^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$'
+      minLength: 1
+      maxLength: 64
     Timestamp: { type: string, format: date-time }
     ResponseMeta:
       type: object
@@ -1401,7 +1518,7 @@ components:
           type: object
           required: [themeId, background]
           properties:
-            themeId: { $ref: '#/components/schemas/Id' }
+            themeId: { $ref: '#/components/schemas/ThemeId' }
             background:
               type: object
               required: [type, value, opacity]
@@ -1533,7 +1650,7 @@ components:
       type: object
       required: [id, name, version, author, description, mode, preview, enabled, default]
       properties:
-        id: { $ref: '#/components/schemas/Id' }
+        id: { $ref: '#/components/schemas/ThemeId' }
         name: { type: string }
         version: { type: string }
         author: { type: string }
@@ -1550,7 +1667,7 @@ components:
         title: { type: string }
         description: { type: string }
         ownerName: { type: string }
-        themeId: { $ref: '#/components/schemas/Id' }
+        themeId: { $ref: '#/components/schemas/ThemeId' }
         tags: { type: array, items: { type: string } }
         featured: { type: boolean }
         viewCount: { type: integer, minimum: 0 }

@@ -23,7 +23,7 @@ Format Go with `gofmt`; keep packages small and domain-focused. Exported Go name
 
 ## Testing Guidelines
 
-Place Go tests beside source as `*_test.go`; prefer table-driven unit tests and SQLite integration tests for persistence or authorization behavior. Every change must pass `make check`, `go test -race ./...`, and `make build`. UI changes also require a browser smoke test of loading, empty, error, mobile, keyboard, and dark-theme states. Add regression tests for bug fixes.
+Place Go tests beside source as `*_test.go`; prefer table-driven unit tests and SQLite integration tests for persistence or authorization behavior. Every change must pass `make check`, `go test -race ./...`, and `make build`. Endpoint contract changes must also pass `make test-contract` (boots the real binary and validates against `api/openapi.yaml`), and UI/flow changes `make e2e` (Playwright over the embedded-frontend binary; see `tests/e2e/`). UI changes also require a browser smoke test of loading, empty, error, mobile, keyboard, and dark-theme states. Add regression tests for bug fixes.
 
 ## Commit & Pull Request Guidelines
 

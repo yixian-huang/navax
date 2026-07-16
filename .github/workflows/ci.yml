@@ -27,10 +27,42 @@ jobs:
         run: make check
       - name: Tests
         run: make test
+      - name: Contract tests
+        run: make test-contract
       - name: Embedded production build
         run: make build VERSION="${GITHUB_SHA::12}" COMMIT="${GITHUB_SHA}" DEPLOYMENT=ci
       - name: Smoke-test binary
         run: test -x bin/navax
+
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.25.x"
+          cache: true
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Embedded production build
+        run: make build VERSION="${GITHUB_SHA::12}" COMMIT="${GITHUB_SHA}" DEPLOYMENT=ci
+      - name: Install Playwright
+        run: |
+          cd tests/e2e && npm install
+          npx playwright install --with-deps chromium
+      - name: Run E2E
+        run: cd tests/e2e && npx playwright test
+      - name: Upload report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: tests/e2e/playwright-report
+          retention-days: 7
 
   container:
     runs-on: ubuntu-latest
