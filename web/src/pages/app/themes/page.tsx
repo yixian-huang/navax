@@ -4,8 +4,8 @@
 // Uses real ThemeRegistry (7 themes), consistent with admin panel.
 // ============================================================
 
-import { useState, useMemo, useCallback, useEffect } from 'react';
-import { Check, Paintbrush, Image as ImageIcon, Trash2 } from 'lucide-react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { Check, Paintbrush, Image as ImageIcon, Trash2, Upload } from 'lucide-react';
 import { themeRegistry } from '@/themes/registry';
 import { useToast } from '@/components/base/Toast';
 import { useSaveStatus } from '@/hooks/useSaveStatus';
@@ -13,6 +13,11 @@ import { cn } from '@/lib/utils';
 import type { ThemePackage } from '@/themes/types';
 import { useMyPage, useUpdatePageSettings } from '@/hooks/useQueries';
 import { ErrorState, LoadingSkeleton } from '@/components/base/SharedUI';
+import { assetsApi, getPublicConfig } from '@/api/assets';
+import { ApiError } from '@/api/client';
+
+const UPLOAD_ACCEPT = 'image/png,image/jpeg,image/gif';
+const DEFAULT_MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 
 import '@/themes/packages';
 
@@ -34,6 +39,15 @@ export default function ThemesPage() {
   const [bgConfig, setBgConfig] = useState<BgConfig>({ image: '', opacity: 0.15 });
   const [bgUrlInput, setBgUrlInput] = useState('');
   const [showBgUrlInput, setShowBgUrlInput] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [maxUploadBytes, setMaxUploadBytes] = useState(DEFAULT_MAX_UPLOAD_BYTES);
+
+  useEffect(() => {
+    getPublicConfig()
+      .then(response => setMaxUploadBytes(response.data.limits.maxUploadBytes))
+      .catch(() => { /* 保留默认上限，服务端仍会二次校验 */ });
+  }, []);
 
   const seriousThemes = useMemo(() => themes.filter(t => t.meta.vibe === 'serious'), [themes]);
   const cuteThemes = useMemo(() => themes.filter(t => t.meta.vibe === 'cute'), [themes]);
@@ -112,6 +126,31 @@ export default function ThemesPage() {
       toast('error', cause instanceof Error ? cause.message : '背景图清除失败');
     }
   }, [persistBackground, toast]);
+
+  const handleUploadBg = useCallback(async (file: File) => {
+    if (file.size > maxUploadBytes) {
+      toast('error', `图片超过上限 ${Math.floor(maxUploadBytes / 1024 / 1024)}MB`);
+      return;
+    }
+    setUploading(true);
+    try {
+      const response = await assetsApi.upload('background', file);
+      await handleSaveBg(response.data.url);
+    } catch (cause) {
+      const message = cause instanceof ApiError && cause.status === 415
+        ? '仅支持 PNG、JPEG 或 GIF 图片'
+        : cause instanceof Error ? cause.message : '背景图上传失败';
+      toast('error', message);
+    } finally {
+      setUploading(false);
+    }
+  }, [maxUploadBytes, handleSaveBg, toast]);
+
+  const handleFilePicked = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = ''; // 允许重复选择同一文件
+    if (file) void handleUploadBg(file);
+  }, [handleUploadBg]);
 
   const handleOpacityChange = useCallback((opacity: number) => {
     setBgConfig(current => ({ ...current, opacity }));
@@ -238,14 +277,36 @@ export default function ThemesPage() {
             </div>
           )}
 
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept={UPLOAD_ACCEPT}
+            onChange={handleFilePicked}
+            className="hidden"
+            aria-hidden="true"
+            tabIndex={-1}
+          />
+
           {/* Set background */}
           {!showBgUrlInput ? (
             <div className="flex items-center gap-2">
               <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className="h-8 px-3 rounded-lg bg-primary-500 text-background-50 dark:text-foreground-950 text-xs font-medium hover:bg-primary-600 disabled:opacity-60 disabled:cursor-not-allowed transition-colors duration-150 whitespace-nowrap inline-flex items-center gap-1.5"
+              >
+                {uploading ? (
+                  <span className="w-3.5 h-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                ) : (
+                  <Upload className="w-3.5 h-3.5" />
+                )}
+                {uploading ? '上传中…' : bgConfig.image ? '上传新图片' : '上传图片'}
+              </button>
+              <button
                 onClick={() => setShowBgUrlInput(true)}
                 className="h-8 px-3 rounded-lg border border-background-200/70 text-xs text-foreground-600 hover:bg-background-50 transition-colors duration-150 whitespace-nowrap"
               >
-                {bgConfig.image ? '更换背景' : '设置背景图'}
+                使用图片 URL
               </button>
               {bgConfig.image && (
                 <button

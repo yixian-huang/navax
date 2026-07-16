@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/cookiejar"
 	"strings"
@@ -128,6 +129,60 @@ func (c *apiClient) call(t *testing.T, method, path string, body any, opts ...ca
 		var parsed map[string]any
 		if err := json.Unmarshal(responseBody, &parsed); err != nil {
 			t.Fatalf("解析响应 JSON %s %s: %v\n%s", method, path, err, responseBody)
+		}
+		result.json = parsed
+	}
+	return result
+}
+
+// uploadPNG 以 multipart/form-data 上传一张最小 PNG，只校验响应（multipart
+// 请求体不做契约请求校验）。
+func (c *apiClient) uploadPNG(t *testing.T, kind string, png []byte) apiResult {
+	t.Helper()
+
+	var buffer bytes.Buffer
+	writer := multipart.NewWriter(&buffer)
+	if err := writer.WriteField("kind", kind); err != nil {
+		t.Fatalf("写入 kind 字段: %v", err)
+	}
+	part, err := writer.CreateFormFile("file", "background.png")
+	if err != nil {
+		t.Fatalf("创建 file 字段: %v", err)
+	}
+	if _, err := part.Write(png); err != nil {
+		t.Fatalf("写入 PNG 内容: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("关闭 multipart writer: %v", err)
+	}
+
+	request, err := http.NewRequest(http.MethodPost, baseURL+"/api/v1/assets", &buffer)
+	if err != nil {
+		t.Fatalf("构造上传请求: %v", err)
+	}
+	request.Header.Set("Content-Type", writer.FormDataContentType())
+	request.Header.Set("Origin", baseURL)
+
+	response, err := c.http.Do(request)
+	if err != nil {
+		t.Fatalf("上传请求: %v", err)
+	}
+	defer response.Body.Close()
+	responseBody, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatalf("读取上传响应: %v", err)
+	}
+
+	response.Body = io.NopCloser(bytes.NewReader(responseBody))
+	if ok, validationErrs := apiValidator.ValidateHttpResponse(request, response); !ok {
+		reportValidationErrors(t, "响应", http.MethodPost, "/api/v1/assets", validationErrs)
+	}
+
+	result := apiResult{status: response.StatusCode, body: responseBody}
+	if strings.Contains(response.Header.Get("Content-Type"), "application/json") && len(responseBody) > 0 {
+		var parsed map[string]any
+		if err := json.Unmarshal(responseBody, &parsed); err != nil {
+			t.Fatalf("解析上传响应 JSON: %v\n%s", err, responseBody)
 		}
 		result.json = parsed
 	}

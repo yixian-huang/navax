@@ -284,6 +284,34 @@ export interface Theme {
   isActive?: boolean;
 }
 
+export type AssetKind = 'avatar' | 'background' | 'site-icon';
+
+export interface Asset {
+  id: string;
+  kind: AssetKind;
+  url: string;
+  mimeType: string;
+  size: number;
+  createdAt: string;
+}
+
+export interface PublicConfig {
+  instanceName: string;
+  publicBaseUrl: string;
+  rootDomain: string | null;
+  registrationMode: 'invite' | 'closed';
+  features: {
+    discover: boolean;
+    analytics: boolean;
+    subdomains: boolean;
+  };
+  limits: {
+    maxCategoriesPerPage: number;
+    maxSitesPerPage: number;
+    maxUploadBytes: number;
+  };
+}
+
 export interface ThemeManifest {
   id: string;
   name: string;

@@ -228,6 +228,43 @@ handlers.push(url => {
   return null;
 });
 
+// ---- Public config & asset upload ----
+let mockAssetSeq = 0;
+handlers.push((url, init) => {
+  if (url === `${API_BASE}/public/config`) {
+    return Promise.resolve(jsonResponse({
+      code: 'OK',
+      data: {
+        instanceName: 'nav.ax',
+        publicBaseUrl: window.location.origin,
+        rootDomain: null,
+        registrationMode: 'invite',
+        features: { discover: true, analytics: true, subdomains: false },
+        limits: { maxCategoriesPerPage: 50, maxSitesPerPage: 1000, maxUploadBytes: 5 * 1024 * 1024 },
+      },
+      meta: { message: '', detail: '' },
+    }));
+  }
+  if (url === `${API_BASE}/assets` && (init?.method || 'GET') === 'POST') {
+    mockAssetSeq += 1;
+    // Mock 环境无真实存储，用 data URL 占位，让预览即时可见。
+    const preview = 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22320%22 height=%22180%22%3E%3Crect width=%22100%25%22 height=%22100%25%22 fill=%22%234a6b52%22/%3E%3C/svg%3E';
+    return Promise.resolve(jsonResponse({
+      code: 'OK',
+      data: {
+        id: `ast_mock_${mockAssetSeq}`,
+        kind: 'background',
+        url: preview,
+        mimeType: 'image/svg+xml',
+        size: 1024,
+        createdAt: new Date().toISOString(),
+      },
+      meta: { message: '', detail: '' },
+    }, 201));
+  }
+  return null;
+});
+
 // ---- Navigation handlers ----
 handlers.push((url, init) => {
   if (/\/pages\/[^/]+\/settings$/.test(url)) {

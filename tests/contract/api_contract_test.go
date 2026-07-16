@@ -1,7 +1,11 @@
 package contract
 
 import (
+	"bytes"
 	"fmt"
+	"image"
+	"image/color"
+	"image/png"
 	"net/http"
 	"testing"
 )
@@ -214,6 +218,25 @@ func TestAPIContract(t *testing.T) {
 		mustStatus(t, bookmarks, http.StatusOK, "导出书签")
 	})
 
+	t.Run("公开配置与背景图上传", func(t *testing.T) {
+		config := guest.call(t, http.MethodGet, "/api/v1/public/config", nil)
+		mustStatus(t, config, http.StatusOK, "公开配置")
+		limits, _ := config.data()["limits"].(map[string]any)
+		if numberField(t, limits, "maxUploadBytes", "上传上限") <= 0 {
+			t.Fatal("maxUploadBytes 应为正数")
+		}
+
+		uploaded := admin.uploadPNG(t, "background", tinyPNG(t))
+		mustStatus(t, uploaded, http.StatusCreated, "上传背景图")
+		assetURL := stringField(t, uploaded.data(), "url", "资源")
+
+		fetched := guest.call(t, http.MethodGet, assetURL, nil)
+		mustStatus(t, fetched, http.StatusOK, "读取上传的图片")
+
+		rejected := admin.uploadPNG(t, "background", []byte("not a real image"))
+		mustStatus(t, rejected, http.StatusUnsupportedMediaType, "非图片内容应被拒绝")
+	})
+
 	t.Run("邀请注册新用户", func(t *testing.T) {
 		invitation := admin.call(t, http.MethodPost, "/api/v1/admin/invitations",
 			map[string]any{"maxUses": 1, "expiresInDays": 7})
@@ -319,6 +342,18 @@ func TestAPIContract(t *testing.T) {
 		denied := user.call(t, http.MethodGet, "/api/v1/admin/overview", nil)
 		mustStatus(t, denied, http.StatusForbidden, "普通用户访问管理端")
 	})
+}
+
+// tinyPNG 生成一张合法的 2x2 PNG，供上传接口校验图片内容。
+func tinyPNG(t *testing.T) []byte {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, 2, 2))
+	img.Set(0, 0, color.RGBA{R: 74, G: 107, B: 82, A: 255})
+	var buffer bytes.Buffer
+	if err := png.Encode(&buffer, img); err != nil {
+		t.Fatalf("编码 PNG: %v", err)
+	}
+	return buffer.Bytes()
 }
 
 // contentOrderFromPage 用页面数据构造覆盖全部分类与站点的排序请求体。

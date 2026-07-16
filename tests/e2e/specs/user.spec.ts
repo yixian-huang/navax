@@ -1,5 +1,8 @@
+import { fileURLToPath } from 'node:url';
 import { test, expect } from '@playwright/test';
 import { USER } from './accounts';
+
+const BACKGROUND_PNG = fileURLToPath(new URL('../fixtures/background.png', import.meta.url));
 
 // 用户关键路径：登录、编辑导航、发布、查看公开页、切换主题。
 test.describe('用户登录', () => {
@@ -56,5 +59,14 @@ test.describe('用户工作台', () => {
     await expect(page.getByText('Slate Dark').first()).toBeVisible();
     await page.getByRole('button', { name: /Slate Dark/ }).click();
     await expect(page.getByText('主题已切换为「Slate Dark」')).toBeVisible();
+  });
+
+  test('上传本地背景图', async ({ page }) => {
+    await page.goto('/app/themes');
+    // 隐藏的 file input 由「上传图片」按钮触发；直接对 input 设置文件。
+    await page.locator('input[type="file"]').setInputFiles(BACKGROUND_PNG);
+    await expect(page.getByText('背景图已更新')).toBeVisible();
+    // 上传后返回真实 asset URL，预览图片指向 /api/v1/assets/…
+    await expect(page.getByAltText('背景预览')).toHaveAttribute('src', /\/api\/v1\/assets\//);
   });
 });

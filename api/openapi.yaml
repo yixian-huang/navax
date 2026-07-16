@@ -610,6 +610,25 @@ paths:
         '401': { $ref: '#/components/responses/ErrorResponse' }
         '413': { $ref: '#/components/responses/ErrorResponse' }
         '415': { $ref: '#/components/responses/ErrorResponse' }
+  /api/v1/assets/{kind}/{object}:
+    get:
+      tags: [Public]
+      operationId: readAsset
+      security: []
+      parameters:
+        - { in: path, name: kind, required: true, schema: { type: string, enum: [avatar, background, site-icon] } }
+        - { in: path, name: object, required: true, schema: { type: string, pattern: '^[a-f0-9]{32}\.(png|jpg|gif)$' } }
+      responses:
+        '200':
+          description: 不可变图片资源
+          headers:
+            Cache-Control: { schema: { type: string } }
+            ETag: { schema: { type: string } }
+          content:
+            image/png: { schema: { type: string, format: binary } }
+            image/jpeg: { schema: { type: string, format: binary } }
+            image/gif: { schema: { type: string, format: binary } }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/me/subdomain:
     get:
       tags: [Pages]
@@ -1311,7 +1330,7 @@ components:
       type: object
       required: [code, data, meta]
       properties:
-        code: { type: string, enum: [MALFORMED_REQUEST, VALIDATION_FAILED, AUTH_REQUIRED, INVALID_CREDENTIALS, SESSION_EXPIRED, FORBIDDEN, ADMIN_REQUIRED, ACCOUNT_DISABLED, NOT_FOUND, INSTANCE_ALREADY_INITIALIZED, EMAIL_CONFLICT, USERNAME_CONFLICT, SLUG_CONFLICT, CATEGORY_NOT_EMPTY, INVITATION_EXPIRED, INVITATION_REVOKED, INVITATION_EXHAUSTED, DRAFT_REVISION_MISMATCH, IMPORT_TOO_LARGE, INVALID_URL, IMPORT_INVALID, RATE_LIMITED, SETUP_REQUIRED, SERVICE_UNAVAILABLE, CONFLICT, INTERNAL_ERROR] }
+        code: { type: string, enum: [MALFORMED_REQUEST, VALIDATION_FAILED, AUTH_REQUIRED, INVALID_CREDENTIALS, SESSION_EXPIRED, FORBIDDEN, ADMIN_REQUIRED, ACCOUNT_DISABLED, NOT_FOUND, METHOD_NOT_ALLOWED, INSTANCE_ALREADY_INITIALIZED, EMAIL_CONFLICT, USERNAME_CONFLICT, SLUG_CONFLICT, CATEGORY_NOT_EMPTY, INVITATION_EXPIRED, INVITATION_REVOKED, INVITATION_EXHAUSTED, INVITATION_NOT_FOUND, DRAFT_REVISION_MISMATCH, IDEMPOTENCY_CONFLICT, IMPORT_TOO_LARGE, IMPORT_CONFLICT, IMPORT_PREVIEW_EXPIRED, INVALID_IMPORT, INVALID_URL, IMPORT_INVALID, PAYLOAD_TOO_LARGE, UNSUPPORTED_MEDIA_TYPE, LINK_CHECK_BUSY, RATE_LIMITED, SETUP_REQUIRED, SERVICE_UNAVAILABLE, CONFLICT, INTERNAL_ERROR] }
         data: { type: 'null' }
         meta: { $ref: '#/components/schemas/ErrorMeta' }
     EmptyEnvelope:
