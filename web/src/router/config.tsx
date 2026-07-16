@@ -5,6 +5,8 @@ import type { RouteObject } from "react-router-dom";
 const NotFound = lazy(() => import("@/pages/NotFound"));
 const Home = lazy(() => import("@/pages/home/page"));
 const LoginPage = lazy(() => import("@/pages/login/page"));
+const ForgotPasswordPage = lazy(() => import("@/pages/forgot-password/page"));
+const ResetPasswordPage = lazy(() => import("@/pages/reset-password/page"));
 const SetupPage = lazy(() => import("@/pages/setup/page"));
 const InvitePage = lazy(() => import("@/pages/invite/page"));
 const PublicSharePage = lazy(() => import("@/pages/public-share/page"));
@@ -39,6 +41,14 @@ const routes: RouteObject[] = [
   {
     path: "/login",
     element: <LoginPage />,
+  },
+  {
+    path: "/forgot-password",
+    element: <ForgotPasswordPage />,
+  },
+  {
+    path: "/reset-password",
+    element: <ResetPasswordPage />,
   },
   {
     path: "/setup",

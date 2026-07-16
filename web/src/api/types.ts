@@ -600,6 +600,12 @@ export interface CreateInvitationRequest {
   sendEmail?: boolean;
 }
 
+export interface PasswordResetLink {
+  resetUrl: string;
+  expiresAt: string;
+  emailSent: boolean;
+}
+
 export interface CreatePlatformSiteRequest {
   title: string;
   url: string;

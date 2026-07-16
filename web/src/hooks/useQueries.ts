@@ -479,6 +479,12 @@ export function useRevokeUserSessions() {
   });
 }
 
+export function useResetUserPassword() {
+  return useMutation({
+    mutationFn: (id: string) => adminApi.resetUserPassword(id),
+  });
+}
+
 export function useCreateInvitation() {
   const qc = useQueryClient();
   return useMutation({

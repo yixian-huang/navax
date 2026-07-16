@@ -228,6 +228,20 @@ handlers.push((url, init) => {
     mockSessionClosed = true;
     return Promise.resolve(jsonResponse({ code: 'OK', data: null, meta: { message: '已退出', detail: '' } }));
   }
+  if (url === `${API_BASE}/auth/password/forgot`) {
+    return Promise.resolve(jsonResponse({
+      code: 'OK',
+      data: { message: '如果该邮箱对应有效账号，我们已发送密码重置邮件。' },
+      meta: { message: '', detail: '' },
+    }));
+  }
+  if (url === `${API_BASE}/auth/password/reset`) {
+    return Promise.resolve(jsonResponse({
+      code: 'OK',
+      data: { message: '密码已重置，请使用新密码登录。' },
+      meta: { message: '', detail: '' },
+    }));
+  }
   if (url.startsWith(`${API_BASE}/auth/invite/`) && url.endsWith('/validate')) {
     return Promise.resolve(jsonResponse({ code: 'OK', data: { valid: true, inviterName: 'admin' }, meta: { message: '', detail: '' } }));
   }
@@ -785,6 +799,18 @@ handlers.push((url) => {
       filtered = filtered.filter(l => l.ownerId === ownerId);
     }
     return Promise.resolve(jsonResponse({ code: 'OK', data: paginate(filtered, page, pageSize), meta: { message: '', detail: '' } }));
+  }
+  // Admin: generate a password reset link for a user
+  if (url.match(/\/admin\/users\/[^/]+\/password-reset$/)) {
+    return Promise.resolve(jsonResponse({
+      code: 'OK',
+      data: {
+        resetUrl: `${window.location.origin}/reset-password?token=mock-reset-token-abcdefghijklmnopqrstuvwxyz`,
+        expiresAt: new Date(Date.now() + 3600000).toISOString(),
+        emailSent: false,
+      },
+      meta: { message: '', detail: '' },
+    }));
   }
   // Admin: delete link
   if (url.match(/\/admin\/links\/[^/]+$/)) {

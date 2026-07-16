@@ -36,6 +36,12 @@ export const authApi = {
   logout: () =>
     request<ApiResponse<null>>('/auth/logout', { method: 'POST' }),
 
+  forgotPassword: (email: string) =>
+    request<ApiResponse<{ message: string }>>('/auth/password/forgot', { method: 'POST', body: { email } }),
+
+  resetPassword: (token: string, password: string) =>
+    request<ApiResponse<{ message: string }>>('/auth/password/reset', { method: 'POST', body: { token, password } }),
+
   registerViaInvite: (token: string, data: InviteRegisterRequest) =>
     request<ApiResponse<AuthSession>>(`/auth/invitations/${encodeURIComponent(token)}/register`, { method: 'POST', body: data }),
 

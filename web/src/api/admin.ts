@@ -31,6 +31,7 @@ import type {
   AdminSubdomainRequest,
   ContractSubdomainStatus,
   SubdomainReviewRequest,
+  PasswordResetLink,
 } from './types';
 
 function asPaginated<T>(response: ApiResponse<T[] | PaginatedResponse<T>>): ApiResponse<PaginatedResponse<T>> {
@@ -72,6 +73,9 @@ export const adminApi = {
 
   revokeUserSessions: (id: string) =>
     request<ApiResponse<null>>(`/admin/users/${id}/sessions`, { method: 'DELETE' }),
+
+  resetUserPassword: (id: string) =>
+    request<ApiResponse<PasswordResetLink>>(`/admin/users/${id}/password-reset`, { method: 'POST' }),
 
   // Invitations
   getInvitations: (params?: { page?: number; pageSize?: number }) =>
