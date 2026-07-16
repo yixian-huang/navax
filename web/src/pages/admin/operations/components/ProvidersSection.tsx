@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, KeyRound, Mail, Network, RotateCw, Save, Server } from 'lucide-react';
+import { CheckCircle2, Info, KeyRound, Mail, Network, RotateCw, Save, Server } from 'lucide-react';
 import { adminApi } from '@/api/admin';
 import type { ProviderConfig, ProviderKind, ProviderSettings } from '@/api/types';
 import { ErrorState, LoadingSkeleton } from '@/components/base/SharedUI';
@@ -10,9 +10,9 @@ import { useToast } from '@/components/base/Toast';
 const providerKinds: ProviderKind[] = ['smtp', 'storage', 'dns'];
 
 const providerMeta = {
-  smtp: { label: 'SMTP 邮件', description: '邀请邮件和系统通知', icon: Mail, secret: 'password', secretLabel: 'SMTP 密码' },
-  storage: { label: '对象存储', description: '本地或 S3 兼容存储', icon: Server, secret: 'secretKey', secretLabel: 'Secret Key' },
-  dns: { label: 'DNS 服务', description: '子域名自动化扩展预留', icon: Network, secret: 'token', secretLabel: 'API Token' },
+  smtp: { label: 'SMTP 邮件', description: '邀请邮件、密码找回等系统通知', icon: Mail, secret: 'password', secretLabel: 'SMTP 密码' },
+  storage: { label: '对象存储', description: '图标 / 图片上传（当前仅本地磁盘）', icon: Server, secret: 'secretKey', secretLabel: 'Secret Key' },
+  dns: { label: 'DNS 服务', description: '子域名自动化扩展预留（暂未接入）', icon: Network, secret: 'token', secretLabel: 'API Token' },
 } as const;
 
 type FormSettings = Record<string, string | number | boolean>;
@@ -165,6 +165,23 @@ function ProviderCard({ provider }: { provider: ProviderConfig }) {
           </>
         )}
       </div>
+
+      {provider.kind === 'storage' && settings.driver === 's3' ? (
+        <div className="rounded-lg bg-amber-50 border border-amber-200/70 p-3 flex items-start gap-2">
+          <Info className="w-3.5 h-3.5 text-amber-600 mt-0.5 shrink-0" />
+          <p className="text-xs text-amber-800 leading-relaxed">
+            S3 兼容存储尚未接入资源分发：无论此处如何配置，上传的图标与图片都会保存并从<strong>本地磁盘</strong>提供。此处仅用于保存配置与连通性测试。
+          </p>
+        </div>
+      ) : null}
+      {provider.kind === 'dns' ? (
+        <div className="rounded-lg bg-amber-50 border border-amber-200/70 p-3 flex items-start gap-2">
+          <Info className="w-3.5 h-3.5 text-amber-600 mt-0.5 shrink-0" />
+          <p className="text-xs text-amber-800 leading-relaxed">
+            DNS 自动化尚未接入：子域名不会自动创建解析记录，需运维在反代 / DNS 侧配置通配解析。此处仅用于保存配置与凭据连通性测试。
+          </p>
+        </div>
+      ) : null}
 
       <div className="rounded-lg bg-background-50 border border-background-200/60 p-3">
         <div className="flex items-center gap-2 mb-2">
