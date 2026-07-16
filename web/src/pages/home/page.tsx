@@ -184,6 +184,29 @@ export default function HomePage() {
   }
 
   if (error) {
+    // 契约规定主站未发布时返回 404：对访客是空状态而非故障，管理员额外给发布入口。
+    if ((error as { status?: number }).status === 404) {
+      return (
+        <PublicShell showSearch={false}>
+          <div className="mx-auto max-w-4xl px-6 md:px-8 pt-20 pb-20">
+            <EmptyState
+              title="站点尚未发布"
+              description="管理员还没有发布导航内容，发布后这里会展示站点导航。"
+              action={
+                authSession?.user?.role === 'admin' ? (
+                  <Link
+                    to="/app?scope=system"
+                    className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-background-100 border border-background-200 text-sm text-foreground-600 hover:bg-background-200 transition-colors duration-150"
+                  >
+                    去发布主站内容
+                  </Link>
+                ) : undefined
+              }
+            />
+          </div>
+        </PublicShell>
+      );
+    }
     return (
       <PublicShell showSearch={false}>
         <div className="mx-auto max-w-4xl px-6 md:px-8 pt-20 pb-20">

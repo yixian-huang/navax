@@ -4,6 +4,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
+import { ApiError } from '@/api/client';
 import { authApi } from '@/api/auth';
 import { navigationApi } from '@/api/navigation';
 import { analyticsApi } from '@/api/analytics';
@@ -337,6 +338,9 @@ export function useSystemPage() {
       const res = await navigationApi.getPublicPage('nav');
       return res.data;
     },
+    // 契约规定主站未发布时返回 404，属稳定状态，重试只会拖慢空状态展示。
+    retry: (failureCount, error) =>
+      !(error instanceof ApiError && error.status === 404) && failureCount < 3,
   });
 }
 
