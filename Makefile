@@ -7,7 +7,7 @@ BUILT_AT ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 DEPLOYMENT ?= binary
 LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.builtAt=$(BUILT_AT) -X main.deployment=$(DEPLOYMENT)
 
-.PHONY: frontend check test test-contract e2e e2e-install embed build clean
+.PHONY: frontend check test test-mock test-contract e2e e2e-install embed build clean
 
 web/node_modules/.install-stamp: web/package.json web/package-lock.json
 	cd web && npm ci
@@ -17,13 +17,17 @@ frontend: web/node_modules/.install-stamp
 	cd web && npm run build
 
 check: web/node_modules/.install-stamp
-	cd web && npm run type-check && npm run lint
+	cd web && npm run type-check && npm run lint && npm run test:mock
 	@files="$$(gofmt -l $$(find cmd internal migrations tests -type f -name '*.go'))"; \
 		test -z "$$files" || { printf '以下 Go 文件需要 gofmt：\n%s\n' "$$files"; exit 1; }
 	go vet ./...
 
 test:
 	go test ./...
+
+# Mock 契约守卫：校验开发态 mock 响应符合 api/openapi.yaml，防止 mock/契约漂移。
+test-mock: web/node_modules/.install-stamp
+	cd web && npm run test:mock
 
 # 契约测试：启动真实二进制并对每对请求/响应做 OpenAPI 校验（内部会自行构建）。
 test-contract:

@@ -181,7 +181,16 @@ type HandlerFn = (url: string, init?: { method?: string; body?: string }) => Pro
 
 const handlers: HandlerFn[] = [];
 
+let mockRequestSeq = 0;
+
 function jsonResponse(data: unknown, status = 200): Response {
+  // 契约要求每个响应的 meta 携带 requestId；mock 统一在此补齐，避免逐处遗漏。
+  const envelope = data as { meta?: Record<string, unknown> } | null;
+  if (envelope && typeof envelope === 'object' && envelope.meta && typeof envelope.meta === 'object'
+    && !('requestId' in envelope.meta)) {
+    mockRequestSeq += 1;
+    envelope.meta.requestId = `mock-req-${mockRequestSeq}`;
+  }
   return new Response(JSON.stringify(data), {
     status,
     headers: { 'Content-Type': 'application/json' },
@@ -304,7 +313,7 @@ handlers.push((url, init) => {
   if (url === `${API_BASE}/assets` && (init?.method || 'GET') === 'POST') {
     mockAssetSeq += 1;
     // Mock 环境无真实存储，用 data URL 占位，让预览即时可见。
-    const preview = 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22320%22 height=%22180%22%3E%3Crect width=%22100%25%22 height=%22100%25%22 fill=%22%234a6b52%22/%3E%3C/svg%3E';
+    const preview = 'data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20width=%22320%22%20height=%22180%22%3E%3Crect%20width=%22100%25%22%20height=%22100%25%22%20fill=%22%234a6b52%22/%3E%3C/svg%3E';
     return Promise.resolve(jsonResponse({
       code: 'OK',
       data: {

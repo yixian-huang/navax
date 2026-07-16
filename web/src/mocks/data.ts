@@ -363,9 +363,9 @@ export const mockPublishedPage: MockPublishedPage = {
 
 // ---- Mock Themes ----
 export const mockThemes: Theme[] = [
-  { id: 'default-light', name: '浅色默认', author: 'nav.ax', mode: 'light', preview: '', isDefault: true, isActive: true },
-  { id: 'default-dark', name: '深色默认', author: 'nav.ax', mode: 'dark', preview: '', isDefault: false, isActive: false },
-  { id: 'forest', name: '森林', author: 'nav.ax', mode: 'both', preview: '', isDefault: false, isActive: false },
+  { id: 'default-light', name: '浅色默认', version: '1.0.0', author: 'nav.ax', description: '简洁明亮的默认主题', mode: 'light', preview: '', enabled: true, default: true, isDefault: true, isActive: true },
+  { id: 'default-dark', name: '深色默认', version: '1.0.0', author: 'nav.ax', description: '沉稳护眼的深色主题', mode: 'dark', preview: '', enabled: true, default: false, isDefault: false, isActive: false },
+  { id: 'forest', name: '森林', version: '1.0.0', author: 'nav.ax', description: '清新自然的森林配色', mode: 'both', preview: '', enabled: true, default: false, isDefault: false, isActive: false },
 ];
 
 // ---- Mock Invitations ----

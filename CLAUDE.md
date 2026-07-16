@@ -10,8 +10,9 @@ All user-facing responses must be written in Chinese (see AGENTS.md). Code ident
 
 Run from the repository root:
 
-- `make check` — frontend type-check + ESLint, `gofmt` verification, `go vet ./...`
+- `make check` — frontend type-check + ESLint + mock contract guard, `gofmt` verification, `go vet ./...`
 - `make test` — all Go tests (`go test ./...`)
+- `make test-mock` — mock contract guard: validates dev-mock responses against `api/openapi.yaml` via Vitest/ajv (`web/tests/mock-contract.test.ts`); guards against mock/contract drift (opaque-`Id` length is intentionally out of scope)
 - `go test -race ./...` — required to pass before merging
 - `go test ./internal/<pkg> -run TestName` — run a single Go test
 - `make test-contract` — API contract tests: boots the real binary and validates every request/response against `api/openapi.yaml` (`tests/contract/`, self-building)
@@ -22,7 +23,7 @@ Run from the repository root:
 - `go run ./cmd/navax` — run the service locally (env vars per `.env.example`; data dir defaults to `./data`)
 - `docker compose up --build` — production-style container; first-run setup at `/setup` with `NAVAX_SETUP_TOKEN`
 
-Frontend-only development: `cd web && npm run dev` (Vite, port 3000). There is no dev proxy to the Go backend — set `VITE_ENABLE_API_MOCKS=true` to install the fetch-intercepting mock API (`web/src/api/mock-handlers.ts`, dev-only). Production code must never depend on `web/src/mocks/`.
+Frontend-only development: `cd web && npm run dev` (Vite, port 3000). There is no dev proxy to the Go backend — set `VITE_ENABLE_API_MOCKS=true` to install the fetch-intercepting mock API (`web/src/api/mock-handlers.ts`, dev-only). Production code must never depend on `web/src/mocks/`. The mock projects its internal store to the same contract shape as the real backend; when adding or changing mock responses, keep them passing `make test-mock`.
 
 Every change must pass `make check`, `go test -race ./...`, and `make build`. UI changes also require a browser smoke test of loading, empty, error, mobile, keyboard, and dark-theme states.
 
