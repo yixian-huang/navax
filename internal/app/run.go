@@ -90,13 +90,13 @@ func Run(ctx context.Context, cfg config.Config, build BuildInfo) error {
 	})
 	accountHandler := httpapi.NewAccountHandler(authService)
 	adminService := adminpkg.NewService(adminpkg.NewSQLStore(db))
-	adminHandler := httpapi.NewAdminHandler(authService, adminService, httpapi.AdminHandlerOptions{
-		Version: build.Version, StartedAt: startedAt,
-	})
 	providerService, err := integrations.NewService(db, cfg.MasterKey)
 	if err != nil {
 		return fmt.Errorf("initialize provider configuration: %w", err)
 	}
+	adminHandler := httpapi.NewAdminHandler(authService, adminService, httpapi.AdminHandlerOptions{
+		Version: build.Version, StartedAt: startedAt, InstanceName: cfg.InstanceName, Mailer: providerService,
+	})
 	providerHandler := httpapi.NewProviderHandler(providerService)
 	backupService, err := maintenance.NewBackupService(db, cfg.DataDir+"/backups")
 	if err != nil {

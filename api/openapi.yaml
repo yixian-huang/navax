@@ -1960,6 +1960,7 @@ components:
           properties:
             token: { type: string }
             inviteUrl: { type: string, format: uri }
+            emailSent: { type: boolean, description: 是否已通过已配置的 SMTP 发送邀请邮件 }
     SystemSettings:
       type: object
       required: [instanceName, publicBaseUrl, registrationMode, limits, analytics, domain]

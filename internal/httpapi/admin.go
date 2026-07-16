@@ -1,8 +1,10 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"runtime"
 	"strconv"
@@ -16,15 +18,19 @@ import (
 )
 
 type AdminHandlerOptions struct {
-	Version   string
-	StartedAt time.Time
+	Version      string
+	StartedAt    time.Time
+	InstanceName string
+	Mailer       Mailer
 }
 
 type AdminHandler struct {
-	auth      *auth.Service
-	service   *adminpkg.Service
-	version   string
-	startedAt time.Time
+	auth         *auth.Service
+	service      *adminpkg.Service
+	version      string
+	startedAt    time.Time
+	instanceName string
+	mailer       Mailer
 }
 
 func NewAdminHandler(authService *auth.Service, service *adminpkg.Service, options ...AdminHandlerOptions) *AdminHandler {
@@ -36,8 +42,13 @@ func NewAdminHandler(authService *auth.Service, service *adminpkg.Service, optio
 		if !options[0].StartedAt.IsZero() {
 			option.StartedAt = options[0].StartedAt
 		}
+		option.InstanceName = options[0].InstanceName
+		option.Mailer = options[0].Mailer
 	}
-	return &AdminHandler{auth: authService, service: service, version: option.Version, startedAt: option.StartedAt}
+	return &AdminHandler{
+		auth: authService, service: service, version: option.Version, startedAt: option.StartedAt,
+		instanceName: option.InstanceName, mailer: option.Mailer,
+	}
 }
 
 func (h *AdminHandler) Mount(router chi.Router) {
@@ -200,7 +211,24 @@ func (h *AdminHandler) createInvitation(w http.ResponseWriter, r *http.Request) 
 	data := invitationData(created.Invitation)
 	data["token"] = created.Token
 	data["inviteUrl"] = created.InviteURL
+	data["emailSent"] = h.maybeSendInvite(r.Context(), request.SendEmail, created)
 	WriteJSON(w, r, http.StatusCreated, data)
+}
+
+// maybeSendInvite delivers the invitation email when the admin asked for it and
+// an SMTP provider is configured. It is best-effort: the invitation already
+// exists and its URL is returned regardless, so a delivery failure is logged
+// rather than surfaced as a request error.
+func (h *AdminHandler) maybeSendInvite(ctx context.Context, requested bool, created adminpkg.InvitationCreated) bool {
+	if !requested || created.Email == nil || h.mailer == nil || !h.mailer.MailConfigured(ctx) {
+		return false
+	}
+	message := inviteMessage(h.instanceName, *created.Email, created.InviteURL, created.ExpiresAt)
+	if err := h.mailer.SendMail(ctx, message); err != nil {
+		slog.Warn("send invitation email", "error", err, "invitation", created.ID)
+		return false
+	}
+	return true
 }
 
 func (h *AdminHandler) revokeInvitation(w http.ResponseWriter, r *http.Request) {
