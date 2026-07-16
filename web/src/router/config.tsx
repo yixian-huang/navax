@@ -11,6 +11,9 @@ const SetupPage = lazy(() => import("@/pages/setup/page"));
 const InvitePage = lazy(() => import("@/pages/invite/page"));
 const PublicSharePage = lazy(() => import("@/pages/public-share/page"));
 const DiscoverPage = lazy(() => import("@/pages/discover/page"));
+const PrivacyPage = lazy(() => import("@/pages/legal/privacy/page"));
+const TermsPage = lazy(() => import("@/pages/legal/terms/page"));
+const CookiesPage = lazy(() => import("@/pages/legal/cookies/page"));
 const AppShell = lazy(() => import("@/components/feature/AppShell"));
 const AdminShell = lazy(() => import("@/components/feature/AdminShell"));
 const AppOverview = lazy(() => import("@/pages/app/overview/page"));
@@ -65,6 +68,18 @@ const routes: RouteObject[] = [
   {
     path: "/discover",
     element: <DiscoverPage />,
+  },
+  {
+    path: "/privacy",
+    element: <PrivacyPage />,
+  },
+  {
+    path: "/terms",
+    element: <TermsPage />,
+  },
+  {
+    path: "/cookies",
+    element: <CookiesPage />,
   },
 
   // App (user dashboard)

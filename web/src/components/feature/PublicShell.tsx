@@ -86,18 +86,23 @@ export default function PublicShell({ children, showSearch = true, themeId = DEF
       <footer className="mt-auto">
         <div className="mx-auto max-w-4xl px-6 md:px-8 py-8">
           <div className="hairline mb-6" />
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
             <span className="text-[11px] text-foreground-300 tracking-wide">
               nav.ax · 开源导航站
             </span>
-            <a
-              href="https://github.com"
-              target="_blank"
-              rel="nofollow noopener noreferrer"
-              className="text-[11px] text-foreground-300 hover:text-primary-500 transition-colors duration-200"
-            >
-              GitHub
-            </a>
+            <nav className="flex items-center gap-4">
+              <Link to="/privacy" className="text-[11px] text-foreground-300 hover:text-primary-500 transition-colors duration-200">隐私政策</Link>
+              <Link to="/terms" className="text-[11px] text-foreground-300 hover:text-primary-500 transition-colors duration-200">服务条款</Link>
+              <Link to="/cookies" className="text-[11px] text-foreground-300 hover:text-primary-500 transition-colors duration-200">Cookie 说明</Link>
+              <a
+                href="https://github.com"
+                target="_blank"
+                rel="nofollow noopener noreferrer"
+                className="text-[11px] text-foreground-300 hover:text-primary-500 transition-colors duration-200"
+              >
+                GitHub
+              </a>
+            </nav>
           </div>
         </div>
       </footer>
