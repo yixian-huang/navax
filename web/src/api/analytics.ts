@@ -50,11 +50,13 @@ export const analyticsApi = {
       clicks: bucket.value,
       ctr: 0,
     }));
+    // 契约的 breakdown 只提供 {key,label,value}；占比可由点击总数在前端派生。
+    const totalCategoryClicks = breakdown.categories.reduce((sum, bucket) => sum + bucket.value, 0);
     const categoryStats: CategoryClickStat[] = breakdown.categories.map(bucket => ({
       categoryName: bucket.label,
       categoryIcon: '',
       clicks: bucket.value,
-      percentage: 0,
+      percentage: totalCategoryClicks > 0 ? Math.round((bucket.value / totalCategoryClicks) * 1000) / 10 : 0,
     }));
     const recentVisits: VisitRecord[] = breakdown.recentVisits.map((visit, index) => ({
       id: `${visit.anonymousId}-${index}`,

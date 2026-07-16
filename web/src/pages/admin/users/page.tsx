@@ -4,7 +4,7 @@
 
 import { useState, useCallback } from 'react';
 import { Ban, RefreshCw, Shield, UserX } from 'lucide-react';
-import { useAdminUsers, useDisableUser, useEnableUser } from '@/hooks/useQueries';
+import { useAdminUsers, useDisableUser, useEnableUser, useRevokeUserSessions } from '@/hooks/useQueries';
 import { DataTable, type Column } from '@/components/base/DataTable';
 import { ConfirmDialog, Badge } from '@/components/base/SharedUI';
 import { useToast } from '@/components/base/Toast';
@@ -20,6 +20,7 @@ export default function AdminUsersPage() {
 
   const disableMutation = useDisableUser();
   const enableMutation = useEnableUser();
+  const revokeMutation = useRevokeUserSessions();
   const { toast } = useToast();
 
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
@@ -38,11 +39,14 @@ export default function AdminUsersPage() {
         onError: () => toast('error', '操作失败'),
       });
     } else if (actionType === 'revoke') {
-      toast('success', `已撤销 ${selectedUser.username} 的所有活动会话`);
+      revokeMutation.mutate(selectedUser.id, {
+        onSuccess: () => toast('success', `已撤销 ${selectedUser.username} 的所有活动会话`),
+        onError: () => toast('error', '操作失败'),
+      });
     }
     setSelectedUser(null);
     setActionType(null);
-  }, [selectedUser, actionType, disableMutation, enableMutation, toast]);
+  }, [selectedUser, actionType, disableMutation, enableMutation, revokeMutation, toast]);
 
   const users = paginated?.items || [];
 

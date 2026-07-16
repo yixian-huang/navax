@@ -473,6 +473,12 @@ export function useEnableUser() {
   });
 }
 
+export function useRevokeUserSessions() {
+  return useMutation({
+    mutationFn: (id: string) => adminApi.revokeUserSessions(id),
+  });
+}
+
 export function useCreateInvitation() {
   const qc = useQueryClient();
   return useMutation({
