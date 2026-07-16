@@ -8,7 +8,7 @@ import type { SearchEngine } from '@/components/base/SearchBar';
 
 export function SearchSection({
   query, onQueryChange, engine, onEngineChange, onSearch,
-  delay, size = 'lg', suggestions,
+  delay, size = 'lg', suggestions, showEngineSelector = true,
 }: {
   query: string; onQueryChange: (v: string) => void;
   engine: SearchEngine; onEngineChange: (e: SearchEngine) => void;
@@ -16,6 +16,7 @@ export function SearchSection({
   delay: number;
   size?: 'lg' | 'md';
   suggestions?: string[];
+  showEngineSelector?: boolean;
 }) {
   return (
     <div className="mb-14 md:mb-16 rise-in" style={{ animationDelay: `${delay}ms` }}>
@@ -25,7 +26,7 @@ export function SearchSection({
         onSearch={onSearch}
         engine={engine}
         onEngineChange={onEngineChange}
-        showEngineSelector
+        showEngineSelector={showEngineSelector}
         showHint
         size={size}
         suggestions={suggestions}

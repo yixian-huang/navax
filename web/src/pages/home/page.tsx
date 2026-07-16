@@ -36,6 +36,17 @@ function useClock() {
 
 const weekDays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
 
+// 若输入看起来是网址/域名则返回可直接访问的 URL，否则返回 null（走搜索引擎）。
+function resolveDirectUrl(input: string): string | null {
+  const value = input.trim();
+  if (!value || /\s/.test(value)) return null;
+  if (/^https?:\/\//i.test(value)) return value;
+  if (/^localhost(?::\d+)?(?:[/?#]\S*)?$/i.test(value)) return `https://${value}`;
+  // 形如 example.com、sub.example.com/path?q=1，要求至少含一个点与合法后缀。
+  if (/^([a-z0-9-]+\.)+[a-z]{2,}(?::\d+)?(?:[/?#]\S*)?$/i.test(value)) return `https://${value}`;
+  return null;
+}
+
 export default function HomePage() {
   const { data: page, isLoading, error, refetch } = useSystemPage();
   const { data: authSession } = useCurrentUser();
@@ -46,6 +57,11 @@ export default function HomePage() {
   const [engine, setEngine] = useState<SearchEngine>('google');
   const [activeCategory, setActiveCategory] = useState('');
   const settings = page?.settings;
+
+  // 采用站点配置的默认搜索引擎（用户随后仍可手动切换）。
+  useEffect(() => {
+    if (settings?.search?.defaultEngine) setEngine(settings.search.defaultEngine);
+  }, [settings?.search?.defaultEngine]);
   const layout: HomeLayout = settings?.layout.template ?? 'full';
   const [density, setDensity] = useState<Density>('comfortable');
 
@@ -90,6 +106,11 @@ export default function HomePage() {
   }, [categories]);
 
   const handleSearch = useCallback((queryStr: string, eng: SearchEngine) => {
+    const direct = resolveDirectUrl(queryStr);
+    if (direct) {
+      window.open(direct, '_blank', 'noopener,noreferrer');
+      return;
+    }
     const engObj = engines.find(e => e.key === eng);
     if (engObj) window.open(engObj.url + encodeURIComponent(queryStr), '_blank', 'noopener,noreferrer');
   }, []);
@@ -111,6 +132,7 @@ export default function HomePage() {
     activeSites, density, onDensityChange: setDensity,
     totalSites, onSiteOpen: handleSiteOpen,
     searchSuggestions,
+    showEngineSelector: settings?.search?.showEngineSelector ?? true,
   };
 
   const renderLayout = () => {

@@ -17,10 +17,11 @@ interface LayoutProps {
   totalSites: number;
   onSiteOpen: (s: Site) => void;
   searchSuggestions?: string[];
+  showEngineSelector?: boolean;
 }
 
 export default function LayoutBrowseFirst({
-  query, onQueryChange, engine, onEngineChange, onSearch,
+  query, onQueryChange, engine, onEngineChange, onSearch, showEngineSelector,
   categories, activeCategory, onCategoryChange,
   activeSites, density, onDensityChange, totalSites, onSiteOpen,
   searchSuggestions,
@@ -33,7 +34,7 @@ export default function LayoutBrowseFirst({
           query={query} onQueryChange={onQueryChange} engine={engine}
           onEngineChange={onEngineChange} onSearch={onSearch} delay={0}
           size="md"
-          suggestions={searchSuggestions}
+          suggestions={searchSuggestions} showEngineSelector={showEngineSelector}
         />
       </div>
 

@@ -26,12 +26,13 @@ interface LayoutProps {
   totalSites: number;
   onSiteOpen: (s: Site) => void;
   searchSuggestions?: string[];
+  showEngineSelector?: boolean;
 }
 
 export default function LayoutFull({
   greeting, displayName, dateStr, weekDay, timeStr, secondsStr,
   showGreeting, showDate, showClock,
-  query, onQueryChange, engine, onEngineChange, onSearch,
+  query, onQueryChange, engine, onEngineChange, onSearch, showEngineSelector,
   categories, activeCategory, onCategoryChange,
   activeSites, density, onDensityChange, totalSites, onSiteOpen,
   searchSuggestions,
@@ -74,7 +75,7 @@ export default function LayoutFull({
       <SearchSection
         query={query} onQueryChange={onQueryChange} engine={engine}
         onEngineChange={onEngineChange} onSearch={onSearch} delay={60}
-        suggestions={searchSuggestions}
+        suggestions={searchSuggestions} showEngineSelector={showEngineSelector}
       />
 
       <SitesSection

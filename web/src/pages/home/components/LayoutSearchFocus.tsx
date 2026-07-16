@@ -17,10 +17,11 @@ interface LayoutProps {
   totalSites: number;
   onSiteOpen: (s: Site) => void;
   searchSuggestions?: string[];
+  showEngineSelector?: boolean;
 }
 
 export default function LayoutSearchFocus({
-  query, onQueryChange, engine, onEngineChange, onSearch,
+  query, onQueryChange, engine, onEngineChange, onSearch, showEngineSelector,
   categories, activeCategory, onCategoryChange,
   activeSites, density, onDensityChange, totalSites, onSiteOpen,
   searchSuggestions,
@@ -37,7 +38,7 @@ export default function LayoutSearchFocus({
       <SearchSection
         query={query} onQueryChange={onQueryChange} engine={engine}
         onEngineChange={onEngineChange} onSearch={onSearch} delay={60}
-        suggestions={searchSuggestions}
+        suggestions={searchSuggestions} showEngineSelector={showEngineSelector}
       />
 
       <SitesSection

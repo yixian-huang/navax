@@ -3,7 +3,7 @@
 // ============================================================
 
 import { useState, useCallback } from 'react';
-import { X, Search, RotateCw, CheckCircle2, AlertTriangle, Clock, ExternalLink, Link2 } from 'lucide-react';
+import { X, Search, RotateCw, CheckCircle2, AlertTriangle, Clock, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { navigationApi } from '@/api/navigation';
 import type { LinkCheckResult } from '@/api/types';
@@ -53,7 +53,7 @@ export default function BatchLinkChecker({ open, onClose, pageId, managedLinks }
     }
   }, [managedLinks, pageId]);
 
-  const loadManagedLinks = useCallback(() => {
+  const clearResults = useCallback(() => {
     setResults([]);
     setErrorMessage('');
   }, []);
@@ -112,12 +112,12 @@ export default function BatchLinkChecker({ open, onClose, pageId, managedLinks }
             </button>
 
             <button
-              onClick={loadManagedLinks}
-              disabled={checking}
-              className="h-9 px-3 rounded-lg border border-background-200/70 text-xs text-foreground-600 hover:bg-background-50 transition-colors duration-150 flex items-center gap-1.5 whitespace-nowrap"
+              onClick={clearResults}
+              disabled={checking || (results.length === 0 && !errorMessage)}
+              className="h-9 px-3 rounded-lg border border-background-200/70 text-xs text-foreground-600 hover:bg-background-50 transition-colors duration-150 flex items-center gap-1.5 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Link2 className="w-3.5 h-3.5" />
-              重新加载链接
+              <RotateCw className="w-3.5 h-3.5" />
+              清除结果
             </button>
 
             {results.length > 0 && !checking && (
