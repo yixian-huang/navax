@@ -15,6 +15,7 @@ import (
 
 	"github.com/yixian-huang/navax/internal/database"
 	"github.com/yixian-huang/navax/internal/navigation"
+	"github.com/yixian-huang/navax/internal/netguard"
 )
 
 const (
@@ -55,7 +56,7 @@ func NewServiceWithOptions(db *sql.DB, options Options) *Service {
 	if options.Now == nil {
 		options.Now = time.Now
 	}
-	validator := urlValidator{resolver: options.Resolver}
+	validator := netguard.NewValidator(options.Resolver)
 	return &Service{
 		db: db, client: newHTTPClient(options, validator), now: options.Now,
 		concurrency: options.Concurrency, requestTimeout: options.RequestTimeout,

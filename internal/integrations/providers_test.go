@@ -3,11 +3,13 @@ package integrations
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/yixian-huang/navax/internal/database"
+	"github.com/yixian-huang/navax/internal/netguard"
 )
 
 func TestProviderSecretsAreEncryptedAndNeverReturned(t *testing.T) {
@@ -68,6 +70,27 @@ func TestDNSProviderTestUsesStoredToken(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The httptest server binds loopback, which the SSRF guard (correctly)
+	// rejects. Substitute an unguarded probe so this test can still assert that
+	// Test() decrypts and forwards the stored bearer token to the endpoint.
+	service.probeHTTP = func(ctx context.Context, _ netguard.Validator, endpoint, bearer string) error {
+		request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+		if err != nil {
+			return err
+		}
+		if bearer != "" {
+			request.Header.Set("Authorization", "Bearer "+bearer)
+		}
+		response, err := http.DefaultClient.Do(request)
+		if err != nil {
+			return err
+		}
+		defer response.Body.Close()
+		if response.StatusCode >= 300 {
+			return fmt.Errorf("端点返回 %s", response.Status)
+		}
+		return nil
+	}
 	if _, err := service.Update(ctx, DNS, Update{
 		Enabled: true,
 		Settings: map[string]any{
@@ -80,6 +103,38 @@ func TestDNSProviderTestUsesStoredToken(t *testing.T) {
 	result, err := service.Test(ctx, DNS)
 	if err != nil || !result.Success {
 		t.Fatalf("Test() = %+v, %v", result, err)
+	}
+}
+
+func TestDNSProviderTestBlocksNonPublicEndpoint(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	db, err := database.OpenAndMigrate(ctx, database.Config{Path: ":memory:", MaxOpenConns: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	service, err := NewService(db, bytes.Repeat([]byte{5}, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A DNS control-plane endpoint pointed at the cloud metadata service must be
+	// rejected by the strict guard rather than probed.
+	if _, err := service.Update(ctx, DNS, Update{
+		Enabled: true,
+		Settings: map[string]any{
+			"provider": "generic", "zoneId": "zone", "ttl": 300, "apiEndpoint": "http://169.254.169.254/latest/meta-data/",
+		},
+		Secrets: map[string]string{"token": "dns-secret"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	result, err := service.Test(ctx, DNS)
+	if err != nil {
+		t.Fatalf("Test() error = %v", err)
+	}
+	if result.Success {
+		t.Fatal("Test() succeeded against a metadata endpoint; SSRF guard not applied")
 	}
 }
 

@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"net/netip"
 	"time"
+
+	"github.com/yixian-huang/navax/internal/netguard"
 )
 
 const (
@@ -20,7 +22,9 @@ const (
 var (
 	ErrInvalid = errors.New("invalid link check request")
 	ErrBusy    = errors.New("link checker is busy")
-	ErrBlocked = errors.New("target address is blocked")
+	// ErrBlocked aliases netguard's so existing callers and tests keep matching
+	// blocked-target errors regardless of which package raised them.
+	ErrBlocked = netguard.ErrBlocked
 )
 
 type Resolver interface {

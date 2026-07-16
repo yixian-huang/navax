@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yixian-huang/navax/internal/netguard"
 	"github.com/yixian-huang/navax/internal/security"
 )
 
@@ -57,6 +58,10 @@ type TestResult struct {
 type Service struct {
 	db  *sql.DB
 	box *security.SecretBox
+	// probeHTTP/probeSMTP are seams so tests can exercise connectivity against a
+	// loopback fixture that the SSRF guard would otherwise (correctly) reject.
+	probeHTTP func(ctx context.Context, validator netguard.Validator, endpoint, bearer string) error
+	probeSMTP func(ctx context.Context, validator netguard.Validator, settings map[string]any, secrets map[string]string) error
 }
 
 func NewService(db *sql.DB, masterKey []byte) (*Service, error) {
@@ -68,7 +73,7 @@ func NewService(db *sql.DB, masterKey []byte) (*Service, error) {
 			return nil, err
 		}
 	}
-	return &Service{db: db, box: box}, nil
+	return &Service{db: db, box: box, probeHTTP: probeHTTP, probeSMTP: probeSMTP}, nil
 }
 
 func (s *Service) List(ctx context.Context) ([]Provider, error) {
@@ -199,7 +204,10 @@ func (s *Service) Test(ctx context.Context, kind Kind) (TestResult, error) {
 	message := "连接成功"
 	switch kind {
 	case SMTP:
-		probeErr = probeSMTP(ctx, provider.Settings, secrets)
+		// SMTP and object storage may legitimately be an internal relay in a
+		// self-hosted deployment, so permit private ranges but still block
+		// loopback and cloud-metadata (see netguard.NewInternalValidator).
+		probeErr = s.probeSMTP(ctx, netguard.NewInternalValidator(nil), provider.Settings, secrets)
 		message = "SMTP 握手与认证成功"
 	case Storage:
 		if stringSetting(provider.Settings, "driver") == "local" {
@@ -208,7 +216,7 @@ func (s *Service) Test(ctx context.Context, kind Kind) (TestResult, error) {
 			if secrets["secretKey"] == "" {
 				return TestResult{}, fmt.Errorf("%w: secretKey is required", ErrInvalidSettings)
 			}
-			probeErr = probeHTTP(ctx, stringSetting(provider.Settings, "endpoint"), "")
+			probeErr = s.probeHTTP(ctx, netguard.NewInternalValidator(nil), stringSetting(provider.Settings, "endpoint"), "")
 			message = "S3 端点可达；未执行写入操作"
 		}
 	case DNS:
@@ -219,7 +227,8 @@ func (s *Service) Test(ctx context.Context, kind Kind) (TestResult, error) {
 		if endpoint == "" && strings.EqualFold(stringSetting(provider.Settings, "provider"), "cloudflare") {
 			endpoint = "https://api.cloudflare.com/client/v4/user/tokens/verify"
 		}
-		probeErr = probeHTTP(ctx, endpoint, secrets["token"])
+		// DNS control-plane APIs are always public; enforce the strict guard.
+		probeErr = s.probeHTTP(ctx, netguard.NewValidator(nil), endpoint, secrets["token"])
 		message = "DNS API 凭据验证成功"
 	}
 	duration := time.Since(started).Milliseconds()
@@ -310,20 +319,24 @@ func validateSettings(kind Kind, settings map[string]any) error {
 	return nil
 }
 
-func probeSMTP(ctx context.Context, settings map[string]any, secrets map[string]string) error {
+func probeSMTP(ctx context.Context, validator netguard.Validator, settings map[string]any, secrets map[string]string) error {
 	host := stringSetting(settings, "host")
 	port, _ := numericSetting(settings, "port")
 	address := net.JoinHostPort(host, strconv.Itoa(port))
-	dialer := &net.Dialer{Timeout: 8 * time.Second}
-	var connection net.Conn
-	var err error
-	if stringSetting(settings, "tlsMode") == "tls" {
-		connection, err = tls.DialWithDialer(dialer, "tcp", address, &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12})
-	} else {
-		connection, err = dialer.DialContext(ctx, "tcp", address)
-	}
+	// Dial through the guard so the host is resolved and vetted before connecting,
+	// and the TCP connection targets the vetted IP (no DNS-rebinding window).
+	dialer := netguard.Dialer{Validator: validator, Dialer: net.Dialer{Timeout: 8 * time.Second}}
+	connection, err := dialer.DialContext(ctx, "tcp", address)
 	if err != nil {
 		return fmt.Errorf("连接 SMTP 失败: %w", err)
+	}
+	if stringSetting(settings, "tlsMode") == "tls" {
+		tlsConnection := tls.Client(connection, &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12})
+		if handshakeErr := tlsConnection.HandshakeContext(ctx); handshakeErr != nil {
+			_ = connection.Close()
+			return fmt.Errorf("SMTP TLS 握手失败: %w", handshakeErr)
+		}
+		connection = tlsConnection
 	}
 	defer connection.Close()
 	client, err := smtp.NewClient(connection, host)
@@ -352,7 +365,7 @@ func probeSMTP(ctx context.Context, settings map[string]any, secrets map[string]
 	return client.Quit()
 }
 
-func probeHTTP(ctx context.Context, endpoint, bearer string) error {
+func probeHTTP(ctx context.Context, validator netguard.Validator, endpoint, bearer string) error {
 	if err := validateHTTPURL(endpoint); err != nil {
 		return err
 	}
@@ -363,11 +376,9 @@ func probeHTTP(ctx context.Context, endpoint, bearer string) error {
 	if bearer != "" {
 		request.Header.Set("Authorization", "Bearer "+bearer)
 	}
-	client := &http.Client{
-		Timeout:       8 * time.Second,
-		CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse },
-	}
-	response, err := client.Do(request)
+	// GuardedClient validates the target (and any redirect) and dials only the
+	// vetted resolved IP. maxRedirects=0 keeps the probe to the configured host.
+	response, err := netguard.GuardedClient(validator, 8*time.Second, 0).Do(request)
 	if err != nil {
 		return fmt.Errorf("连接端点失败: %w", err)
 	}

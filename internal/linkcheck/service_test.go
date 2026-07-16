@@ -17,6 +17,7 @@ import (
 
 	navaxdb "github.com/yixian-huang/navax/internal/database"
 	"github.com/yixian-huang/navax/internal/navigation"
+	"github.com/yixian-huang/navax/internal/netguard"
 )
 
 const (
@@ -234,7 +235,7 @@ func TestURLValidatorBlocksPrivateReservedAndMetadataTargets(t *testing.T) {
 		"mixed.test":   {netip.MustParseAddr("8.8.8.8"), netip.MustParseAddr("fd00::1")},
 		"public.test":  {netip.MustParseAddr("8.8.8.8")},
 	}}
-	validator := urlValidator{resolver: resolver}
+	validator := netguard.NewValidator(resolver)
 	blockedTargets := []string{
 		"http://127.0.0.1/", "http://[::1]/", "http://169.254.169.254/latest/meta-data/",
 		"http://100.100.100.200/", "http://private.test/", "http://mixed.test/",
@@ -246,12 +247,12 @@ func TestURLValidatorBlocksPrivateReservedAndMetadataTargets(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := validator.validate(context.Background(), target); !errors.Is(err, ErrBlocked) {
+		if _, err := validator.Validate(context.Background(), target); !errors.Is(err, ErrBlocked) {
 			t.Errorf("validate(%q) error = %v, want blocked", raw, err)
 		}
 	}
 	publicTarget, _ := url.Parse("https://public.test/path")
-	if addresses, err := validator.validate(context.Background(), publicTarget); err != nil || len(addresses) != 1 {
+	if addresses, err := validator.Validate(context.Background(), publicTarget); err != nil || len(addresses) != 1 {
 		t.Fatalf("public target validation = %v, %v", addresses, err)
 	}
 }
