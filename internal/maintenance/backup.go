@@ -406,7 +406,14 @@ func createInstanceArchive(destination, databaseSnapshot, dataDirectory string, 
 	if err := writeZipFile(archive, "navax.db", databaseSnapshot); err != nil {
 		return err
 	}
-	for _, name := range []string{"master.key", "analytics.key"} {
+	// master.key is deliberately NOT bundled: it decrypts the third-party
+	// secrets stored (encrypted) inside navax.db, so shipping both in one
+	// archive would defeat encryption-at-rest for the backup. In-place
+	// restores keep using the live master.key already on disk; cross-machine
+	// disaster recovery must supply the original NAVAX_MASTER_KEY out-of-band
+	// (see docs/deployment.md). Old archives that still contain master.key
+	// continue to restore for backward compatibility.
+	for _, name := range []string{"analytics.key"} {
 		path := filepath.Join(dataDirectory, name)
 		if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() {
 			if err := writeZipFile(archive, name, path); err != nil {

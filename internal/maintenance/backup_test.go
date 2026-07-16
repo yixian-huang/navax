@@ -177,10 +177,13 @@ func TestInstanceArchiveRestoresDatabaseAssetsAndKeys(t *testing.T) {
 		names[file.Name] = true
 	}
 	_ = archive.Close()
-	for _, name := range []string{"manifest.json", "navax.db", "master.key", "analytics.key", "assets/usr_owner/logo.png"} {
+	for _, name := range []string{"manifest.json", "navax.db", "analytics.key", "assets/usr_owner/logo.png"} {
 		if !names[name] {
 			t.Fatalf("archive missing %q", name)
 		}
+	}
+	if names["master.key"] {
+		t.Fatal("archive must not bundle master.key alongside the encrypted database")
 	}
 	if _, err := db.ExecContext(ctx, "UPDATE system_settings SET instance_name = 'changed' WHERE id = 1"); err != nil {
 		t.Fatal(err)
@@ -207,8 +210,10 @@ func TestInstanceArchiveRestoresDatabaseAssetsAndKeys(t *testing.T) {
 	}
 	for path, expected := range map[string]string{
 		filepath.Join(root, "assets", "usr_owner", "logo.png"): "asset-before",
-		filepath.Join(root, "master.key"):                      "master-before",
-		filepath.Join(root, "analytics.key"):                   "analytics-before",
+		// master.key is not bundled, so the live key on disk is preserved
+		// rather than overwritten by the archive.
+		filepath.Join(root, "master.key"):    "master-after",
+		filepath.Join(root, "analytics.key"): "analytics-before",
 	} {
 		actual, err := os.ReadFile(path)
 		if err != nil || string(actual) != expected {
