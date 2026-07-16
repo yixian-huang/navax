@@ -33,8 +33,8 @@ func TestOpenAndMigrate(t *testing.T) {
 	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM schema_migrations").Scan(&migrationCount); err != nil {
 		t.Fatalf("query migrations: %v", err)
 	}
-	if migrationCount != 2 {
-		t.Fatalf("migration count = %d, want 2", migrationCount)
+	if migrationCount != 3 {
+		t.Fatalf("migration count = %d, want 3", migrationCount)
 	}
 
 	var defaultTheme string

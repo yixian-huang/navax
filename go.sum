@@ -41,6 +41,8 @@ github.com/pb33f/ordered-map/v2 v2.3.1 h1:5319HDO0aw4DA4gzi+zv4FXU9UlSs3xGZ40wcP
 github.com/pb33f/ordered-map/v2 v2.3.1/go.mod h1:qxFQgd0PkVUtOMCkTapqotNgzRhMPL7VvaHKbd1HnmQ=
 github.com/pb33f/testify v0.1.0 h1:g48/HDU/jn2COspS4nM0scptxiKTJ4DnbX/4ehK6IZ8=
 github.com/pb33f/testify v0.1.0/go.mod h1:nq283P/jJ8hXMmdhAqfj7BJIz0y+6IOHj9q0044rKt4=
+github.com/phuslu/iploc v1.0.20260715 h1:XNz15mE+AwYG+ll2DX6gBJL4K+M6pUqyw1JmYM4GBVQ=
+github.com/phuslu/iploc v1.0.20260715/go.mod h1:VZqAWoi2A80YPvfk1AizLGHavNIG9nhBC8d87D/SeVs=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec h1:W09IVJc94icq4NjY3clb7Lk8O1qJ8BdBEF8z0ibU0rE=

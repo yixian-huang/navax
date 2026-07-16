@@ -6,6 +6,7 @@ require (
 	github.com/go-chi/chi/v5 v5.3.1
 	github.com/pb33f/libopenapi v0.38.6
 	github.com/pb33f/libopenapi-validator v0.14.0
+	github.com/phuslu/iploc v1.0.20260715
 	golang.org/x/crypto v0.54.0
 	modernc.org/sqlite v1.53.0
 )

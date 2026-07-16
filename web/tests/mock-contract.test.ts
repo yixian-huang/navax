@@ -58,6 +58,8 @@ const cases: Case[] = [
   { name: '公共目录', path: '/api/v1/public/directory', method: 'get', status: '200', url: '/api/v1/public/directory' },
   { name: '发现页', path: '/api/v1/public/discover', method: 'get', status: '200', url: '/api/v1/public/discover' },
   { name: '子域名（无申请为 null）', path: '/api/v1/me/subdomain', method: 'get', status: '200', url: '/api/v1/me/subdomain' },
+  { name: '访问统计概览', path: '/api/v1/me/analytics/overview', method: 'get', status: '200', url: '/api/v1/me/analytics/overview' },
+  { name: '访问统计分布', path: '/api/v1/me/analytics/breakdown', method: 'get', status: '200', url: '/api/v1/me/analytics/breakdown' },
   { name: '资源上传', path: '/api/v1/assets', method: 'post', status: '201', url: '/api/v1/assets', init: { method: 'POST' } },
 ];
 

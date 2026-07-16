@@ -11,6 +11,36 @@ import (
 	"github.com/yixian-huang/navax/internal/navigation"
 )
 
+func TestBrowserType(t *testing.T) {
+	t.Parallel()
+	cases := []struct{ ua, want string }{
+		{"", ""},
+		{"Mozilla/5.0 (Windows NT 10.0) AppleWebKit/537.36 Chrome/127.0 Safari/537.36", "Chrome"},
+		{"Mozilla/5.0 (Windows NT 10.0) Chrome/127.0 Safari/537.36 Edg/127.0.0", "Edge"},
+		{"Mozilla/5.0 (X11; Linux) Chrome/126 Safari/537.36 OPR/112.0", "Opera"},
+		{"Mozilla/5.0 (Macintosh) Gecko/20100101 Firefox/128.0", "Firefox"},
+		{"Mozilla/5.0 (Macintosh) Version/17.0 Safari/605.1.15", "Safari"},
+		{"curl/8.4.0", "Other"},
+	}
+	for _, tc := range cases {
+		if got := browserType(tc.ua); got != tc.want {
+			t.Errorf("browserType(%q) = %q, want %q", tc.ua, got, tc.want)
+		}
+	}
+}
+
+func TestCountryCode(t *testing.T) {
+	t.Parallel()
+	if got := countryCode("8.8.8.8"); len(got) != 2 {
+		t.Errorf("public IP country = %q, want a 2-letter code", got)
+	}
+	for _, addr := range []string{"", "not-an-ip", "   "} {
+		if got := countryCode(addr); got != "" {
+			t.Errorf("countryCode(%q) = %q, want empty", addr, got)
+		}
+	}
+}
+
 func TestRecordAndReadPrivacyPreservingAnalytics(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -115,6 +145,13 @@ func TestRecordAndReadPrivacyPreservingAnalytics(t *testing.T) {
 	}
 	if len(breakdown.TopSites) != 1 || breakdown.TopSites[0].Key != site.ID || len(breakdown.RecentVisits) != 1 {
 		t.Fatalf("breakdown = %+v", breakdown)
+	}
+	if breakdown.TopSites[0].CategoryName != "开发" {
+		t.Fatalf("top site category = %q, want 开发", breakdown.TopSites[0].CategoryName)
+	}
+	// UA 无浏览器标记应归类为 Other；文档用途 IP 解析不出国家。
+	if visit := breakdown.RecentVisits[0]; visit.Browser == "" || visit.Country != "" {
+		t.Fatalf("recent visit browser=%q country=%q", visit.Browser, visit.Country)
 	}
 	service.now = func() time.Time { return time.Now().UTC().AddDate(0, 0, 91) }
 	if err := service.PurgeExpired(ctx); err != nil {

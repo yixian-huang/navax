@@ -1863,7 +1863,7 @@ components:
         reason: { type: string, maxLength: 300 }
     AnalyticsOverview:
       type: object
-      required: [totalPV, totalUV, todayPV, todayUV, bounceRate, averagePages]
+      required: [totalPV, totalUV, todayPV, todayUV, bounceRate, averagePages, avgSessionPages, todayVisitors, visitorsChange]
       properties:
         totalPV: { type: integer, minimum: 0 }
         totalUV: { type: integer, minimum: 0 }
@@ -1873,6 +1873,9 @@ components:
         uvChange: { type: number }
         bounceRate: { type: number, minimum: 0, maximum: 1 }
         averagePages: { type: number, minimum: 0 }
+        avgSessionPages: { type: number, minimum: 0 }
+        todayVisitors: { type: integer, minimum: 0 }
+        visitorsChange: { type: number }
     DailyStat:
       type: object
       required: [date, pv, uv]
@@ -1896,6 +1899,8 @@ components:
             properties:
               anonymousId: { type: string }
               device: { type: string }
+              browser: { type: string, description: 由 User-Agent 解析的浏览器族，未知为空 }
+              country: { type: string, description: 入库时解析的 2 位国家码，未知为空 }
               referrerDomain: { type: string }
               visitedAt: { $ref: '#/components/schemas/Timestamp' }
     MetricBucket:
@@ -1905,6 +1910,8 @@ components:
         key: { type: string }
         label: { type: string }
         value: { type: integer, minimum: 0 }
+        icon: { type: string, description: 仅 topSites/categories 分布返回：站点或分类图标 }
+        categoryName: { type: string, description: 仅 topSites 返回：站点所属分类名 }
     AdminOverview:
       type: object
       required: [totalUsers, activeUsers, activeInvitations, publicPages, health]

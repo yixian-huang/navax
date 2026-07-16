@@ -718,6 +718,10 @@ export interface MetricBucket {
   key: string;
   label: string;
   value: number;
+  /** 仅 topSites/categories 分布返回：站点或分类图标。 */
+  icon?: string;
+  /** 仅 topSites 返回：站点所属分类名。 */
+  categoryName?: string;
 }
 
 export interface AnalyticsBreakdown {
@@ -754,6 +758,10 @@ export interface AnalyticsRecentVisit {
   anonymousId: string;
   referrerDomain: string;
   device: string;
+  /** 由 User-Agent 解析的浏览器族，未知为空。 */
+  browser?: string;
+  /** 入库时解析的 2 位国家码，未知为空。 */
+  country?: string;
   visitedAt: string;
 }
 

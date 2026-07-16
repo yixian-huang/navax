@@ -687,6 +687,9 @@ handlers.push((url) => {
       uvChange: overview.uvChange,
       bounceRate: overview.bounceRate > 1 ? overview.bounceRate / 100 : overview.bounceRate,
       averagePages: overview.avgSessionPages,
+      avgSessionPages: overview.avgSessionPages,
+      todayVisitors: overview.todayVisitors,
+      visitorsChange: overview.visitorsChange,
     }, meta: { message: '', detail: '' } }));
   }
   if (url === `${API_BASE}/me/analytics/trends` || url.startsWith(`${API_BASE}/me/analytics/trends?`)) {
@@ -696,13 +699,15 @@ handlers.push((url) => {
   if (url === `${API_BASE}/me/analytics/breakdown` || url.startsWith(`${API_BASE}/me/analytics/breakdown?`)) {
     const data = mockAnalyticsResponse;
     return Promise.resolve(jsonResponse({ code: 'OK', data: {
-      topSites: data.topSites.map(item => ({ key: item.siteId, label: item.siteTitle, value: item.clicks })),
-      categories: data.categoryStats.map(item => ({ key: item.categoryName, label: item.categoryName, value: item.clicks })),
+      topSites: data.topSites.map(item => ({ key: item.siteId, label: item.siteTitle, value: item.clicks, icon: item.siteIcon, categoryName: item.categoryName })),
+      categories: data.categoryStats.map(item => ({ key: item.categoryName, label: item.categoryName, value: item.clicks, icon: item.categoryIcon })),
       devices: [],
       referrers: [],
       recentVisits: data.recentVisits.map(item => ({
         anonymousId: `visitor-${item.id}`,
         device: item.device,
+        browser: item.browser,
+        country: item.country,
         referrerDomain: item.referrer,
         visitedAt: item.visitedAt,
       })),

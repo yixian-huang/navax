@@ -42,29 +42,33 @@ export const analyticsApi = {
     ]);
     const breakdown = breakdownResponse.data;
     const siteLimit = params?.siteLimit ?? breakdown.topSites.length;
+    // CTR 采用「点击 / 页面浏览」口径（无需曝光埋点），上限 100%。
+    const pageViews = overviewResponse.data.totalPV;
+    const clickRate = (clicks: number) =>
+      pageViews > 0 ? Math.min(100, Math.round((clicks / pageViews) * 1000) / 10) : 0;
     const topSites: TopSiteClick[] = breakdown.topSites.slice(0, siteLimit).map(bucket => ({
       siteId: bucket.key,
       siteTitle: bucket.label,
-      siteIcon: '',
-      categoryName: '',
+      siteIcon: bucket.icon ?? '',
+      categoryName: bucket.categoryName ?? '',
       clicks: bucket.value,
-      ctr: 0,
+      ctr: clickRate(bucket.value),
     }));
-    // 契约的 breakdown 只提供 {key,label,value}；占比可由点击总数在前端派生。
+    // 契约的 category bucket 只提供计数；占比可由点击总数在前端派生。
     const totalCategoryClicks = breakdown.categories.reduce((sum, bucket) => sum + bucket.value, 0);
     const categoryStats: CategoryClickStat[] = breakdown.categories.map(bucket => ({
       categoryName: bucket.label,
-      categoryIcon: '',
+      categoryIcon: bucket.icon ?? '',
       clicks: bucket.value,
       percentage: totalCategoryClicks > 0 ? Math.round((bucket.value / totalCategoryClicks) * 1000) / 10 : 0,
     }));
     const recentVisits: VisitRecord[] = breakdown.recentVisits.map((visit, index) => ({
       id: `${visit.anonymousId}-${index}`,
       visitorIp: visit.anonymousId,
-      country: '',
+      country: visit.country ?? '',
       referrer: visit.referrerDomain,
       device: visit.device === 'mobile' || visit.device === 'tablet' ? visit.device : 'desktop',
-      browser: '',
+      browser: visit.browser ?? '',
       pageTitle: '',
       visitedAt: visit.visitedAt,
     }));
@@ -89,8 +93,8 @@ export const analyticsApi = {
       data: response.data.topSites.slice(0, limit).map(bucket => ({
         siteId: bucket.key,
         siteTitle: bucket.label,
-        siteIcon: '',
-        categoryName: '',
+        siteIcon: bucket.icon ?? '',
+        categoryName: bucket.categoryName ?? '',
         clicks: bucket.value,
         ctr: 0,
       })),

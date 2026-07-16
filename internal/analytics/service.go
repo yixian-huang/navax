@@ -7,9 +7,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"net"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/phuslu/iploc"
 )
 
 var (
@@ -53,11 +56,16 @@ type Bucket struct {
 	Key   string `json:"key"`
 	Label string `json:"label"`
 	Value int64  `json:"value"`
+	// Icon/CategoryName 仅用于 topSites、categories 分布，其余 bucket 省略。
+	Icon         string `json:"icon,omitempty"`
+	CategoryName string `json:"categoryName,omitempty"`
 }
 
 type RecentVisit struct {
 	AnonymousID    string    `json:"anonymousId"`
 	Device         string    `json:"device"`
+	Browser        string    `json:"browser,omitempty"`
+	Country        string    `json:"country,omitempty"`
 	ReferrerDomain string    `json:"referrerDomain"`
 	VisitedAt      time.Time `json:"visitedAt"`
 }
@@ -155,16 +163,18 @@ func (s *Service) Record(ctx context.Context, event Event) error {
 	visitorHash := s.visitorHash(date, event.ClientAddress, event.UserAgent)
 	referrerDomain := cleanReferrer(event.Referrer)
 	device := deviceType(event.UserAgent)
+	browser := browserType(event.UserAgent)
+	country := countryCode(event.ClientAddress)
 	var clientEventID any
 	if event.ClientEventID != "" {
 		clientEventID = event.ClientEventID
 	}
 	_, err = s.db.ExecContext(ctx, `
 		INSERT INTO analytics_events(page_id, snapshot_id, site_id, event_type, client_event_id, visitor_hash,
-		                            device, referrer_domain, occurred_date, occurred_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		                            device, browser, country_code, referrer_domain, occurred_date, occurred_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		event.PageID, currentSnapshot, persistedSiteID, event.Type, clientEventID, visitorHash,
-		device, referrerDomain, date, now.Format(time.RFC3339Nano),
+		device, browser, country, referrerDomain, date, now.Format(time.RFC3339Nano),
 	)
 	if err != nil {
 		if event.ClientEventID != "" && strings.Contains(strings.ToLower(err.Error()), "unique constraint") {
@@ -277,17 +287,18 @@ func (s *Service) Breakdown(ctx context.Context, userID string, period int) (Bre
 	period = normalizePeriod(period)
 	start := s.now().UTC().AddDate(0, 0, -(period - 1)).Format("2006-01-02")
 	result := Breakdown{}
-	result.TopSites, err = s.buckets(ctx, `
-		SELECT s.id, s.title, COUNT(*) FROM analytics_events e JOIN sites s ON s.id = e.site_id
+	result.TopSites, err = s.siteBuckets(ctx, `
+		SELECT s.id, s.title, COUNT(*), s.icon, c.name
+		FROM analytics_events e JOIN sites s ON s.id = e.site_id JOIN categories c ON c.id = s.category_id
 		WHERE e.page_id = ? AND e.event_type = 'site_click' AND e.occurred_date >= ?
-		GROUP BY s.id, s.title ORDER BY COUNT(*) DESC, s.title LIMIT 20`, pageID, start)
+		GROUP BY s.id, s.title, s.icon, c.name ORDER BY COUNT(*) DESC, s.title LIMIT 20`, pageID, start)
 	if err != nil {
 		return Breakdown{}, err
 	}
-	result.Categories, err = s.buckets(ctx, `
-		SELECT c.id, c.name, COUNT(*) FROM analytics_events e JOIN sites s ON s.id = e.site_id JOIN categories c ON c.id = s.category_id
+	result.Categories, err = s.iconBuckets(ctx, `
+		SELECT c.id, c.name, COUNT(*), c.icon FROM analytics_events e JOIN sites s ON s.id = e.site_id JOIN categories c ON c.id = s.category_id
 		WHERE e.page_id = ? AND e.event_type = 'site_click' AND e.occurred_date >= ?
-		GROUP BY c.id, c.name ORDER BY COUNT(*) DESC, c.name`, pageID, start)
+		GROUP BY c.id, c.name, c.icon ORDER BY COUNT(*) DESC, c.name`, pageID, start)
 	if err != nil {
 		return Breakdown{}, err
 	}
@@ -304,7 +315,7 @@ func (s *Service) Breakdown(ctx context.Context, userID string, period int) (Bre
 		return Breakdown{}, err
 	}
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT hex(visitor_hash), device, referrer_domain, occurred_at FROM analytics_events
+		SELECT hex(visitor_hash), device, browser, country_code, referrer_domain, occurred_at FROM analytics_events
 		WHERE page_id = ? AND event_type = 'page_view' AND occurred_date >= ? ORDER BY occurred_at DESC LIMIT 20`, pageID, start)
 	if err != nil {
 		return Breakdown{}, err
@@ -314,7 +325,7 @@ func (s *Service) Breakdown(ctx context.Context, userID string, period int) (Bre
 	for rows.Next() {
 		var visit RecentVisit
 		var hash, occurredAt string
-		if err := rows.Scan(&hash, &visit.Device, &visit.ReferrerDomain, &occurredAt); err != nil {
+		if err := rows.Scan(&hash, &visit.Device, &visit.Browser, &visit.Country, &visit.ReferrerDomain, &occurredAt); err != nil {
 			return Breakdown{}, err
 		}
 		if len(hash) > 12 {
@@ -388,6 +399,42 @@ func (s *Service) buckets(ctx context.Context, query string, args ...any) ([]Buc
 	return items, rows.Err()
 }
 
+// siteBuckets 额外读取站点图标与所属分类名，用于热门站点排行。
+func (s *Service) siteBuckets(ctx context.Context, query string, args ...any) ([]Bucket, error) {
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]Bucket, 0)
+	for rows.Next() {
+		var item Bucket
+		if err := rows.Scan(&item.Key, &item.Label, &item.Value, &item.Icon, &item.CategoryName); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+// iconBuckets 额外读取分类图标，用于分类点击分布。
+func (s *Service) iconBuckets(ctx context.Context, query string, args ...any) ([]Bucket, error) {
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]Bucket, 0)
+	for rows.Next() {
+		var item Bucket
+		if err := rows.Scan(&item.Key, &item.Label, &item.Value, &item.Icon); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
 func (s *Service) visitorHash(date, address, userAgent string) []byte {
 	mac := hmac.New(sha256.New, s.key)
 	_, _ = mac.Write([]byte(date))
@@ -422,6 +469,41 @@ func deviceType(userAgent string) string {
 	default:
 		return "desktop"
 	}
+}
+
+// browserType 从 User-Agent 粗略识别浏览器族；顺序很重要，因为多数 UA 会
+// 叠加声明（如 Edge/Chrome 都含 "safari"，Chrome 含 "safari"）。
+func browserType(userAgent string) string {
+	value := strings.ToLower(userAgent)
+	switch {
+	case value == "":
+		return ""
+	case strings.Contains(value, "edg/"), strings.Contains(value, "edga/"), strings.Contains(value, "edgios/"):
+		return "Edge"
+	case strings.Contains(value, "opr/"), strings.Contains(value, "opera"):
+		return "Opera"
+	case strings.Contains(value, "firefox"), strings.Contains(value, "fxios"):
+		return "Firefox"
+	case strings.Contains(value, "chrome"), strings.Contains(value, "crios"):
+		return "Chrome"
+	case strings.Contains(value, "safari"):
+		return "Safari"
+	default:
+		return "Other"
+	}
+}
+
+// countryCode 在入库时由客户端地址解析出 2 位国家码；只保留国家码，绝不持久化 IP。
+func countryCode(address string) string {
+	ip := net.ParseIP(strings.TrimSpace(address))
+	if ip == nil {
+		return ""
+	}
+	code := strings.ToUpper(strings.TrimSpace(iploc.Country(ip)))
+	if len(code) != 2 || code == "ZZ" {
+		return ""
+	}
+	return code
 }
 
 func normalizePeriod(period int) int {
