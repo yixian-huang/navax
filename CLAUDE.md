@@ -64,7 +64,3 @@ nav.ax is a personalized navigation-site service: a single Go 1.25 process serve
 
 - Conventional Commit subjects, e.g. `feat: add signed instance backups`.
 - Go: gofmt-formatted, small domain-focused packages; table-driven tests named `TestFeatureCondition` placed beside source as `*_test.go`; prefer SQLite integration tests for persistence or authorization behavior; add regression tests with bug fixes.
-
-## Agent notes (from AGENTS.md)
-
-- "KB" means the MCP `omni` knowledge base, never a repo `docs/wiki` mirror. Before writing to it: call `whoami`, consult current principles, preserve provenance, and attach non-hub pages to their hub.

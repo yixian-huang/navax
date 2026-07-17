@@ -32,5 +32,3 @@ Use focused Conventional Commit subjects, for example `feat: add signed instance
 ## Security & Agent Instructions
 
 Keep secrets out of source and browser storage; sessions use HttpOnly cookies. Validate authorization server-side and preserve SSRF, upload, origin, and rate-limit protections. All user-facing agent responses must be written in Chinese.
-
-Treat “KB” as MCP `omni`, never a repository `docs/wiki` mirror. Before writing, call `whoami`, consult current principles, preserve provenance, and attach non-hub pages to their hub.
