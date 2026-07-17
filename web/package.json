@@ -48,6 +48,7 @@
     "vitest": "^4.1.10",
     "yaml": "^2.9.0"
   },
+  "license": "AGPL-3.0-only",
   "name": "navax-web",
   "private": true,
   "scripts": {

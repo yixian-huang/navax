@@ -1,5 +1,7 @@
 # nav.ax
 
+中文 | [English](README.en.md)
+
 nav.ax 是一个 Go + React 构建的个性化导航站，面向个人、受邀用户和自托管场景。单个 Go 进程提供 REST API、公开导航页、管理界面、SQLite 存储与内嵌前端资源。
 
 ## Docker Compose 快速开始
@@ -95,4 +97,12 @@ docker compose ps
 - `api/openapi.yaml`：HTTP API 契约
 - `docs/`：需求与架构说明
 
-贡献约定见 [AGENTS.md](AGENTS.md)。
+## 贡献
+
+贡献流程、合并门槛与架构边界见 [CONTRIBUTING.md](CONTRIBUTING.md);参与项目请遵守 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)。安全漏洞请按 [SECURITY.md](SECURITY.md) 通过私密渠道报告,不要公开提交 issue。
+
+## 许可证与品牌
+
+源代码以 [AGPL-3.0-only](LICENSE) 许可发布。按照 AGPL 第 13 条,若你以网络服务形式运行修改后的版本,必须向其用户提供对应源码——内置页脚的源码链接即用于满足这一要求,分发修改版时请保留等效入口。
+
+"nav.ax" 名称与 logo 用于标识官方实例,不在代码许可范围内。部署修改版本请使用你自己的名称与标识,避免与官方实例混淆。

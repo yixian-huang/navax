@@ -1,0 +1,46 @@
+name: Bug 报告 / Bug report
+description: 报告一个可复现的问题 / Report a reproducible problem
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        安全漏洞请勿在此提交,请使用仓库 Security 标签页的私密报告渠道。
+        Do not report security vulnerabilities here — use private vulnerability reporting (Security tab).
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 现象 / What happened
+      description: 实际发生了什么 / What actually happened
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤 / Steps to reproduce
+      placeholder: |
+        1. ...
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期行为 / Expected behavior
+  - type: input
+    id: version
+    attributes:
+      label: 版本 / Version
+      description: "`GET /api/v1/version` 的输出或 Release 版本号 / Output of `GET /api/v1/version` or the release tag"
+    validations:
+      required: true
+  - type: input
+    id: deployment
+    attributes:
+      label: 部署方式 / Deployment
+      description: Docker Compose、原生二进制或源码构建,以及操作系统 / Compose, native binary, or source build, plus OS
+  - type: textarea
+    id: logs
+    attributes:
+      label: 相关日志 / Logs
+      render: text
