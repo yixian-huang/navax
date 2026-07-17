@@ -100,6 +100,7 @@ function activePublication() {
     showAuthor: page.publishSettings.showAuthor,
     seoTitle: page.publishSettings.title,
     seoDescription: page.publishSettings.description,
+    seoImage: page.publishSettings.seoImage || '',
     published: page.isPublished,
     canonicalUrl: page.publishSettings.customDomain || null,
     robots: page.isPublished ? 'index,follow' : 'noindex,follow',
@@ -537,6 +538,7 @@ handlers.push((url, init) => {
       page.publishSettings.showAuthor = body.showAuthor ?? page.publishSettings.showAuthor;
       page.publishSettings.title = body.seoTitle ?? page.publishSettings.title;
       page.publishSettings.description = body.seoDescription ?? page.publishSettings.description;
+      if (body.seoImage !== undefined) page.publishSettings.seoImage = body.seoImage;
       page.isPublished = body.visibility !== 'private' && page.isPublished;
       page.publishSettings.isPublished = page.isPublished;
     } else if (method === 'DELETE') {

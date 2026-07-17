@@ -207,19 +207,27 @@ func (c Config) FromPublishedPage(page navigation.PublishedPage, requestPath str
 	})
 
 	if page.Kind == navigation.PageKindSystem && requestPath == "/" {
-		seo.JSONLD = mustJSON(c.websiteJSONLD(title, description, canonical))
+		seo.JSONLD = mustJSON(c.websiteJSONLD(title, description, canonical, page))
 	} else if page.Visibility == navigation.VisibilityPublic {
-		seo.JSONLD = mustJSON(map[string]any{
-			"@context":    "https://schema.org",
-			"@type":       "WebPage",
-			"name":        title,
-			"description": description,
-			"url":         canonical,
-			"isPartOf": map[string]any{
-				"@type": "WebSite",
-				"name":  name,
-				"url":   base + "/",
+		graph := []any{
+			map[string]any{
+				"@type":       "WebPage",
+				"name":        title,
+				"description": description,
+				"url":         canonical,
+				"isPartOf": map[string]any{
+					"@type": "WebSite",
+					"name":  name,
+					"url":   base + "/",
+				},
 			},
+		}
+		if list := itemListJSONLD(page); list != nil {
+			graph = append(graph, list)
+		}
+		seo.JSONLD = mustJSON(map[string]any{
+			"@context": "https://schema.org",
+			"@graph":   graph,
 		})
 	}
 	_ = host
@@ -239,44 +247,84 @@ func (c Config) shell(seo webui.SEO) webui.SEO {
 	return seo
 }
 
-func (c Config) websiteJSONLD(title, description, canonical string) map[string]any {
+func (c Config) websiteJSONLD(title, description, canonical string, page navigation.PublishedPage) map[string]any {
 	name := c.name()
 	base := c.base()
-	return map[string]any{
-		"@context": "https://schema.org",
-		"@graph": []any{
-			map[string]any{
-				"@type":       "WebSite",
-				"name":        name,
-				"url":         base + "/",
-				"description": description,
-				"inLanguage":  "zh-CN",
-			},
-			map[string]any{
-				"@type":               "WebApplication",
-				"name":                name,
-				"url":                 canonical,
-				"applicationCategory": "BrowserApplication",
-				"operatingSystem":     "Web",
-				"description":         description,
-				"offers": map[string]any{
-					"@type":         "Offer",
-					"price":         "0",
-					"priceCurrency": "USD",
-				},
-			},
-			map[string]any{
-				"@type":       "WebPage",
-				"name":        title,
-				"description": description,
-				"url":         canonical,
-				"isPartOf": map[string]any{
-					"@type": "WebSite",
-					"name":  name,
-					"url":   base + "/",
-				},
+	graph := []any{
+		map[string]any{
+			"@type":       "WebSite",
+			"name":        name,
+			"url":         base + "/",
+			"description": description,
+			"inLanguage":  "zh-CN",
+		},
+		map[string]any{
+			"@type":               "WebApplication",
+			"name":                name,
+			"url":                 canonical,
+			"applicationCategory": "BrowserApplication",
+			"operatingSystem":     "Web",
+			"description":         description,
+			"offers": map[string]any{
+				"@type":         "Offer",
+				"price":         "0",
+				"priceCurrency": "USD",
 			},
 		},
+		map[string]any{
+			"@type":       "WebPage",
+			"name":        title,
+			"description": description,
+			"url":         canonical,
+			"isPartOf": map[string]any{
+				"@type": "WebSite",
+				"name":  name,
+				"url":   base + "/",
+			},
+		},
+	}
+	if list := itemListJSONLD(page); list != nil {
+		graph = append(graph, list)
+	}
+	return map[string]any{
+		"@context": "https://schema.org",
+		"@graph":   graph,
+	}
+}
+
+func itemListJSONLD(page navigation.PublishedPage) map[string]any {
+	const maxItems = 60
+	elements := make([]any, 0, maxItems)
+	pos := 1
+	for _, cat := range page.Categories {
+		for _, site := range cat.Sites {
+			name := strings.TrimSpace(site.Title)
+			url := strings.TrimSpace(site.URL)
+			if name == "" || url == "" {
+				continue
+			}
+			elements = append(elements, map[string]any{
+				"@type":    "ListItem",
+				"position": pos,
+				"name":     name,
+				"url":      url,
+			})
+			pos++
+			if len(elements) >= maxItems {
+				break
+			}
+		}
+		if len(elements) >= maxItems {
+			break
+		}
+	}
+	if len(elements) == 0 {
+		return nil
+	}
+	return map[string]any{
+		"@type":           "ItemList",
+		"numberOfItems":   len(elements),
+		"itemListElement": elements,
 	}
 }
 
@@ -288,7 +336,14 @@ func strengthenSystemTitle(instanceName, title string) string {
 	return title
 }
 
+// noscriptFromPage builds a crawler-visible text outline of the published navigation.
+// Kept as plain text (escaped by webui) with category → site hierarchy.
 func noscriptFromPage(page navigation.PublishedPage, instanceName string) string {
+	const (
+		maxSitesTotal = 80
+		maxDescRunes  = 120
+		maxBodyRunes  = 6000
+	)
 	var b strings.Builder
 	title := strings.TrimSpace(page.Title)
 	if title == "" {
@@ -297,39 +352,63 @@ func noscriptFromPage(page navigation.PublishedPage, instanceName string) string
 	b.WriteString(title)
 	if desc := strings.TrimSpace(page.Description); desc != "" {
 		b.WriteString(" — ")
-		b.WriteString(desc)
+		b.WriteString(truncateRunes(desc, maxDescRunes))
 	}
-	b.WriteString("。")
-	// List a short sample of sites so crawlers without JS still see content keywords.
-	count := 0
+	b.WriteString("。\n")
+
+	siteCount := 0
 	for _, cat := range page.Categories {
+		catName := strings.TrimSpace(cat.Name)
+		if catName == "" {
+			catName = "未分类"
+		}
+		// Collect sites in this category first.
+		names := make([]string, 0, len(cat.Sites))
 		for _, site := range cat.Sites {
 			name := strings.TrimSpace(site.Title)
 			if name == "" {
 				continue
 			}
-			if count == 0 {
-				b.WriteString(" 收录：")
-			} else {
-				b.WriteString("、")
-			}
-			b.WriteString(name)
-			count++
-			if count >= 24 {
+			names = append(names, name)
+			siteCount++
+			if siteCount >= maxSitesTotal {
 				break
 			}
 		}
-		if count >= 24 {
+		if len(names) == 0 {
+			continue
+		}
+		b.WriteString(catName)
+		b.WriteString("：")
+		b.WriteString(strings.Join(names, "、"))
+		b.WriteString("。\n")
+		if siteCount >= maxSitesTotal {
 			break
 		}
 	}
-	if count > 0 {
-		b.WriteString("。")
+	if siteCount == 0 {
+		b.WriteString("暂无公开站点。\n")
+	} else if siteCount >= maxSitesTotal {
+		b.WriteString("…（更多站点请在浏览器中打开完整页面）\n")
 	}
-	b.WriteString(" 由 ")
+	b.WriteString("由 ")
 	b.WriteString(instanceName)
 	b.WriteString(" 提供。")
-	return b.String()
+
+	out := b.String()
+	if len([]rune(out)) > maxBodyRunes {
+		runes := []rune(out)
+		out = string(runes[:maxBodyRunes]) + "…"
+	}
+	return out
+}
+
+func truncateRunes(s string, max int) string {
+	runes := []rune(s)
+	if len(runes) <= max {
+		return s
+	}
+	return string(runes[:max]) + "…"
 }
 
 func normalizePath(pathname string) string {

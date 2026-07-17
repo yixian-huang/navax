@@ -445,11 +445,11 @@ func (s *SQLStore) ReplacePublication(ctx context.Context, actor Actor, pageID s
 		}
 		_, err := tx.ExecContext(ctx, `
 			UPDATE page_publications
-			SET visibility = ?, slug = ?, show_author = ?, seo_title = ?, seo_description = ?,
+			SET visibility = ?, slug = ?, show_author = ?, seo_title = ?, seo_description = ?, seo_image = ?,
 			    current_snapshot_id = CASE WHEN ? = 'private' THEN NULL ELSE current_snapshot_id END,
 			    updated_at = ?
 			WHERE page_id = ?`,
-			input.Visibility, input.Slug, input.ShowAuthor, input.SEOTitle, input.SEODescription,
+			input.Visibility, input.Slug, input.ShowAuthor, input.SEOTitle, input.SEODescription, input.SEOImage,
 			input.Visibility, dbTime(now), pageID,
 		)
 		return mapWriteError(err)
@@ -781,7 +781,7 @@ func loadPublication(ctx context.Context, q queryer, pageID, publicBaseURL strin
 	var pageKind PageKind
 	var draftRevision int
 	err := q.QueryRowContext(ctx, `
-		SELECT p.visibility, p.slug, p.show_author, p.seo_title, p.seo_description,
+		SELECT p.visibility, p.slug, p.show_author, p.seo_title, p.seo_description, p.seo_image,
 		       p.current_snapshot_id, p.updated_at,
 		       s.id, s.draft_revision, s.published_at, s.slug, s.visibility,
 		       n.kind, n.draft_revision
@@ -789,7 +789,7 @@ func loadPublication(ctx context.Context, q queryer, pageID, publicBaseURL strin
 		JOIN navigation_pages n ON n.id = p.page_id
 		LEFT JOIN published_snapshots s ON s.id = p.current_snapshot_id
 		WHERE p.page_id = ?`, pageID).Scan(
-		&publication.Visibility, &publication.Slug, &publication.ShowAuthor, &publication.SEOTitle, &publication.SEODescription,
+		&publication.Visibility, &publication.Slug, &publication.ShowAuthor, &publication.SEOTitle, &publication.SEODescription, &publication.SEOImage,
 		&currentSnapshotID, &publicationUpdatedAt, &snapshotID, &publishedRevision, &snapshotPublishedAt, &snapshotSlug, &snapshotVisibility,
 		&pageKind, &draftRevision,
 	)
@@ -848,10 +848,7 @@ func buildPublishedPage(page Page, snapshotID string, visibility Visibility, slu
 		owner.Name = page.OwnerName
 		owner.AvatarURL = page.OwnerAvatarURL
 	}
-	ogImage := ""
-	if page.Settings.Appearance.Background.Type == "image" {
-		ogImage = strings.TrimSpace(page.Settings.Appearance.Background.Value)
-	}
+	ogImage := resolveOGImage(page)
 	return PublishedPage{
 		ID: page.ID, SnapshotID: snapshotID, Kind: page.Kind, Title: page.Title, Description: page.Description,
 		SEOTitle: page.Publication.SEOTitle, SEODescription: page.Publication.SEODescription, OGImage: ogImage,
@@ -859,6 +856,23 @@ func buildPublishedPage(page Page, snapshotID string, visibility Visibility, slu
 		Owner:    owner,
 		Settings: page.Settings, Categories: categories, PublishedAt: publishedAt,
 	}
+}
+
+// resolveOGImage prefers the dedicated SEO image, then still background, then video poster.
+func resolveOGImage(page Page) string {
+	if img := strings.TrimSpace(page.Publication.SEOImage); img != "" {
+		return img
+	}
+	bg := page.Settings.Appearance.Background
+	switch strings.ToLower(strings.TrimSpace(bg.Type)) {
+	case "image":
+		return strings.TrimSpace(bg.Value)
+	case "video":
+		if bg.Poster != nil {
+			return strings.TrimSpace(*bg.Poster)
+		}
+	}
+	return ""
 }
 
 func attachApprovedSubdomain(ctx context.Context, q queryer, page Page, published *PublishedPage) error {

@@ -73,6 +73,7 @@ export default function PublishPage() {
   const [showAuthor, setShowAuthor] = useState(true);
   const [seoTitle, setSeoTitle] = useState('');
   const [seoDescription, setSeoDescription] = useState('');
+  const [seoImage, setSeoImage] = useState('');
   const [highlightVisibility, setHighlightVisibility] = useState(false);
 
   const isPublished = publication?.published ?? false;
@@ -95,6 +96,7 @@ export default function PublishPage() {
     setShowAuthor(publication.showAuthor);
     setSeoTitle(publication.seoTitle || page?.title || '');
     setSeoDescription(publication.seoDescription || page?.description || '');
+    setSeoImage(publication.seoImage || '');
   }, [publication, page?.title, page?.description]);
 
   useEffect(() => {
@@ -208,6 +210,7 @@ export default function PublishPage() {
       showAuthor,
       seoTitle: seoTitle.trim(),
       seoDescription: seoDescription.trim(),
+      seoImage: seoImage.trim(),
     }, {
       onSuccess: () => toast('success', '发布设置已保存'),
       onError: (cause: Error) => toast('error', cause.message || '发布设置保存失败'),
@@ -405,8 +408,28 @@ export default function PublishPage() {
                   className="mt-1 w-full px-3 py-2 rounded-lg bg-background-50 border border-background-200/70 text-sm text-foreground-900 resize-none"
                 />
               </label>
-              <p className="text-[11px] text-foreground-400">
-                分享图（og:image）自动使用主题设置中的背景图；请在「主题」页上传背景后重新发布。
+              <label className="text-xs text-foreground-500 block">
+                SEO 分享图（og:image，可选）
+                <input
+                  value={seoImage}
+                  onChange={event => setSeoImage(event.target.value)}
+                  maxLength={2048}
+                  placeholder="https://… 或 /api/v1/assets/…（推荐 1200×630，小于 300KB）"
+                  className="mt-1 w-full h-9 px-3 rounded-lg bg-background-50 border border-background-200/70 text-sm text-foreground-900"
+                />
+              </label>
+              {seoImage.trim() && (
+                <div className="rounded-lg overflow-hidden border border-background-200/70 bg-background-100 aspect-[1200/630] max-h-36">
+                  <img
+                    src={seoImage.trim()}
+                    alt="SEO 分享图预览"
+                    className="w-full h-full object-cover"
+                    onError={e => { e.currentTarget.style.opacity = '0.3'; }}
+                  />
+                </div>
+              )}
+              <p className="text-[11px] text-foreground-400 leading-relaxed">
+                留空时发布后回退到主题背景图（视频则用 poster）。建议专用分享图 1200×630、体积小于 300KB，避免直接用高清壁纸。
               </p>
               <div className="flex items-center justify-between pt-1 gap-3 flex-wrap">
                 <label className="inline-flex items-center gap-2 text-sm text-foreground-600">

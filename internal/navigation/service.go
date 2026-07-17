@@ -216,6 +216,7 @@ func (s *Service) ReplacePublication(ctx context.Context, actor Actor, pageID st
 	input.Slug = strings.ToLower(strings.TrimSpace(input.Slug))
 	input.SEOTitle = strings.TrimSpace(input.SEOTitle)
 	input.SEODescription = strings.TrimSpace(input.SEODescription)
+	input.SEOImage = strings.TrimSpace(input.SEOImage)
 	if input.Visibility != VisibilityPrivate && input.Visibility != VisibilityUnlisted && input.Visibility != VisibilityPublic {
 		return Publication{}, validation("visibility", "must be private, unlisted, or public")
 	}
@@ -228,7 +229,30 @@ func (s *Service) ReplacePublication(ctx context.Context, actor Actor, pageID st
 	if len(input.SEOTitle) > 70 || len(input.SEODescription) > 160 {
 		return Publication{}, validation("seo", "title or description is too long")
 	}
+	if err := validateSEOImage(input.SEOImage); err != nil {
+		return Publication{}, err
+	}
 	return s.store.ReplacePublication(ctx, actor, pageID, input, strings.TrimRight(publicBaseURL, "/"), s.now().UTC())
+}
+
+func validateSEOImage(raw string) error {
+	if raw == "" {
+		return nil
+	}
+	if len(raw) > 2048 {
+		return validation("seoImage", "must be at most 2048 characters")
+	}
+	// Same-origin asset paths or absolute http(s) URLs only.
+	if strings.HasPrefix(raw, "/api/v1/assets/") {
+		return nil
+	}
+	if strings.HasPrefix(raw, "https://") || strings.HasPrefix(raw, "http://") {
+		if strings.ContainsAny(raw, " \t\n\r") {
+			return validation("seoImage", "must not contain whitespace")
+		}
+		return nil
+	}
+	return validation("seoImage", "must be an http(s) URL or /api/v1/assets/ path")
 }
 
 func (s *Service) Preview(ctx context.Context, actor Actor, pageID, publicBaseURL string) (PublishedPage, error) {

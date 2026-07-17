@@ -1963,6 +1963,10 @@ components:
         showAuthor: { type: boolean }
         seoTitle: { type: string }
         seoDescription: { type: string }
+        seoImage:
+          type: string
+          maxLength: 2048
+          description: Dedicated Open Graph / share image URL; empty falls back to page background on publish.
         published: { type: boolean }
         canonicalUrl: { type: [string, 'null'], format: uri }
         robots: { type: string, enum: ['noindex,follow', 'index,follow'] }
@@ -1979,6 +1983,10 @@ components:
         showAuthor: { type: boolean }
         seoTitle: { type: string, maxLength: 70 }
         seoDescription: { type: string, maxLength: 160 }
+        seoImage:
+          type: string
+          maxLength: 2048
+          description: Dedicated SEO/OG image (https URL or /api/v1/assets/… path).
     PublishRequest:
       type: object
       required: [expectedRevision]
@@ -1993,6 +2001,9 @@ components:
         kind: { $ref: '#/components/schemas/PageKind' }
         title: { type: string }
         description: { type: string }
+        seoTitle: { type: string }
+        seoDescription: { type: string }
+        ogImage: { type: string, description: Absolute or site-relative share image resolved at publish time. }
         slug: { type: string }
         visibility: { type: string, enum: [unlisted, public] }
         owner:

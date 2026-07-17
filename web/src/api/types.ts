@@ -161,6 +161,8 @@ export interface Publication {
   showAuthor: boolean;
   seoTitle?: string;
   seoDescription?: string;
+  /** Dedicated Open Graph image; empty falls back to background on publish. */
+  seoImage?: string;
   published: boolean;
   canonicalUrl: string | null;
   robots?: 'noindex,follow' | 'index,follow';
@@ -176,6 +178,7 @@ export interface PublicationSettingsUpdate {
   showAuthor: boolean;
   seoTitle?: string;
   seoDescription?: string;
+  seoImage?: string;
 }
 
 /** OpenAPI v1 中的完整导航页草稿。 */
@@ -216,6 +219,7 @@ export interface PublishSettings {
   isPublished: boolean;
   customDomain: string;
   showAuthor: boolean;
+  seoImage?: string;
 }
 
 // UI 已发布页模型：契约字段 + owner 展平后的便捷字段。

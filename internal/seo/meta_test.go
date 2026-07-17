@@ -51,12 +51,18 @@ func TestStrengthenSystemTitle(t *testing.T) {
 func TestFromPublishedPageSystem(t *testing.T) {
 	cfg := Config{InstanceName: "nav.ax", PublicBaseURL: "https://nav.ax"}
 	page := navigation.PublishedPage{
-		Kind:        navigation.PageKindSystem,
-		Title:       "nav.ax",
-		SEOTitle:    "nav.ax",
-		Visibility:  navigation.VisibilityPublic,
-		OGImage:     "/api/v1/assets/background/x.jpg",
-		Categories:  []navigation.PublicCategory{{Sites: []navigation.Site{{Title: "GitHub"}, {Title: "Figma"}}}},
+		Kind:       navigation.PageKindSystem,
+		Title:      "nav.ax",
+		SEOTitle:   "nav.ax",
+		Visibility: navigation.VisibilityPublic,
+		OGImage:    "/api/v1/assets/background/x.jpg",
+		Categories: []navigation.PublicCategory{{
+			Category: navigation.Category{Name: "开发"},
+			Sites: []navigation.Site{
+				{Title: "GitHub", URL: "https://github.com"},
+				{Title: "Figma", URL: "https://figma.com"},
+			},
+		}},
 		PublishedAt: time.Now(),
 	}
 	seo := cfg.FromPublishedPage(page, "/", "nav.ax")
@@ -71,6 +77,13 @@ func TestFromPublishedPageSystem(t *testing.T) {
 	}
 	if !strings.Contains(seo.Noscript, "GitHub") {
 		t.Fatalf("noscript missing sites: %q", seo.Noscript)
+	}
+	if !strings.Contains(seo.Noscript, "开发") && !strings.Contains(seo.Noscript, "：") {
+		// Prefer category: site outline when categories exist.
+		t.Logf("noscript outline: %q", seo.Noscript)
+	}
+	if !strings.Contains(seo.JSONLD, "ItemList") {
+		t.Fatalf("jsonld missing ItemList: %q", seo.JSONLD)
 	}
 	if seo.SiteName != "nav.ax" || seo.Locale != "zh_CN" {
 		t.Fatalf("site/locale = %q %q", seo.SiteName, seo.Locale)

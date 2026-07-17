@@ -121,11 +121,14 @@ type Site struct {
 }
 
 type Publication struct {
-	Visibility            Visibility `json:"visibility"`
-	Slug                  string     `json:"slug"`
-	ShowAuthor            bool       `json:"showAuthor"`
-	SEOTitle              string     `json:"seoTitle"`
-	SEODescription        string     `json:"seoDescription"`
+	Visibility     Visibility `json:"visibility"`
+	Slug           string     `json:"slug"`
+	ShowAuthor     bool       `json:"showAuthor"`
+	SEOTitle       string     `json:"seoTitle"`
+	SEODescription string     `json:"seoDescription"`
+	// SEOImage is an optional dedicated Open Graph / share image URL.
+	// Empty means publish falls back to the page background (or video poster).
+	SEOImage              string     `json:"seoImage"`
 	Published             bool       `json:"published"`
 	CanonicalURL          *string    `json:"canonicalUrl"`
 	Robots                string     `json:"robots"`
@@ -227,4 +230,5 @@ type PublicationSettingsInput struct {
 	ShowAuthor     bool
 	SEOTitle       string
 	SEODescription string
+	SEOImage       string
 }

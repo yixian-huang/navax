@@ -280,6 +280,7 @@ func (h *NavigationHandler) replacePublication(w http.ResponseWriter, r *http.Re
 		ShowAuthor     bool                  `json:"showAuthor"`
 		SEOTitle       string                `json:"seoTitle"`
 		SEODescription string                `json:"seoDescription"`
+		SEOImage       string                `json:"seoImage"`
 	}
 	if !decodeJSON(w, r, &request) {
 		return
@@ -287,7 +288,7 @@ func (h *NavigationHandler) replacePublication(w http.ResponseWriter, r *http.Re
 	publication, err := h.service.ReplacePublication(
 		r.Context(), navigationActor(r), chi.URLParam(r, "pageId"), navigation.PublicationSettingsInput{
 			Visibility: request.Visibility, Slug: request.Slug, ShowAuthor: request.ShowAuthor,
-			SEOTitle: request.SEOTitle, SEODescription: request.SEODescription,
+			SEOTitle: request.SEOTitle, SEODescription: request.SEODescription, SEOImage: request.SEOImage,
 		}, h.publicBaseURL,
 	)
 	if err != nil {
