@@ -113,13 +113,23 @@ func (h *AuthHandler) currentSession(w http.ResponseWriter, r *http.Request) {
 
 func (h *AuthHandler) login(w http.ResponseWriter, r *http.Request) {
 	var request struct {
+		// Account is preferred: email or username. Email is kept for backward compatibility.
+		Account  string `json:"account"`
 		Email    string `json:"email"`
+		Username string `json:"username"`
 		Password string `json:"password"`
 	}
 	if !decodeJSON(w, r, &request) {
 		return
 	}
-	session, token, err := h.service.Login(r.Context(), request.Email, request.Password, deviceSummary(r))
+	identifier := strings.TrimSpace(request.Account)
+	if identifier == "" {
+		identifier = strings.TrimSpace(request.Email)
+	}
+	if identifier == "" {
+		identifier = strings.TrimSpace(request.Username)
+	}
+	session, token, err := h.service.Login(r.Context(), identifier, request.Password, deviceSummary(r))
 	if err != nil {
 		h.writeAuthError(w, r, err)
 		return
@@ -337,7 +347,7 @@ func (h *AuthHandler) oauthCallback(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		slog.Warn("oauth callback", "provider", provider, "error", err)
-		http.Redirect(w, r, "/login?oauth=error", http.StatusFound)
+		http.Redirect(w, r, "/login?oauth="+oauthFailureReason(err), http.StatusFound)
 		return
 	}
 	h.setSessionCookie(w, token, session.ExpiresAt)
@@ -346,6 +356,23 @@ func (h *AuthHandler) oauthCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/app?scope=personal", http.StatusFound)
+}
+
+// oauthFailureReason maps auth errors to login-page query values for clear UX.
+func oauthFailureReason(err error) string {
+	switch {
+	case errors.Is(err, auth.ErrRegistrationClosed):
+		// Invite/closed mode: no matching account and no invitation token.
+		return "invite_required"
+	case errors.Is(err, auth.ErrInvitationInvalid), errors.Is(err, auth.ErrInvitationExpired), errors.Is(err, auth.ErrInvitationExhausted):
+		return "invite_required"
+	case errors.Is(err, auth.ErrAccountDisabled):
+		return "account_disabled"
+	case errors.Is(err, auth.ErrOAuthDenied), errors.Is(err, auth.ErrOAuthState):
+		return "denied"
+	default:
+		return "error"
+	}
 }
 
 func (h *AuthHandler) writeAuthError(w http.ResponseWriter, r *http.Request, err error) {

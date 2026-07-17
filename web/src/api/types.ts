@@ -568,7 +568,11 @@ export interface AuthSession {
 }
 
 export interface LoginRequest {
-  email: string;
+  /** Preferred: email or username */
+  account?: string;
+  /** Legacy alias for account (email or username) */
+  email?: string;
+  username?: string;
   password: string;
 }
 
