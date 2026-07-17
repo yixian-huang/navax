@@ -152,17 +152,24 @@ body {
   border: 1px solid oklch(var(--background-200) / 0.14);
 }
 
-/* Site cards sit on the photo with the same low-opacity frost (no section slab). */
+/*
+ * Site cards on wallpaper: more opaque frost so surface reads as a light panel.
+ * Text inside cards uses theme foreground (not --wp-ink), so white cards stay dark-ink readable
+ * even when the photo behind is dark (tone="dark" would otherwise force light ink).
+ */
 [data-wallpaper] .material-card {
-  background: oklch(var(--background-50) / 0.36);
-  -webkit-backdrop-filter: blur(12px) saturate(1.08);
-  backdrop-filter: blur(12px) saturate(1.08);
-  border: 1px solid oklch(var(--background-200) / 0.22);
-  box-shadow: 0 1px 2px oklch(var(--foreground-900) / 0.05);
+  background: oklch(var(--background-50) / 0.82);
+  -webkit-backdrop-filter: blur(16px) saturate(1.1);
+  backdrop-filter: blur(16px) saturate(1.1);
+  border: 1px solid oklch(var(--background-200) / 0.45);
+  box-shadow: 0 1px 3px oklch(var(--foreground-900) / 0.06);
 }
 [data-wallpaper] .material-card:hover {
-  background: oklch(var(--background-50) / 0.48);
+  background: oklch(var(--background-50) / 0.9);
   box-shadow: 0 4px 16px oklch(var(--foreground-900) / 0.08);
+}
+[data-wallpaper] .site-card-favicon {
+  background: oklch(var(--background-100) / 0.95);
 }
 
 /*
@@ -294,33 +301,51 @@ body {
   display: block !important;
 }
 
+/* List rows float on wallpaper — light frost + wallpaper ink (no solid white card). */
+[data-wallpaper] .site-card-list {
+  background: oklch(var(--background-50) / 0.22);
+  -webkit-backdrop-filter: blur(10px) saturate(1.05);
+  backdrop-filter: blur(10px) saturate(1.05);
+}
 [data-wallpaper] .site-card-list:hover {
-  background: oklch(var(--background-50) / 0.28);
+  background: oklch(var(--background-50) / 0.36);
+}
+[data-wallpaper] .site-card-list .site-card-list-domain,
+[data-wallpaper] .site-card-list .site-card-list-desc,
+[data-wallpaper] .wallpaper-ink-scope .site-card-list .site-card-list-domain,
+[data-wallpaper] .wallpaper-ink-scope .site-card-list .site-card-list-desc,
+[data-wallpaper] .wallpaper-ink-scope .site-card-list .site-card-list-domain *,
+[data-wallpaper] .wallpaper-ink-scope .site-card-list .site-card-list-desc * {
+  color: var(--wp-ink-muted);
+  text-shadow: var(--wp-shadow);
+}
+[data-wallpaper] .wallpaper-ink-scope .site-card-list .site-card-title,
+[data-wallpaper] .wallpaper-ink-scope .site-card-list .site-card-title * {
+  color: var(--wp-ink);
+  text-shadow: var(--wp-shadow);
 }
 
 /*
- * Site secondary lines (domain / description) over wallpaper.
- * Must beat `.wallpaper-ink-scope .material-card * { color: unset }` (0,3,0)
- * so frosted cards still get sampled ink + edge shadow.
- * light tone → dark soft ink; dark tone → light soft ink (via --wp-*).
+ * Material card body text: always theme ink on the light frosted panel.
+ * Beat `.wallpaper-ink-scope .material-card * { color: unset }` without using --wp-ink
+ * (dark photos force light ink → unreadable on white-ish cards).
  */
-[data-wallpaper] .site-card-list .site-card-list-domain,
-[data-wallpaper] .site-card-list .site-card-list-desc,
-[data-wallpaper] .material-card .site-card-domain,
-[data-wallpaper] .material-card .site-card-desc,
-[data-wallpaper] .wallpaper-ink-scope .material-card .site-card-domain,
-[data-wallpaper] .wallpaper-ink-scope .material-card .site-card-desc,
-[data-wallpaper] .wallpaper-ink-scope .material-card .site-card-domain *,
-[data-wallpaper] .wallpaper-ink-scope .material-card .site-card-desc * {
-  color: var(--wp-ink-soft);
-  text-shadow: var(--wp-shadow);
+[data-wallpaper] .wallpaper-ink-scope .material-card .site-card-title,
+[data-wallpaper] .wallpaper-ink-scope .material-card .site-card-title * {
+  color: oklch(var(--foreground-900));
+  text-shadow: none;
 }
-/* Description slightly stronger than domain so it stays readable when both show */
-[data-wallpaper] .material-card .site-card-desc,
+[data-wallpaper] .wallpaper-ink-scope .material-card .site-card-domain,
+[data-wallpaper] .wallpaper-ink-scope .material-card .site-card-domain *,
+[data-wallpaper] .material-card .site-card-domain {
+  color: oklch(var(--foreground-500));
+  text-shadow: none;
+}
 [data-wallpaper] .wallpaper-ink-scope .material-card .site-card-desc,
 [data-wallpaper] .wallpaper-ink-scope .material-card .site-card-desc *,
-[data-wallpaper] .site-card-list .site-card-list-desc {
-  color: var(--wp-ink-muted);
+[data-wallpaper] .material-card .site-card-desc {
+  color: oklch(var(--foreground-700));
+  text-shadow: none;
 }
 
 /* Quiet empty state on public home / wallpaper */

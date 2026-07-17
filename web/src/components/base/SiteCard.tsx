@@ -1,7 +1,7 @@
 // ============================================================
 // nav.ax SiteCard — Refined Neutral / Material
-// Shared wrapper with three density views, context menu, visits.
-// Description: compact hidden; comfortable/list one muted line when present.
+// Comfortable: icon + text side-by-side (not icon-alone row).
+// Description: compact hidden; comfortable/list one line when present.
 // ============================================================
 
 import { useCallback } from 'react';
@@ -65,7 +65,6 @@ function HighlightText({ text, query }: { text: string; query: string }) {
   );
 }
 
-/** Prefer non-empty description; used for secondary line + native tooltip. */
 function siteDescription(site: Site): string {
   return (site.description || '').trim();
 }
@@ -76,9 +75,6 @@ function tooltipFor(site: Site, domain: string): string {
   return `${site.title} · ${domain}`;
 }
 
-// ============================================================
-// CardWrapper — shared click/keyboard/context-menu behavior
-// ============================================================
 function CardWrapper({
   site,
   onOpen,
@@ -94,7 +90,6 @@ function CardWrapper({
   onDelete?: (site: Site) => void;
   children: React.ReactNode;
   className?: string;
-  /** Native browser tooltip (full title + description). */
   title?: string;
 }) {
   const { handleContextMenu, portal } = useContextMenu();
@@ -157,76 +152,75 @@ function CardWrapper({
   );
 }
 
-// ============================================================
-// SiteCard
-// ============================================================
 export default function SiteCard({ site, density, onOpen, onEdit, onDelete, searchQuery }: SiteCardProps) {
   const domain = getDomain(site.url);
   const q = searchQuery || '';
   const desc = siteDescription(site);
   const tip = tooltipFor(site, domain);
-
   const shared = { site, onOpen, onEdit, onDelete, title: tip };
 
   if (density === 'list') {
-    // Second line: description preferred, else domain (layout height unchanged).
     const secondary = desc || domain;
     return (
       <CardWrapper
         {...shared}
-        className="site-card-list flex items-center gap-3.5 px-3 py-2.5 rounded-lg hover:bg-background-100 transition-colors duration-200 focus-visible:outline-offset-[-2px]"
+        className="site-card-list flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-background-100 transition-colors duration-200 focus-visible:outline-offset-[-2px]"
       >
-        <Favicon url={site.url} className="w-5 h-5 flex-shrink-0" />
+        <span className="site-card-favicon flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-background-100/80">
+          <Favicon url={site.url} className="w-5 h-5" />
+        </span>
         <span className="min-w-0 flex-1">
-          <span className="block text-sm font-medium text-foreground-800 truncate group-hover:text-accent-500 transition-colors duration-200">
+          <span className="site-card-title block text-sm font-medium text-foreground-800 truncate group-hover:text-accent-500 transition-colors duration-200">
             <HighlightText text={site.title} query={q} />
           </span>
           <span
             className={cn(
-              'block text-[11px] truncate site-card-list-domain',
+              'block text-[11px] truncate',
               desc
-                ? 'text-foreground-400 site-card-list-desc'
-                : 'text-foreground-300 font-mono site-card-list-domain',
+                ? 'site-card-list-desc text-foreground-500'
+                : 'site-card-list-domain text-foreground-400 font-mono',
             )}
           >
             <HighlightText text={secondary} query={q} />
           </span>
         </span>
-        <i className="ri-arrow-right-up-line text-sm text-foreground-200 opacity-0 group-hover:opacity-100 transition-all duration-200 flex-shrink-0" />
+        <i className="ri-arrow-right-up-line text-sm text-foreground-300 opacity-0 group-hover:opacity-100 transition-all duration-200 flex-shrink-0" />
       </CardWrapper>
     );
   }
 
   if (density === 'compact') {
-    // Keep dense icon grid; description only via native title tooltip.
     return (
       <CardWrapper {...shared} className="material-card flex flex-col items-center gap-2 p-3">
         <Favicon url={site.url} className="w-6 h-6" />
-        <span className="text-[11px] font-medium text-foreground-700 text-center truncate w-full leading-tight group-hover:text-accent-500 transition-colors duration-200">
+        <span className="site-card-title text-[11px] font-medium text-foreground-700 text-center truncate w-full leading-tight group-hover:text-accent-500 transition-colors duration-200">
           <HighlightText text={site.title} query={q} />
         </span>
       </CardWrapper>
     );
   }
 
-  // Comfortable: domain always; description only when present (no empty row).
+  // Comfortable: icon left, title / domain / description stacked right.
   return (
-    <CardWrapper {...shared} className="material-card flex flex-col gap-3 p-4">
-      <div className="flex items-center justify-between">
-        <Favicon url={site.url} className="w-7 h-7" />
-        <div className="flex items-center gap-1.5">
-          <i className="ri-arrow-right-up-line text-base text-foreground-200 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300" />
+    <CardWrapper
+      {...shared}
+      className="material-card site-card-comfortable flex items-start gap-3 p-3.5"
+    >
+      <span className="site-card-favicon flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-background-100/90">
+        <Favicon url={site.url} className="w-6 h-6" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-start gap-1.5">
+          <h3 className="site-card-title min-w-0 flex-1 text-sm font-semibold text-foreground-900 truncate group-hover:text-accent-500 transition-colors duration-200">
+            <HighlightText text={site.title} query={q} />
+          </h3>
+          <i className="ri-arrow-right-up-line mt-0.5 text-sm text-foreground-300 opacity-0 -translate-x-0.5 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300 flex-shrink-0" />
         </div>
-      </div>
-      <div className="min-w-0">
-        <h3 className="text-sm font-semibold text-foreground-900 truncate group-hover:text-accent-500 transition-colors duration-200">
-          <HighlightText text={site.title} query={q} />
-        </h3>
-        <p className="site-card-domain text-[11px] text-foreground-300 truncate font-mono mt-0.5">
+        <p className="site-card-domain text-[11px] text-foreground-500 truncate font-mono mt-0.5">
           <HighlightText text={domain} query={q} />
         </p>
         {desc ? (
-          <p className="site-card-desc text-[11px] text-foreground-400 truncate mt-0.5 leading-snug">
+          <p className="site-card-desc text-[11px] text-foreground-600 truncate mt-0.5 leading-snug">
             <HighlightText text={desc} query={q} />
           </p>
         ) : null}
