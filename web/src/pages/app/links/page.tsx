@@ -3,11 +3,11 @@
 // Left: CRUD data management · Right: live DnD preview
 // ============================================================
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Plus, Edit2, Trash2, ChevronRight, Search, Save,
   Monitor, Tablet, Smartphone,
-  PanelLeftClose, PanelLeft, Layout, List, Grid3X3, X, Link2,
+  PanelLeftClose, PanelLeft, Layout, List, Grid3X3, X, Link2, Loader2, Check,
 } from 'lucide-react';
 import {
   DndContext,
@@ -128,13 +128,94 @@ export default function LinksPage() {
     type: 'site' | 'category';
   } | null>(null);
 
-  // Local layout changes
+  // Local layout changes — auto-saved to draft so left/right panels stay in sync.
   const [localPage, setLocalPage] = useState<NavigationPage | null>(null);
   const [hasLayoutChanges, setHasLayoutChanges] = useState(false);
+  const [layoutSaveState, setLayoutSaveState] = useState<'idle' | 'dirty' | 'saving' | 'saved' | 'error'>('idle');
   const [overCategoryId, setOverCategoryId] = useState<string | null>(null);
 
   const page = useMemo(() => localPage || pageData, [localPage, pageData]);
   const homeLayout = page?.settings?.layout.template ?? 'full';
+  const pageRef = useRef(page);
+  pageRef.current = page;
+  const layoutSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const layoutSavingRef = useRef(false);
+  const layoutSavePendingRef = useRef(false);
+  const layoutDirtyRef = useRef(false);
+
+  const markLayoutDirty = useCallback(() => {
+    layoutDirtyRef.current = true;
+    setHasLayoutChanges(true);
+    setLayoutSaveState('dirty');
+  }, []);
+
+  const persistLayout = useCallback(async () => {
+    const snapshot = pageRef.current;
+    if (!snapshot?.settings) return;
+    if (layoutSavingRef.current) {
+      layoutSavePendingRef.current = true;
+      return;
+    }
+    layoutSavingRef.current = true;
+    setLayoutSaveState('saving');
+    markSaving();
+
+    const density = (['list', 'compact', 'comfortable'] as const).includes(snapshot.settings.layout.density as Density)
+      ? snapshot.settings.layout.density
+      : 'comfortable';
+    const columns = Math.min(8, Math.max(1, snapshot.settings.layout.columns || 4));
+    const settings = {
+      ...snapshot.settings,
+      layout: { ...snapshot.settings.layout, density, columns },
+    };
+
+    try {
+      await saveComposition.mutateAsync({
+        categories: snapshot.categories.map(category => ({
+          id: category.id,
+          siteIds: (category.sites ?? []).map(site => site.id),
+        })),
+        settings,
+      });
+      markSaved();
+      layoutDirtyRef.current = false;
+      setHasLayoutChanges(false);
+      setLocalPage(null);
+      setLayoutSaveState('saved');
+    } catch (cause) {
+      markError('保存布局失败');
+      setLayoutSaveState('error');
+      toast('error', cause instanceof Error ? cause.message : '布局保存失败，请点「立即保存」重试');
+    } finally {
+      layoutSavingRef.current = false;
+      if (layoutSavePendingRef.current) {
+        layoutSavePendingRef.current = false;
+        void persistLayout();
+      }
+    }
+  }, [saveComposition, markSaving, markSaved, markError, toast]);
+
+  /** Mark dirty and schedule auto-save (debounced). */
+  const scheduleLayoutSave = useCallback((delayMs = 450) => {
+    markLayoutDirty();
+    if (layoutSaveTimerRef.current) clearTimeout(layoutSaveTimerRef.current);
+    layoutSaveTimerRef.current = setTimeout(() => {
+      layoutSaveTimerRef.current = null;
+      void persistLayout();
+    }, delayMs);
+  }, [markLayoutDirty, persistLayout]);
+
+  const flushLayoutSave = useCallback(() => {
+    if (layoutSaveTimerRef.current) {
+      clearTimeout(layoutSaveTimerRef.current);
+      layoutSaveTimerRef.current = null;
+    }
+    void persistLayout();
+  }, [persistLayout]);
+
+  useEffect(() => () => {
+    if (layoutSaveTimerRef.current) clearTimeout(layoutSaveTimerRef.current);
+  }, []);
 
   const setHomeLayout = useCallback((template: (typeof HOME_LAYOUTS)[number]) => {
     if (!page?.settings) return;
@@ -149,8 +230,8 @@ export default function LinksPage() {
         },
       };
     });
-    setHasLayoutChanges(true);
-  }, [page]);
+    scheduleLayoutSave(300);
+  }, [page, scheduleLayoutSave]);
 
   // Flat site list for table view (all sites with category info)
   const flatSites = useMemo<FlatSite[]>(() => {
@@ -465,86 +546,91 @@ export default function LinksPage() {
           }),
         };
       });
-      setHasLayoutChanges(true);
+      markLayoutDirty();
     },
-    [page],
+    [page, markLayoutDirty],
   );
 
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
       const { active, over } = event;
       setOverCategoryId(null);
-      if (!over || !page) return;
+      let changed = layoutDirtyRef.current;
 
-      const activeData = active.data.current;
+      if (over && page) {
+        const activeData = active.data.current;
 
-      // Category reorder
-      if (activeData?.type === 'category') {
-        const overCatId = findCategoryId(page, over.id);
-        if (!overCatId || active.id === overCatId) return;
-        const catIdx = page.categories.findIndex(c => c.id === active.id);
-        const overIdx = page.categories.findIndex(c => c.id === overCatId);
-        if (catIdx === -1 || overIdx === -1 || catIdx === overIdx) return;
-        setLocalPage(prev => {
-          const p = prev || page;
-          return { ...p, categories: arrayMove(p.categories, catIdx, overIdx) };
-        });
-        setHasLayoutChanges(true);
-        return;
-      }
-
-      // Site: cross-category already applied in dragOver; finalize same-category reorder.
-      const sourceCat = page.categories.find(c => c.sites.some(s => s.id === active.id));
-      if (!sourceCat) return;
-
-      const overCatId = findCategoryId(page, over.id);
-      if (!overCatId) return;
-
-      if (overCatId !== sourceCat.id) {
-        // Ensure final placement if dragOver missed (e.g. drop on empty category header).
-        setLocalPage(prev => {
-          const p = prev || page;
-          const from = p.categories.find(c => c.sites.some(s => s.id === active.id));
-          if (!from) return p;
-          // Already moved?
-          if (from.id === overCatId) return p;
-          const site = from.sites.find(s => s.id === active.id);
-          if (!site) return p;
-          return {
-            ...p,
-            categories: p.categories.map(c => {
-              if (c.id === from.id) return { ...c, sites: c.sites.filter(s => s.id !== active.id) };
-              if (c.id === overCatId) {
-                if (c.sites.some(s => s.id === active.id)) return c;
-                return { ...c, sites: [...c.sites, { ...site, categoryId: c.id }] };
+        // Category reorder
+        if (activeData?.type === 'category') {
+          const overCatId = findCategoryId(page, over.id);
+          if (overCatId && active.id !== overCatId) {
+            const catIdx = page.categories.findIndex(c => c.id === active.id);
+            const overIdx = page.categories.findIndex(c => c.id === overCatId);
+            if (catIdx !== -1 && overIdx !== -1 && catIdx !== overIdx) {
+              setLocalPage(prev => {
+                const p = prev || page;
+                return { ...p, categories: arrayMove(p.categories, catIdx, overIdx) };
+              });
+              changed = true;
+            }
+          }
+        } else {
+          // Site: cross-category already applied in dragOver; finalize same-category reorder.
+          const sourceCat = page.categories.find(c => c.sites.some(s => s.id === active.id));
+          if (sourceCat) {
+            const overCatId = findCategoryId(page, over.id);
+            if (overCatId && overCatId !== sourceCat.id) {
+              setLocalPage(prev => {
+                const p = prev || page;
+                const from = p.categories.find(c => c.sites.some(s => s.id === active.id));
+                if (!from || from.id === overCatId) return p;
+                const site = from.sites.find(s => s.id === active.id);
+                if (!site) return p;
+                return {
+                  ...p,
+                  categories: p.categories.map(c => {
+                    if (c.id === from.id) return { ...c, sites: c.sites.filter(s => s.id !== active.id) };
+                    if (c.id === overCatId) {
+                      if (c.sites.some(s => s.id === active.id)) return c;
+                      return { ...c, sites: [...c.sites, { ...site, categoryId: c.id }] };
+                    }
+                    return c;
+                  }),
+                };
+              });
+              changed = true;
+            } else if (overCatId === sourceCat.id && active.id !== over.id) {
+              const oldIndex = sourceCat.sites.findIndex(s => s.id === active.id);
+              const newIndex = sourceCat.sites.findIndex(s => s.id === over.id);
+              if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
+                setLocalPage(prev => {
+                  const p = prev || page;
+                  return {
+                    ...p,
+                    categories: p.categories.map(c => {
+                      if (c.id !== sourceCat.id) return c;
+                      return { ...c, sites: arrayMove(c.sites, oldIndex, newIndex) };
+                    }),
+                  };
+                });
+                changed = true;
               }
-              return c;
-            }),
-          };
-        });
-        setHasLayoutChanges(true);
-        return;
+            }
+          }
+        }
       }
 
-      // Same-category reorder
-      if (active.id === over.id) return;
-      const oldIndex = sourceCat.sites.findIndex(s => s.id === active.id);
-      const newIndex = sourceCat.sites.findIndex(s => s.id === over.id);
-      if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return;
-
-      setLocalPage(prev => {
-        const p = prev || page;
-        return {
-          ...p,
-          categories: p.categories.map(c => {
-            if (c.id !== sourceCat.id) return c;
-            return { ...c, sites: arrayMove(c.sites, oldIndex, newIndex) };
-          }),
-        };
-      });
-      setHasLayoutChanges(true);
+      if (changed) {
+        markLayoutDirty();
+        // Debounce slightly so setLocalPage commits and pageRef updates first.
+        if (layoutSaveTimerRef.current) clearTimeout(layoutSaveTimerRef.current);
+        layoutSaveTimerRef.current = setTimeout(() => {
+          layoutSaveTimerRef.current = null;
+          void persistLayout();
+        }, 80);
+      }
     },
-    [page],
+    [page, markLayoutDirty, persistLayout],
   );
 
   // ---- Layout settings ----
@@ -558,9 +644,9 @@ export default function LinksPage() {
           settings: { ...base.settings, layout: { ...base.settings.layout, density: d as Density } },
         };
       });
-      setHasLayoutChanges(true);
+      scheduleLayoutSave(350);
     },
-    [page],
+    [page, scheduleLayoutSave],
   );
 
   const setColumns = useCallback(
@@ -573,46 +659,14 @@ export default function LinksPage() {
           settings: { ...base.settings, layout: { ...base.settings.layout, columns: c } },
         };
       });
-      setHasLayoutChanges(true);
+      scheduleLayoutSave(500);
     },
-    [page],
+    [page, scheduleLayoutSave],
   );
 
   const handleSaveLayout = useCallback(() => {
-    if (!page?.settings) return;
-    // Clamp to server-valid layout values before save (API: density enum, columns 1–8).
-    const density = (['list', 'compact', 'comfortable'] as const).includes(page.settings.layout.density as Density)
-      ? page.settings.layout.density
-      : 'comfortable';
-    const columns = Math.min(8, Math.max(1, page.settings.layout.columns || 4));
-    const settings = {
-      ...page.settings,
-      layout: {
-        ...page.settings.layout,
-        density,
-        columns,
-      },
-    };
-    markSaving();
-    saveComposition.mutate({
-      categories: page.categories.map(category => ({
-        id: category.id,
-        siteIds: (category.sites ?? []).map(site => site.id),
-      })),
-      settings,
-    }, {
-      onSuccess: () => {
-        markSaved();
-        setHasLayoutChanges(false);
-        setLocalPage(null);
-        toast('success', draftSaveToastMessage(page.publication, '布局已写入草稿'));
-      },
-      onError: (cause) => {
-        markError('保存布局失败');
-        toast('error', cause instanceof Error ? cause.message : '保存布局失败');
-      },
-    });
-  }, [page, saveComposition, markSaving, markSaved, markError, toast]);
+    flushLayoutSave();
+  }, [flushLayoutSave]);
 
   // ---- Loading ----
   if (isLoading) return <LoadingSkeleton count={4} />;
@@ -953,24 +1007,33 @@ export default function LinksPage() {
         </div>
         )}
 
-        {/* Layout Settings */}
+        {/* Layout Settings — changes auto-save to draft; status mirrors preview bar */}
         <div className="border-t border-background-200/70 px-4 py-3 space-y-3">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             <span className="text-[11px] font-medium text-foreground-500">布局设置</span>
-            <button
-              onClick={handleSaveLayout}
-              disabled={!hasLayoutChanges}
+            <span
               className={cn(
-                'h-7 px-3 rounded-md text-[11px] font-medium transition-all duration-150 flex items-center gap-1 whitespace-nowrap',
-                hasLayoutChanges
-                  ? 'bg-primary-500 text-background-50 dark:text-foreground-950 hover:bg-primary-600'
-                  : 'border border-background-200/70 text-foreground-400 cursor-not-allowed',
+                'inline-flex items-center gap-1 text-[10px] font-medium whitespace-nowrap',
+                layoutSaveState === 'saving' && 'text-foreground-500',
+                layoutSaveState === 'dirty' && 'text-accent-600',
+                layoutSaveState === 'saved' && 'text-primary-600',
+                layoutSaveState === 'error' && 'text-red-600',
+                layoutSaveState === 'idle' && 'text-foreground-400',
               )}
             >
-              <Save className="w-3 h-3" />
-              {hasLayoutChanges ? '保存' : '已保存'}
-            </button>
+              {layoutSaveState === 'saving' && <Loader2 className="w-3 h-3 animate-spin" />}
+              {layoutSaveState === 'saved' && <Check className="w-3 h-3" />}
+              {layoutSaveState === 'dirty' && '待自动保存…'}
+              {layoutSaveState === 'saving' && '保存中…'}
+              {layoutSaveState === 'saved' && '已写入草稿'}
+              {layoutSaveState === 'error' && '保存失败'}
+              {layoutSaveState === 'idle' && '拖拽/调整后自动保存'}
+            </span>
           </div>
+          <p className="text-[10px] text-foreground-400 leading-relaxed -mt-1">
+            右侧预览拖拽与下方选项会<strong className="font-medium text-foreground-500">自动保存到草稿</strong>
+            ，发布后访客可见。
+          </p>
 
           {/* Homepage Layout Mode */}
           <div className="space-y-1.5">
@@ -1054,8 +1117,36 @@ export default function LinksPage() {
               </button>
             )}
             <h2 className="text-sm font-semibold text-foreground-700">实时预览</h2>
+            {(layoutSaveState === 'dirty' || layoutSaveState === 'saving' || layoutSaveState === 'error' || layoutSaveState === 'saved') && (
+              <span
+                className={cn(
+                  'hidden sm:inline-flex items-center gap-1 h-6 px-2 rounded-full text-[10px] font-medium',
+                  layoutSaveState === 'dirty' && 'bg-accent-50 text-accent-700',
+                  layoutSaveState === 'saving' && 'bg-background-100 text-foreground-600',
+                  layoutSaveState === 'saved' && 'bg-primary-50 text-primary-700',
+                  layoutSaveState === 'error' && 'bg-red-50 text-red-600',
+                )}
+              >
+                {layoutSaveState === 'saving' && <Loader2 className="w-3 h-3 animate-spin" />}
+                {layoutSaveState === 'saved' && <Check className="w-3 h-3" />}
+                {layoutSaveState === 'dirty' && '布局已改 · 即将保存'}
+                {layoutSaveState === 'saving' && '正在保存草稿…'}
+                {layoutSaveState === 'saved' && '草稿已更新'}
+                {layoutSaveState === 'error' && '保存失败'}
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-1">
+            {(layoutSaveState === 'dirty' || layoutSaveState === 'error') && (
+              <button
+                type="button"
+                onClick={handleSaveLayout}
+                className="h-7 px-2.5 rounded-md text-[11px] font-medium bg-primary-500 text-background-50 hover:bg-primary-600 inline-flex items-center gap-1 mr-1 whitespace-nowrap"
+              >
+                <Save className="w-3 h-3" />
+                立即保存
+              </button>
+            )}
             {([
               { key: 'desktop' as Viewport, icon: Monitor, label: '桌面' },
               { key: 'tablet' as Viewport, icon: Tablet, label: '平板' },
@@ -1077,6 +1168,42 @@ export default function LinksPage() {
             ))}
           </div>
         </div>
+
+        {/* Sticky save strip when dirty — sits where the user is dragging */}
+        {(layoutSaveState === 'dirty' || layoutSaveState === 'saving' || layoutSaveState === 'error') && (
+          <div
+            className={cn(
+              'flex items-center justify-between gap-3 px-4 py-2 border-b text-xs',
+              layoutSaveState === 'error'
+                ? 'bg-red-50 border-red-100 text-red-700'
+                : 'bg-accent-50/80 border-accent-100/80 text-accent-800',
+            )}
+          >
+            <span className="min-w-0">
+              {layoutSaveState === 'saving' && '正在把布局写入草稿…'}
+              {layoutSaveState === 'dirty' && '预览中的拖拽与布局调整会自动保存到草稿，无需回到左侧。'}
+              {layoutSaveState === 'error' && '自动保存失败，可点右侧按钮重试。'}
+            </span>
+            <button
+              type="button"
+              onClick={handleSaveLayout}
+              disabled={layoutSaveState === 'saving'}
+              className={cn(
+                'h-7 px-3 rounded-md text-[11px] font-medium inline-flex items-center gap-1 flex-shrink-0 whitespace-nowrap',
+                layoutSaveState === 'saving'
+                  ? 'bg-background-200 text-foreground-400 cursor-wait'
+                  : 'bg-primary-500 text-background-50 hover:bg-primary-600',
+              )}
+            >
+              {layoutSaveState === 'saving' ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <Save className="w-3 h-3" />
+              )}
+              {layoutSaveState === 'saving' ? '保存中' : '立即保存'}
+            </button>
+          </div>
+        )}
 
         {/* Preview content */}
         <div className="flex-1 overflow-y-auto p-4 md:p-6">
@@ -1134,7 +1261,7 @@ export default function LinksPage() {
           </DndContext>
 
           <p className="text-[11px] text-foreground-300 mt-3 text-center">
-            拖拽分类手柄排序 · 拖站点到其他分类（标题或站点上）即可跨分类移动 · 改完点「保存」
+            拖拽分类手柄排序 · 拖站点到其他分类即可移动 · 布局改动会自动保存到草稿
           </p>
         </div>
       </div>
