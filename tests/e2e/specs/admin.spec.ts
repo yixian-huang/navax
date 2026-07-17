@@ -18,7 +18,7 @@ test.describe('管理员', () => {
 
   test('系统配置可进入平台主题库', async ({ page }) => {
     await page.goto('/admin/settings');
-    await page.getByRole('link', { name: '管理主题库' }).click();
+    await page.getByRole('link', { name: '打开平台主题库' }).click();
     await expect(page.getByRole('heading', { name: '平台主题库' })).toBeVisible();
     await expect(page.getByText('Slate Dark').first()).toBeVisible();
   });

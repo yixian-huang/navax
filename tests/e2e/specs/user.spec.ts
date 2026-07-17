@@ -30,10 +30,11 @@ test.describe('用户工作台', () => {
     await page.getByRole('button', { name: '创建' }).click();
     await expect(page.getByText('我的书签').first()).toBeVisible();
 
+    // 快速添加：填 URL，在「更多选项」里手动命名，避免依赖线上抓取结果。
     await page.getByRole('button', { name: '添加站点' }).first().click();
-    await page.getByRole('button', { name: '手动添加' }).click();
-    await page.getByPlaceholder('GitHub', { exact: true }).fill('IETF');
-    await page.getByPlaceholder('https://github.com').fill('https://www.ietf.org');
+    await page.getByPlaceholder(/粘贴或输入 URL/).fill('https://www.ietf.org');
+    await page.getByRole('button', { name: /更多选项/ }).click();
+    await page.getByPlaceholder('留空则用自动识别').fill('IETF');
     await page.getByRole('combobox').selectOption({ label: '我的书签' });
     await page.getByRole('button', { name: '添加', exact: true }).click();
     await expect(page.getByText('IETF').first()).toBeVisible();
@@ -91,8 +92,9 @@ test.describe('用户工作台', () => {
   test('上传本地背景图', async ({ page }) => {
     await page.goto('/app/themes');
     // 隐藏的 file input 由「上传图片」按钮触发；直接对 input 设置文件。
-    await page.locator('input[type="file"]').setInputFiles(BACKGROUND_PNG);
-    await expect(page.getByText('背景图已更新')).toBeVisible();
+    // 页面有两个隐藏 file input：第一个上传到「我的背景」，第二个是站长预设。
+    await page.locator('input[type="file"]').first().setInputFiles(BACKGROUND_PNG);
+    await expect(page.getByText(/背景已写入草稿/)).toBeVisible();
     // 上传后返回真实 asset URL，预览图片指向 /api/v1/assets/…
     await expect(page.getByAltText('背景预览')).toHaveAttribute('src', /\/api\/v1\/assets\//);
   });

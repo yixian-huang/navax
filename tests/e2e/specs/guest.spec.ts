@@ -17,7 +17,7 @@ test.describe('游客', () => {
 
   test('访问不存在的分享页提示页面不可用', async ({ page }) => {
     await page.goto('/u/does-not-exist');
-    await expect(page.getByText('该导航页不存在或已被设为私密')).toBeVisible();
+    await expect(page.getByText('导航页不存在')).toBeVisible();
   });
 
   test('公开首页键盘可聚焦分类标签', async ({ page }) => {

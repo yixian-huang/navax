@@ -12,9 +12,9 @@ test.describe('用户申请短域名', () => {
   test('提交短域名申请后进入待审核', async ({ page }) => {
     await page.goto('/app/publish');
     await page.getByPlaceholder('your-name').fill(SHORT_LABEL);
-    await page.getByRole('button', { name: '申请域名' }).click();
+    await page.getByRole('button', { name: '申请子域名' }).click();
     await expect(page.getByText('申请已提交，等待审核')).toBeVisible();
-    await expect(page.getByText(/正在审核中/)).toBeVisible();
+    await expect(page.getByText(/审核中/).first()).toBeVisible();
   });
 });
 
