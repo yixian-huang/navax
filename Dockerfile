@@ -1,13 +1,13 @@
 # syntax=docker/dockerfile:1.7
 
-FROM node:22-alpine AS frontend
+FROM --platform=$BUILDPLATFORM node:22-alpine AS frontend
 WORKDIR /src/web
 COPY web/package.json web/package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm npm ci
 COPY web/ ./
 RUN npm run build
 
-FROM golang:1.25-alpine AS backend
+FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS backend
 WORKDIR /src
 RUN apk add --no-cache ca-certificates
 COPY go.mod go.sum ./
@@ -22,9 +22,10 @@ ARG VERSION=dev
 ARG COMMIT=unknown
 ARG BUILT_AT=1970-01-01T00:00:00Z
 ARG DEPLOYMENT=container
+ARG TARGETOS TARGETARCH
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 GOOS=linux go build \
+    CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build \
       -trimpath -buildvcs=false \
       -ldflags="-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.builtAt=${BUILT_AT} -X main.deployment=${DEPLOYMENT}" \
       -o /out/navax ./cmd/navax
