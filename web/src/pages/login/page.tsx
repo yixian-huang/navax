@@ -19,11 +19,13 @@ function oauthToastMessage(code: string | null, registrationMode: string): strin
       if (registrationMode === 'open') {
         return '第三方登录失败。若已有账号，请使用同一邮箱的 Google/GitHub 账号。';
       }
-      return '当前为邀请注册：第三方登录仅支持已绑定账号，或 Google/GitHub 邮箱与站内账号相同；新用户需邀请链接，并在邀请页使用第三方注册。';
+      return '当前为邀请注册：已有账号请用同邮箱第三方登录；新用户可在下方填写邀请码后再点 Google/GitHub，或从邀请链接进入。';
+    case 'mail_required':
+      return '服务器未配置邮件服务，无法完成第三方注册验证码步骤';
     case 'account_disabled':
       return '该账号已被禁用，请联系管理员';
     case 'error':
-      return '第三方登录失败，请重试。若已有账号，请使用相同邮箱的 Google/GitHub 账号；新用户需邀请或公开注册。';
+      return '第三方登录失败，请重试。若已有账号，请使用相同邮箱的 Google/GitHub 账号。';
     default:
       return null;
   }
@@ -41,6 +43,8 @@ export default function LoginPage() {
   const [sending, setSending] = useState(false);
   const [registrationMode, setRegistrationMode] = useState<'invite' | 'closed' | 'open'>('invite');
   const [oauthProviders, setOauthProviders] = useState<string[]>([]);
+  /** Optional invite token carried into OAuth start (invite-mode registration). */
+  const [inviteToken, setInviteToken] = useState('');
   const { toast } = useToast();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -255,10 +259,23 @@ export default function LoginPage() {
                 <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-background-200/70" /></div>
                 <div className="relative flex justify-center text-[11px]"><span className="px-2 bg-background-100 text-foreground-400">或使用</span></div>
               </div>
+              {registrationMode === 'invite' && (
+                <label className="block mb-3">
+                  <span className="block text-xs text-foreground-500 mb-1.5">
+                    邀请码（新用户 OAuth 注册时填写；已有账号可留空）
+                  </span>
+                  <input
+                    value={inviteToken}
+                    onChange={e => setInviteToken(e.target.value.trim())}
+                    placeholder="邀请 token"
+                    className="w-full h-10 px-3 rounded-lg border border-background-200/70 bg-background-50 text-sm focus:outline-none focus:border-primary-300"
+                  />
+                </label>
+              )}
               <div className="grid gap-2">
                 {oauthProviders.includes('google') && (
                   <a
-                    href={authApi.oauthStartURL('google')}
+                    href={authApi.oauthStartURL('google', inviteToken || undefined)}
                     className="h-10 rounded-lg border border-background-200/70 bg-background-50 text-sm font-medium text-foreground-700 hover:bg-background-100 inline-flex items-center justify-center gap-2"
                   >
                     <i className="ri-google-fill text-base" /> Google 登录
@@ -266,18 +283,18 @@ export default function LoginPage() {
                 )}
                 {oauthProviders.includes('github') && (
                   <a
-                    href={authApi.oauthStartURL('github')}
+                    href={authApi.oauthStartURL('github', inviteToken || undefined)}
                     className="h-10 rounded-lg border border-background-200/70 bg-background-50 text-sm font-medium text-foreground-700 hover:bg-background-100 inline-flex items-center justify-center gap-2"
                   >
                     <i className="ri-github-fill text-base" /> GitHub 登录
                   </a>
                 )}
               </div>
-              {registrationMode !== 'open' && (
-                <p className="mt-3 text-[11px] leading-relaxed text-foreground-400 text-center">
-                  邀请制下：第三方登录需站内已有账号且邮箱一致；新用户请使用邀请链接。
-                </p>
-              )}
+              <p className="mt-3 text-[11px] leading-relaxed text-foreground-400 text-center">
+                新用户：第三方授权后将向该邮箱发送验证码，验证通过后完成注册。
+                {registrationMode === 'invite' ? ' 邀请制需同时提供有效邀请码。' : ''}
+                {' '}已有账号：使用与站内相同邮箱的 Google/GitHub 即可直接登录。
+              </p>
             </div>
           )}
 

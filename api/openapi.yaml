@@ -339,7 +339,7 @@ paths:
     get:
       tags: [Auth]
       operationId: oauthCallback
-      summary: OAuth 回调；成功后设置会话并重定向到工作台
+      summary: OAuth 回调；已绑定则建会话，新用户则发邮箱验证码并重定向补全页
       security: []
       parameters:
         - in: path
@@ -358,8 +358,51 @@ paths:
       responses:
         '302':
           description: |
-            成功时重定向到 /app 或 /admin；失败时重定向到 /login?oauth=…
-            （denied | invite_required | account_disabled | error）
+            已登录 → /app 或 /admin；
+            新用户 → /oauth/complete?email=…&needsInvite=0|1；
+            失败 → /login?oauth=denied|invite_required|account_disabled|mail_required|error
+  /api/v1/auth/oauth/register/email-code:
+    post:
+      tags: [Auth]
+      operationId: completeOAuthRegister
+      summary: 用邮箱验证码完成首次 OAuth 注册（邀请制可附 invitationToken）
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, code]
+              properties:
+                email: { type: string, format: email, maxLength: 254 }
+                code: { type: string, pattern: '^[0-9]{6}$' }
+                invitationToken: { type: string, minLength: 24, maxLength: 256 }
+      responses:
+        '201': { $ref: '#/components/responses/AuthSessionResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+        '422': { $ref: '#/components/responses/ErrorResponse' }
+  /api/v1/auth/oauth/register/resend:
+    post:
+      tags: [Auth]
+      operationId: resendOAuthRegisterCode
+      summary: 重发 OAuth 注册邮箱验证码
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email, maxLength: 254 }
+      responses:
+        '200': { $ref: '#/components/responses/MessageResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '503': { $ref: '#/components/responses/ErrorResponse' }
 
   /api/v1/me/profile:
     get:

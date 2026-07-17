@@ -94,33 +94,48 @@ func (s *Service) BeginOAuth(ctx context.Context, provider OAuthProvider, invita
 	}
 }
 
-// CompleteOAuth exchanges the code, finds or creates a user, and returns a session.
-func (s *Service) CompleteOAuth(ctx context.Context, provider OAuthProvider, code, state, device string) (Session, string, error) {
+// OAuthCompleteResult is either an established session or a pending email-OTP
+// step for first-time OAuth registration.
+type OAuthCompleteResult struct {
+	Session      Session
+	PlainToken   string
+	PendingEmail string // non-empty → redirect to /oauth/complete
+	PlainCode    string // only set when PendingEmail is set; for mailer only
+	NeedsInvite  bool   // invite-mode and no invitation token yet
+}
+
+// CompleteOAuth exchanges the code, finds or links a user, or parks a first-time
+// registration behind email verification (+ invitation when required).
+func (s *Service) CompleteOAuth(ctx context.Context, provider OAuthProvider, code, state, device string) (OAuthCompleteResult, error) {
 	if strings.TrimSpace(code) == "" {
-		return Session{}, "", ErrOAuthDenied
+		return OAuthCompleteResult{}, ErrOAuthDenied
 	}
 	gotProvider, invitationToken, err := s.oauthStore().TakeOAuthState(ctx, state, s.now().UTC())
 	if err != nil || gotProvider != string(provider) {
-		return Session{}, "", ErrOAuthState
+		return OAuthCompleteResult{}, ErrOAuthState
 	}
 	cfg, ok, err := s.oauthConfig(ctx, provider)
 	if err != nil || !ok {
-		return Session{}, "", ErrOAuthNotConfigured
+		return OAuthCompleteResult{}, ErrOAuthNotConfigured
 	}
 	profile, err := exchangeOAuth(ctx, provider, cfg, code)
 	if err != nil {
-		return Session{}, "", err
+		return OAuthCompleteResult{}, err
 	}
 	if profile.Subject == "" {
-		return Session{}, "", ErrOAuthDenied
+		return OAuthCompleteResult{}, ErrOAuthDenied
 	}
 
 	// Existing linked identity.
 	if user, userErr := s.oauthStore().UserByOAuth(ctx, string(provider), profile.Subject); userErr == nil {
 		if user.Status != "active" {
-			return Session{}, "", ErrAccountDisabled
+			return OAuthCompleteResult{}, ErrAccountDisabled
 		}
-		return s.createSession(ctx, user, device)
+		session, token, err := s.createSession(ctx, user, device)
+		if err != nil {
+			return OAuthCompleteResult{}, err
+		}
+		return OAuthCompleteResult{Session: session, PlainToken: token}, nil
 	}
 
 	// Link to existing email account when possible.
@@ -128,44 +143,168 @@ func (s *Service) CompleteOAuth(ctx context.Context, provider OAuthProvider, cod
 	if email != "" {
 		if user, userErr := s.store.UserByEmail(ctx, email); userErr == nil {
 			if user.Status != "active" {
-				return Session{}, "", ErrAccountDisabled
+				return OAuthCompleteResult{}, ErrAccountDisabled
 			}
 			linkID, idErr := identity.New("oai")
 			if idErr != nil {
-				return Session{}, "", idErr
+				return OAuthCompleteResult{}, idErr
 			}
 			if err := s.oauthStore().LinkOAuthIdentity(ctx, linkID, string(provider), profile.Subject, user.ID, email, s.now().UTC()); err != nil {
-				return Session{}, "", err
+				return OAuthCompleteResult{}, err
 			}
-			return s.createSession(ctx, user, device)
+			session, token, err := s.createSession(ctx, user, device)
+			if err != nil {
+				return OAuthCompleteResult{}, err
+			}
+			return OAuthCompleteResult{Session: session, PlainToken: token}, nil
 		}
 	}
 
-	// Create new user when registration allows.
+	// First-time OAuth: require a real email + OTP before creating the account.
+	if email == "" {
+		return OAuthCompleteResult{}, ErrOAuthDenied
+	}
+	mode, err := s.store.RegistrationMode(ctx)
+	if err != nil {
+		return OAuthCompleteResult{}, err
+	}
+	if mode == "closed" {
+		return OAuthCompleteResult{}, ErrRegistrationClosed
+	}
+	if invitationToken != "" {
+		if _, invErr := s.ValidateInvitation(ctx, invitationToken); invErr != nil {
+			return OAuthCompleteResult{}, invErr
+		}
+	}
+	// invite mode without token is OK: complete page collects invitation + OTP.
+	needsInvite := invitationToken == "" && mode != "open"
+	username := sanitizeOAuthUsername(profile.Username, profile.Email, profile.Subject)
+	plainCode, err := s.issueOAuthRegisterCode(ctx, OAuthRegisterPayload{
+		Provider: string(provider), Subject: profile.Subject, Email: email,
+		Username: username, AvatarURL: strings.TrimSpace(profile.AvatarURL),
+		InvitationToken: invitationToken,
+	})
+	if err != nil {
+		return OAuthCompleteResult{}, err
+	}
+	return OAuthCompleteResult{
+		PendingEmail: email, PlainCode: plainCode, NeedsInvite: needsInvite,
+	}, nil
+}
+
+func (s *Service) issueOAuthRegisterCode(ctx context.Context, payload OAuthRegisterPayload) (plainCode string, err error) {
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
+	code, err := randomDigits(6)
+	if err != nil {
+		return "", err
+	}
+	id, err := identity.New("emc")
+	if err != nil {
+		return "", err
+	}
+	now := s.now().UTC()
+	record := EmailCodeRecord{
+		ID: id, Email: payload.Email, Purpose: EmailCodeOAuthRegister,
+		CodeHash: security.HashToken(code), Payload: string(raw),
+		ExpiresAt: now.Add(emailCodeTTL),
+	}
+	if err := s.emailStore().CreateEmailCode(ctx, record, now); err != nil {
+		return "", err
+	}
+	return code, nil
+}
+
+// ResendOAuthRegisterCode re-issues OTP for a pending OAuth registration.
+func (s *Service) ResendOAuthRegisterCode(ctx context.Context, email string) (plainCode string, needsInvite bool, err error) {
+	email = normalizeEmail(email)
+	record, err := s.emailStore().LatestEmailCode(ctx, email, EmailCodeOAuthRegister, s.now().UTC())
+	if err != nil {
+		return "", false, ErrEmailCodeInvalid
+	}
+	var payload OAuthRegisterPayload
+	if err := json.Unmarshal([]byte(record.Payload), &payload); err != nil {
+		return "", false, ErrEmailCodeInvalid
+	}
+	code, err := s.issueOAuthRegisterCode(ctx, payload)
+	if err != nil {
+		return "", false, err
+	}
+	mode, modeErr := s.store.RegistrationMode(ctx)
+	if modeErr != nil {
+		return "", false, modeErr
+	}
+	needsInvite = payload.InvitationToken == "" && mode != "open"
+	return code, needsInvite, nil
+}
+
+// VerifyOAuthRegister completes first-time OAuth signup after email OTP
+// (and invitation token when the instance is invite-only).
+func (s *Service) VerifyOAuthRegister(ctx context.Context, email, code, invitationToken, device string) (Session, string, error) {
+	email = normalizeEmail(email)
+	record, err := s.emailStore().LatestEmailCode(ctx, email, EmailCodeOAuthRegister, s.now().UTC())
+	if err != nil {
+		return Session{}, "", ErrEmailCodeInvalid
+	}
+	if err := s.verifyCodeRecord(record, code); err != nil {
+		return Session{}, "", err
+	}
+	var payload OAuthRegisterPayload
+	if err := json.Unmarshal([]byte(record.Payload), &payload); err != nil {
+		return Session{}, "", ErrEmailCodeInvalid
+	}
+	if normalizeEmail(payload.Email) != email {
+		return Session{}, "", ErrEmailCodeInvalid
+	}
+	invite := strings.TrimSpace(invitationToken)
+	if invite == "" {
+		invite = strings.TrimSpace(payload.InvitationToken)
+	}
 	mode, err := s.store.RegistrationMode(ctx)
 	if err != nil {
 		return Session{}, "", err
 	}
-	if invitationToken == "" && mode != "open" {
+	if mode == "closed" {
 		return Session{}, "", ErrRegistrationClosed
 	}
-	if invitationToken != "" {
-		if _, invErr := s.ValidateInvitation(ctx, invitationToken); invErr != nil {
+	if invite == "" && mode != "open" {
+		return Session{}, "", ErrRegistrationClosed
+	}
+	if invite != "" {
+		if _, invErr := s.ValidateInvitation(ctx, invite); invErr != nil {
 			return Session{}, "", invErr
 		}
 	}
+	// Another user may have registered the email while OTP was pending.
+	if user, userErr := s.store.UserByEmail(ctx, email); userErr == nil {
+		if user.Status != "active" {
+			return Session{}, "", ErrAccountDisabled
+		}
+		if err := s.emailStore().ConsumeEmailCode(ctx, record.ID, s.now().UTC()); err != nil {
+			return Session{}, "", err
+		}
+		linkID, idErr := identity.New("oai")
+		if idErr != nil {
+			return Session{}, "", idErr
+		}
+		_ = s.oauthStore().LinkOAuthIdentity(ctx, linkID, payload.Provider, payload.Subject, user.ID, email, s.now().UTC())
+		return s.createSession(ctx, user, device)
+	}
 
-	username := sanitizeOAuthUsername(profile.Username, profile.Email, profile.Subject)
-	// OAuth accounts get a random unusable password hash.
 	randomPass, _, err := security.NewToken()
 	if err != nil {
 		return Session{}, "", err
 	}
-	input := RegisterInput{Username: username, Email: emailOrFallback(email, provider, profile.Subject), Password: randomPass, Device: device}
+	username := payload.Username
+	if username == "" {
+		username = sanitizeOAuthUsername("", email, payload.Subject)
+	}
+	input := RegisterInput{Username: username, Email: email, Password: randomPass, Device: device}
 	params, plainToken, err := s.prepareRegistration(input)
 	if err != nil {
-		// username conflict: retry with suffix
-		input.Username = username + "-" + profile.Subject[min(4, len(profile.Subject)):]
+		input.Username = username + "-" + payload.Subject[min(4, len(payload.Subject)):]
 		if len(input.Username) > 32 {
 			input.Username = input.Username[:32]
 		}
@@ -174,17 +313,20 @@ func (s *Service) CompleteOAuth(ctx context.Context, provider OAuthProvider, cod
 			return Session{}, "", err
 		}
 	}
-	params.User.AvatarURL = strings.TrimSpace(profile.AvatarURL)
-	if invitationToken != "" {
-		params.InvitationHash = security.HashToken(invitationToken)
+	params.User.AvatarURL = strings.TrimSpace(payload.AvatarURL)
+	if err := s.emailStore().ConsumeEmailCode(ctx, record.ID, s.now().UTC()); err != nil {
+		return Session{}, "", err
+	}
+	if invite != "" {
+		params.InvitationHash = security.HashToken(invite)
 		if err := s.store.RegisterWithInvitation(ctx, params, s.now().UTC()); err != nil {
 			return Session{}, "", err
 		}
 		linkID, idErr := identity.New("oai")
 		if idErr == nil {
-			_ = s.oauthStore().LinkOAuthIdentity(ctx, linkID, string(provider), profile.Subject, params.User.ID, params.User.Email, s.now().UTC())
+			_ = s.oauthStore().LinkOAuthIdentity(ctx, linkID, payload.Provider, payload.Subject, params.User.ID, email, s.now().UTC())
 		}
-	} else if err := s.oauthStore().CreateOAuthUser(ctx, params, string(provider), profile.Subject, s.now().UTC()); err != nil {
+	} else if err := s.oauthStore().CreateOAuthUser(ctx, params, payload.Provider, payload.Subject, s.now().UTC()); err != nil {
 		return Session{}, "", err
 	}
 	return Session{ID: params.Session.ID, User: params.User, ExpiresAt: params.Session.ExpiresAt}, plainToken, nil
