@@ -30,11 +30,13 @@ internal/config/       环境变量、持久化设置和校验
 internal/database/     SQLite、事务、迁移和备份
 internal/httpapi/      路由、DTO、响应、认证/权限中间件
 internal/auth/         用户、邀请、Session、密码
-internal/navigation/   页面、分类、站点、排序和偏好
-internal/publication/  不可变快照、公开投影、SEO 和 ETag
+internal/navigation/   页面、分类、站点、排序、偏好，以及发布快照/公开投影/ETag
+internal/catalog/      公开配置、主题列表、推荐目录、发现页
+internal/assets/       本地图片上传与只读分发（S3 配置为预留，v1 未接入分发）
 internal/analytics/    匿名事件、聚合和保留策略
 internal/admin/        运营管理和审计
-internal/integrations/ SMTP、对象存储、DNS 适配器
+internal/integrations/ SMTP、对象存储与 DNS 的配置/测试适配器（DNS 与 S3 写入为扩展预留）
+internal/subdomains/   子域名申请、审核与 Host 解析数据
 internal/maintenance/  更新检查、验签、备份和恢复
 migrations/            只增不改的 SQL 迁移
 web/                    React/Vite 前端
@@ -56,7 +58,7 @@ HTTP 层只负责解析、校验、授权和序列化；业务模块拥有事务
 
 ## 5. HTTP 与安全
 
-同源 API 使用 Host-only、Secure、HttpOnly、SameSite=Lax Cookie。所有非安全方法校验 `Origin`；登录、邀请、事件和链接检查分别限流。公开快照返回 ETag 与 Cache-Control。
+同源 API 使用 Host-only、Secure、HttpOnly、SameSite=Lax Cookie。所有非安全方法校验 `Origin`/`Referer`（含登录与注册，防止 login CSRF）；登录、邀请、事件、改密、恢复令牌和链接检查分别限流。公开快照返回 ETag 与 Cache-Control。
 
 服务器抓取 URL 时，每次 DNS 解析和重定向都拒绝回环、私网、链路本地、保留地址及云元数据地址。上传限制 MIME、尺寸和大小，默认拒绝 SVG。
 

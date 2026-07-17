@@ -6,13 +6,15 @@ import (
 	"strings"
 )
 
-// VerifyOrigin rejects authenticated cross-site state changes. Public login,
-// registration and bootstrap requests have no ambient authority and are allowed.
+// VerifyOrigin rejects cross-site state changes on every non-safe method.
+// Browser fetch/XHR always send Origin for these; missing or mismatched Origin
+// (or Referer fallback) is treated as a CSRF/cross-site attempt — including
+// login/register/bootstrap, which would otherwise allow login CSRF.
 func VerifyOrigin(publicBaseURL string) func(http.Handler) http.Handler {
 	allowed, _ := url.Parse(publicBaseURL)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if isSafeMethod(r.Method) || readSessionCookie(r) == "" {
+			if isSafeMethod(r.Method) {
 				next.ServeHTTP(w, r)
 				return
 			}

@@ -23,6 +23,13 @@ export default function AdminThemesPage() {
   const [pendingId, setPendingId] = useState<string | null>(null);
   const { toast } = useToast();
   const activeId = platformThemes?.find(theme => theme.default || theme.isDefault)?.id ?? 'slate';
+  const enabledMap = useMemo(() => {
+    const map = new Map<string, boolean>();
+    for (const theme of platformThemes ?? []) {
+      map.set(theme.id, theme.enabled !== false);
+    }
+    return map;
+  }, [platformThemes]);
 
   const seriousThemes = useMemo(() => themes.filter(t => t.meta.vibe === 'serious'), [themes]);
   const cuteThemes = useMemo(() => themes.filter(t => t.meta.vibe === 'cute'), [themes]);
@@ -35,10 +42,26 @@ export default function AdminThemesPage() {
       await updateTheme.mutateAsync({ themeId: id, data: { enabled: true, default: true } });
       setPendingId(null);
       const pkg = themeRegistry.get(id);
-      toast('success', `主题已切换为「${pkg?.meta.name || id}」`);
+      toast('success', `默认主题已切换为「${pkg?.meta.name || id}」`);
     } catch (cause) {
       themeRegistry.activate(activeId);
       toast('error', cause instanceof Error ? cause.message : '主题切换失败');
+      setPendingId(null);
+    }
+  }, [activeId, toast, updateTheme]);
+
+  const handleToggleEnabled = useCallback(async (id: string, enabled: boolean) => {
+    if (id === activeId && !enabled) {
+      toast('error', '默认主题不可停用，请先切换默认主题');
+      return;
+    }
+    setPendingId(id);
+    try {
+      await updateTheme.mutateAsync({ themeId: id, data: { enabled } });
+      toast('success', enabled ? '主题已启用' : '主题已停用');
+    } catch (cause) {
+      toast('error', cause instanceof Error ? cause.message : '更新主题状态失败');
+    } finally {
       setPendingId(null);
     }
   }, [activeId, toast, updateTheme]);
@@ -51,22 +74,28 @@ export default function AdminThemesPage() {
   const renderThemeCard = (pkg: ThemePackage) => {
     const isActive = activeId === pkg.id;
     const isPending = pendingId === pkg.id;
+    const isEnabled = enabledMap.get(pkg.id) ?? true;
 
     return (
-      <button
+      <div
         key={pkg.id}
-        onClick={() => handleActivate(pkg.id)}
-        disabled={isPending}
         className={cn(
-          'relative flex flex-col rounded-xl border-2 transition-all duration-200 text-left cursor-pointer',
+          'relative flex flex-col rounded-xl border-2 transition-all duration-200 text-left',
           isActive && !isPending
             ? 'border-primary-500'
-            : 'border-background-200/70 hover:border-background-300',
+            : 'border-background-200/70',
+          !isEnabled && 'opacity-60',
           isPending && 'opacity-70'
         )}
       >
         {/* Preview bar — swatches from theme metadata */}
-        <div className="h-16 flex items-end rounded-t-[10px] overflow-hidden">
+        <button
+          type="button"
+          onClick={() => handleActivate(pkg.id)}
+          disabled={isPending}
+          className="h-16 flex items-end rounded-t-[10px] overflow-hidden cursor-pointer"
+          aria-label={`设为默认主题 ${pkg.meta.name}`}
+        >
           {pkg.meta.swatches.map((c, i) => (
             <div
               key={i}
@@ -74,7 +103,7 @@ export default function AdminThemesPage() {
               style={{ backgroundColor: c, opacity: i === 1 ? 0.85 : 1 }}
             />
           ))}
-        </div>
+        </button>
 
         {/* Info */}
         <div className="p-3.5 bg-background-50 rounded-b-[10px]">
@@ -95,16 +124,35 @@ export default function AdminThemesPage() {
           <p className="text-[11px] text-foreground-400 leading-relaxed">
             {pkg.meta.description}
           </p>
-          <span className={cn(
-            'inline-block mt-2 text-[10px] font-medium px-2 py-0.5 rounded-full',
-            pkg.meta.vibe === 'cute'
-              ? 'bg-pink-50 text-pink-600'
-              : 'bg-slate-100 text-slate-600'
-          )}>
-            {pkg.meta.vibe === 'cute' ? 'Kawaii' : 'Classic'}
-          </span>
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <span className={cn(
+              'inline-block text-[10px] font-medium px-2 py-0.5 rounded-full',
+              pkg.meta.vibe === 'cute'
+                ? 'bg-pink-50 text-pink-600'
+                : 'bg-slate-100 text-slate-600'
+            )}>
+              {pkg.meta.vibe === 'cute' ? 'Kawaii' : 'Classic'}
+            </span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={isEnabled}
+              aria-label={`${isEnabled ? '停用' : '启用'}主题 ${pkg.meta.name}`}
+              disabled={isPending || isActive}
+              onClick={() => handleToggleEnabled(pkg.id, !isEnabled)}
+              className={cn(
+                'relative w-9 h-5 rounded-full transition-colors disabled:opacity-40',
+                isEnabled ? 'bg-primary-500' : 'bg-background-300'
+              )}
+            >
+              <span className={cn(
+                'absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform',
+                isEnabled && 'translate-x-4'
+              )} />
+            </button>
+          </div>
         </div>
-      </button>
+      </div>
     );
   };
 
@@ -118,7 +166,7 @@ export default function AdminThemesPage() {
           <h1 className="text-xl font-bold font-heading text-foreground-950">导航主题</h1>
         </div>
         <p className="text-xs text-foreground-400 mt-0.5">
-          设置导航站首页的全局主题风格，切换后立即对全部访客生效 · 共 {themes.length} 套主题
+          点击预览设为默认；右侧开关控制用户可选主题。默认主题不可停用 · 共 {themes.length} 套主题
         </p>
       </div>
 

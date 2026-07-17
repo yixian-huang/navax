@@ -39,6 +39,10 @@ func AbuseProtection() func(http.Handler) http.Handler {
 		{http.MethodPost, func(path string) bool {
 			return strings.HasPrefix(path, "/api/v1/auth/invitations/") && strings.HasSuffix(path, "/register")
 		}, 10, 10 * time.Minute},
+		{http.MethodPatch, exactPath("/api/v1/me/password"), 10, 15 * time.Minute},
+		{http.MethodPost, func(path string) bool {
+			return strings.HasPrefix(path, "/api/v1/admin/backups/") && strings.HasSuffix(path, "/restore-token")
+		}, 5, 15 * time.Minute},
 		{http.MethodPost, exactPath("/api/v1/public/events"), 120, time.Minute},
 		{http.MethodPost, func(path string) bool { return strings.HasSuffix(path, "/link-checks") }, 10, time.Minute},
 		{http.MethodPost, exactPath("/api/v1/assets"), 30, time.Minute},
@@ -78,7 +82,19 @@ func (l *abuseLimiter) allow(key string, limit int, window time.Duration) (bool,
 	entry, exists := l.entries[key]
 	if !exists || !entry.reset.After(now) {
 		if !exists && len(l.entries) >= l.maxKeys {
-			return false, window
+			// Prefer dropping expired keys; if still full, evict one arbitrary
+			// entry so a table fill cannot lock out every new peer.
+			for candidate, stale := range l.entries {
+				if !stale.reset.After(now) {
+					delete(l.entries, candidate)
+				}
+			}
+			if len(l.entries) >= l.maxKeys {
+				for candidate := range l.entries {
+					delete(l.entries, candidate)
+					break
+				}
+			}
 		}
 		l.entries[key] = rateEntry{count: 1, reset: now.Add(window)}
 		return true, 0

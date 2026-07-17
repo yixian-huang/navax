@@ -155,6 +155,21 @@ func TestApprovedSubdomainResolvesPublishedPage(t *testing.T) {
 	if _, err := service.PublicHomeForHost(ctx, "missing.nav.ax"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("unknown subdomain error = %v", err)
 	}
+
+	// Revoke must clear subdomain on public projection without republish.
+	if _, err := db.ExecContext(ctx, "UPDATE subdomain_requests SET status = 'revoked' WHERE id = 'subdomain_request_one'"); err != nil {
+		t.Fatal(err)
+	}
+	bySlug, err := service.PublicBySlug(ctx, published.Slug)
+	if err != nil {
+		t.Fatalf("PublicBySlug after revoke error = %v", err)
+	}
+	if bySlug.Subdomain != nil {
+		t.Fatalf("revoked subdomain still present on public page: %q", *bySlug.Subdomain)
+	}
+	if _, err := service.PublicHomeForHost(ctx, "alice.nav.ax"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("revoked host should 404, got %v", err)
+	}
 }
 
 func TestReservedPublicationSlugRejected(t *testing.T) {

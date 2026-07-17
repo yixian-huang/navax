@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net"
 	"net/http"
 	"strconv"
@@ -329,6 +330,8 @@ func (h *NavigationHandler) publish(w http.ResponseWriter, r *http.Request) {
 		WriteJSON(w, r, replay.Status, publication)
 		return
 	}
+	// Only Abort when Publish itself fails. After a successful side effect, never
+	// Abort: clients would otherwise replay and create another snapshot.
 	completed := false
 	defer func() {
 		if !completed {
@@ -343,8 +346,9 @@ func (h *NavigationHandler) publish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := reservation.Complete(r.Context(), http.StatusOK, publication); err != nil {
-		WriteError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "保存幂等发布结果失败", nil)
-		return
+		// Publish already committed. Still return success so clients do not retry;
+		// leave the in-progress key (no Abort) until natural expiry.
+		slog.Warn("complete publish idempotency record", "error", err, "page_id", pageID)
 	}
 	completed = true
 	WriteJSON(w, r, http.StatusOK, publication)

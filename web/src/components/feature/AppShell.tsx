@@ -197,11 +197,20 @@ export default function AppShell() {
             to={`/app/settings?scope=${scope}`}
             className="flex items-center gap-2 text-xs text-foreground-500 hover:text-foreground-700 transition-colors duration-150"
           >
-            <img
-              src={user.avatarUrl || 'https://readdy.ai/api/search-image?query=default%20avatar%20placeholder%20icon&width=64&height=64&seq=avatar-default&orientation=squarish'}
-              alt=""
-              className="w-6 h-6 rounded-full object-cover bg-background-200"
-            />
+            {user.avatarUrl ? (
+              <img
+                src={user.avatarUrl}
+                alt=""
+                className="w-6 h-6 rounded-full object-cover bg-background-200"
+              />
+            ) : (
+              <span
+                aria-hidden
+                className="w-6 h-6 rounded-full bg-primary-100 text-primary-700 text-[11px] font-semibold inline-flex items-center justify-center"
+              >
+                {(user.username || '?').slice(0, 1).toUpperCase()}
+              </span>
+            )}
             <span className="hidden sm:inline">{user.username}</span>
           </Link>
         </header>

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -11,6 +12,9 @@ import (
 	adminpkg "github.com/yixian-huang/navax/internal/admin"
 	"github.com/yixian-huang/navax/internal/navigation"
 )
+
+// ErrDiscoverDisabled is returned when the instance has turned off the discover surface.
+var ErrDiscoverDisabled = errors.New("discover is disabled")
 
 type Config struct {
 	InstanceName     string   `json:"instanceName"`
@@ -119,8 +123,8 @@ func (s *Service) Directory(ctx context.Context, search, categoryID string, page
 		args = append(args, categoryID)
 	}
 	if search != "" {
-		where += " AND (s.title LIKE ? OR s.description LIKE ? OR s.url LIKE ?)"
-		pattern := "%" + search + "%"
+		where += " AND (s.title LIKE ? ESCAPE '\\' OR s.description LIKE ? ESCAPE '\\' OR s.url LIKE ? ESCAPE '\\')"
+		pattern := "%" + escapeLike(search) + "%"
 		args = append(args, pattern, pattern, pattern)
 	}
 	var total int
@@ -148,13 +152,21 @@ func (s *Service) Directory(ctx context.Context, search, categoryID string, page
 }
 
 func (s *Service) Discover(ctx context.Context, search, tag, sort string, page, pageSize int) (Page[DiscoverPage], error) {
+	var discoverEnabled bool
+	if err := s.db.QueryRowContext(ctx, "SELECT discover_enabled FROM system_settings WHERE id = 1").Scan(&discoverEnabled); err != nil {
+		return Page[DiscoverPage]{}, fmt.Errorf("read discover feature flag: %w", err)
+	}
+	if !discoverEnabled {
+		return Page[DiscoverPage]{}, ErrDiscoverDisabled
+	}
+
 	page, pageSize = normalizePagination(page, pageSize)
 	search, tag = strings.TrimSpace(search), strings.TrimSpace(tag)
 	where := ` WHERE p.kind = 'personal' AND pp.visibility = 'public' AND pp.current_snapshot_id IS NOT NULL AND u.status = 'active'`
 	args := make([]any, 0, 6)
 	if search != "" {
-		where += " AND (json_extract(s.payload_json, '$.title') LIKE ? OR json_extract(s.payload_json, '$.description') LIKE ?)"
-		pattern := "%" + search + "%"
+		where += " AND (json_extract(s.payload_json, '$.title') LIKE ? ESCAPE '\\' OR json_extract(s.payload_json, '$.description') LIKE ? ESCAPE '\\')"
+		pattern := "%" + escapeLike(search) + "%"
 		args = append(args, pattern, pattern)
 	}
 	if tag != "" {
@@ -218,4 +230,8 @@ func normalizePagination(page, pageSize int) (int, int) {
 		pageSize = 100
 	}
 	return page, pageSize
+}
+
+func escapeLike(value string) string {
+	return strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(value)
 }

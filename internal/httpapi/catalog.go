@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -60,6 +61,10 @@ func (h *CatalogHandler) discover(w http.ResponseWriter, r *http.Request) {
 		queryInt(r, "page", 1), queryInt(r, "pageSize", 20),
 	)
 	if err != nil {
+		if errors.Is(err, catalog.ErrDiscoverDisabled) {
+			WriteError(w, r, http.StatusNotFound, "NOT_FOUND", "发现页已关闭", nil)
+			return
+		}
 		WriteError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "读取发现页失败", nil)
 		return
 	}

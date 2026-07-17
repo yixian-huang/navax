@@ -20,6 +20,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/yixian-huang/navax/internal/identity"
@@ -29,6 +30,7 @@ var (
 	ErrUpdateNotConfigured = errors.New("automatic update is not configured")
 	ErrInvalidManifest     = errors.New("invalid signed update manifest")
 	ErrContainerManaged    = errors.New("container deployments must be updated by the container runtime")
+	ErrUpdateInProgress    = errors.New("an update is already in progress")
 )
 
 const maxManifestBytes = 2 << 20
@@ -76,6 +78,7 @@ type UpdateService struct {
 	client      *http.Client
 	backups     *BackupService
 	executable  func() (string, error)
+	applyMu     sync.Mutex
 }
 
 func NewUpdateService(db *sql.DB, currentVersion, deployment, manifestURL string, publicKey []byte) *UpdateService {
@@ -223,10 +226,20 @@ func (s *UpdateService) Apply(ctx context.Context, requestedVersion, actorID str
 	if s.backups == nil {
 		return UpdateState{}, errors.New("pre-update backup service is unavailable")
 	}
+	// Serialize binary replacement across concurrent admin/auto-apply callers.
+	if !s.applyMu.TryLock() {
+		return UpdateState{}, ErrUpdateInProgress
+	}
+	defer s.applyMu.Unlock()
+
 	var raw string
 	var latest sql.NullString
-	if err := s.db.QueryRowContext(ctx, "SELECT manifest_json, latest_version FROM update_state WHERE id = 1").Scan(&raw, &latest); err != nil {
+	var status string
+	if err := s.db.QueryRowContext(ctx, "SELECT manifest_json, latest_version, status FROM update_state WHERE id = 1").Scan(&raw, &latest, &status); err != nil {
 		return UpdateState{}, err
+	}
+	if status == "downloading" || status == "applying" {
+		return UpdateState{}, ErrUpdateInProgress
 	}
 	if !latest.Valid || requestedVersion == "" || requestedVersion != latest.String {
 		return UpdateState{}, fmt.Errorf("requested update version is not available")

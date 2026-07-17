@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"time"
 
 	"github.com/yixian-huang/navax/internal/database"
@@ -117,8 +118,10 @@ func (r *Reservation) Abort(ctx context.Context) {
 	if r == nil || r.service == nil {
 		return
 	}
-	_, _ = r.service.db.ExecContext(ctx, `
+	if _, err := r.service.db.ExecContext(ctx, `
 		DELETE FROM idempotency_records
 		WHERE scope = ? AND idempotency_key = ? AND actor_id = ? AND request_hash = ? AND response_status IS NULL`,
-		r.scope, r.key, r.actorID, r.hash)
+		r.scope, r.key, r.actorID, r.hash); err != nil {
+		slog.Warn("abort idempotency reservation", "error", err, "scope", r.scope)
+	}
 }

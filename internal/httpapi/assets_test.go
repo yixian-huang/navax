@@ -39,6 +39,7 @@ func TestAssetHandlerUploadAndPublicRead(t *testing.T) {
 
 	payload := httpTestPNG(t)
 	request := multipartAssetRequest(t, "/api/v1/assets", "avatar", "avatar.png", "image/png", payload, "")
+	request.Header.Set("Origin", "https://nav.ax")
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, request)
 	if response.Code != http.StatusUnauthorized {

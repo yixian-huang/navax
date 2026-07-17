@@ -798,10 +798,8 @@ func loadPublication(ctx context.Context, q queryer, pageID, publicBaseURL strin
 		return Publication{}, fmt.Errorf("read navigation publication: %w", err)
 	}
 	publication.Published = currentSnapshotID.Valid && snapshotID.Valid
+	// Unpublished drafts must never advertise index; only a live public snapshot may.
 	publication.Robots = "noindex,follow"
-	if publication.Visibility == VisibilityPublic && !publication.Published {
-		publication.Robots = "index,follow"
-	}
 	if publication.Published {
 		publication.SnapshotID = &snapshotID.String
 		revision := int(publishedRevision.Int64)
@@ -894,7 +892,32 @@ func loadPublicSnapshot(ctx context.Context, q queryer, query string, args ...an
 	if err := json.Unmarshal([]byte(payload), &page); err != nil {
 		return PublishedPage{}, fmt.Errorf("decode public navigation snapshot: %w", err)
 	}
+	// Subdomain is live state, not immutable snapshot content. Clear any embedded
+	// value then re-attach the currently approved domain (if any) so revoke is
+	// visible without requiring a republish.
+	page.Subdomain = nil
+	if err := attachApprovedSubdomainByPageID(ctx, q, page.ID, &page); err != nil {
+		return PublishedPage{}, err
+	}
+	page.ETag = makeETag(page)
 	return page, nil
+}
+
+func attachApprovedSubdomainByPageID(ctx context.Context, q queryer, pageID string, published *PublishedPage) error {
+	var domain string
+	err := q.QueryRowContext(ctx, `
+		SELECT sr.full_domain FROM subdomain_requests sr
+		JOIN navigation_pages n ON n.owner_id = sr.user_id AND n.id = ? AND n.kind = 'personal'
+		WHERE sr.status = 'approved'
+		ORDER BY sr.reviewed_at DESC LIMIT 1`, pageID).Scan(&domain)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read approved subdomain for public page: %w", err)
+	}
+	published.Subdomain = &domain
+	return nil
 }
 
 func ensurePublishedSlugAvailable(ctx context.Context, q queryer, pageID, slug string) error {

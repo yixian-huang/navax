@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -125,6 +126,8 @@ func (h *UpdateHandler) apply(w http.ResponseWriter, r *http.Request) {
 		WriteJSON(w, r, replay.Status, state)
 		return
 	}
+	// Only Abort when Apply itself fails. After binary replacement succeeds,
+	// never Abort (replay would re-replace binaries) and always request restart.
 	completed := false
 	defer func() {
 		if !completed {
@@ -137,8 +140,7 @@ func (h *UpdateHandler) apply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := reservation.Complete(r.Context(), http.StatusAccepted, state); err != nil {
-		WriteError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "保存幂等更新结果失败", nil)
-		return
+		slog.Warn("complete update apply idempotency record", "error", err, "version", request.Version)
 	}
 	completed = true
 	WriteJSON(w, r, http.StatusAccepted, state)
@@ -155,6 +157,8 @@ func (h *UpdateHandler) writeError(w http.ResponseWriter, r *http.Request, err e
 		WriteError(w, r, http.StatusUnprocessableEntity, "VALIDATION_FAILED", "更新清单签名或内容无效", nil)
 	case errors.Is(err, maintenance.ErrContainerManaged):
 		WriteError(w, r, http.StatusConflict, "CONFLICT", "容器部署必须由容器编排更新", nil)
+	case errors.Is(err, maintenance.ErrUpdateInProgress):
+		WriteError(w, r, http.StatusConflict, "CONFLICT", "已有更新正在进行，请稍后重试", nil)
 	default:
 		WriteError(w, r, http.StatusServiceUnavailable, "SERVICE_UNAVAILABLE", "更新服务暂不可用", nil)
 	}

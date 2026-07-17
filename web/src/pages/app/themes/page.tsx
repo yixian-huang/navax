@@ -11,7 +11,7 @@ import { useToast } from '@/components/base/Toast';
 import { useSaveStatus } from '@/hooks/useSaveStatus';
 import { cn } from '@/lib/utils';
 import type { ThemePackage } from '@/themes/types';
-import { useMyPage, useUpdatePageSettings } from '@/hooks/useQueries';
+import { useMyPage, useThemes, useUpdatePageSettings } from '@/hooks/useQueries';
 import { ErrorState, LoadingSkeleton } from '@/components/base/SharedUI';
 import { assetsApi, getPublicConfig } from '@/api/assets';
 import { ApiError } from '@/api/client';
@@ -27,9 +27,10 @@ interface BgConfig {
 }
 
 export default function ThemesPage() {
-  const { data: page, isLoading, isError, error, refetch } = useMyPage();
+  const { data: page, isLoading: pageLoading, isError, error, refetch } = useMyPage();
+  const enabledThemesQuery = useThemes();
+  const isLoading = pageLoading || enabledThemesQuery.isLoading;
   const updateSettings = useUpdatePageSettings();
-  const themes = useMemo(() => themeRegistry.list(), []);
   const [activeId, setActiveId] = useState('slate');
   const [pendingId, setPendingId] = useState<string | null>(null);
   const { toast } = useToast();
@@ -48,6 +49,14 @@ export default function ThemesPage() {
       .then(response => setMaxUploadBytes(response.data.limits.maxUploadBytes))
       .catch(() => { /* 保留默认上限，服务端仍会二次校验 */ });
   }, []);
+
+  // Only offer themes the admin has enabled (server is source of truth).
+  const themes = useMemo(() => {
+    const enabledIds = new Set((enabledThemesQuery.data ?? []).map(theme => theme.id));
+    const registered = themeRegistry.list();
+    if (enabledIds.size === 0) return registered;
+    return registered.filter(pkg => enabledIds.has(pkg.id));
+  }, [enabledThemesQuery.data]);
 
   const seriousThemes = useMemo(() => themes.filter(t => t.meta.vibe === 'serious'), [themes]);
   const cuteThemes = useMemo(() => themes.filter(t => t.meta.vibe === 'cute'), [themes]);

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -177,6 +178,7 @@ func TestDiscoverVisibilityAndFilters(t *testing.T) {
 	if byTag.Total != 1 {
 		t.Fatalf("按 tag=tools 过滤 = %d, want 1", byTag.Total)
 	}
+
 	missTag, err := service.Discover(ctx, "", "nonexistent", "latest", 1, 20)
 	if err != nil {
 		t.Fatal(err)
@@ -191,6 +193,13 @@ func TestDiscoverVisibilityAndFilters(t *testing.T) {
 	}
 	if bySearch.Total != 1 {
 		t.Fatalf("按标题搜索 = %d, want 1", bySearch.Total)
+	}
+
+	if _, err := db.ExecContext(ctx, "UPDATE system_settings SET discover_enabled = 0 WHERE id = 1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Discover(ctx, "", "", "latest", 1, 20); !errors.Is(err, ErrDiscoverDisabled) {
+		t.Fatalf("Discover when disabled error = %v, want ErrDiscoverDisabled", err)
 	}
 }
 
