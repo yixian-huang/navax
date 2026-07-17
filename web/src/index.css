@@ -168,8 +168,9 @@ body {
   background: oklch(var(--background-50) / 0.9);
   box-shadow: 0 4px 16px oklch(var(--foreground-900) / 0.08);
 }
+/* Favicon sits on the card surface — no extra plate behind the icon. */
 [data-wallpaper] .site-card-favicon {
-  background: oklch(var(--background-100) / 0.95);
+  background: transparent;
 }
 
 /*

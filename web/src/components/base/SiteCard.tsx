@@ -166,7 +166,7 @@ export default function SiteCard({ site, density, onOpen, onEdit, onDelete, sear
         {...shared}
         className="site-card-list flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-background-100 transition-colors duration-200 focus-visible:outline-offset-[-2px]"
       >
-        <span className="site-card-favicon flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-background-100/80">
+        <span className="site-card-favicon flex h-9 w-9 flex-shrink-0 items-center justify-center">
           <Favicon url={site.url} className="w-5 h-5" />
         </span>
         <span className="min-w-0 flex-1">
@@ -206,7 +206,7 @@ export default function SiteCard({ site, density, onOpen, onEdit, onDelete, sear
       {...shared}
       className="material-card site-card-comfortable flex items-start gap-3 p-3.5"
     >
-      <span className="site-card-favicon flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-background-100/90">
+      <span className="site-card-favicon flex h-10 w-10 flex-shrink-0 items-center justify-center">
         <Favicon url={site.url} className="w-6 h-6" />
       </span>
       <div className="min-w-0 flex-1">
