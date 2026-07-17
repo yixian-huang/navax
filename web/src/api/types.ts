@@ -840,6 +840,8 @@ export interface DiscoveredPage {
   description: string;
   ownerName: string;
   themeId: string;
+  /** Wallpaper / OG still for the card hero. */
+  coverImage?: string;
   tags: string[];
   featured?: boolean;
   viewCount: number;

@@ -170,6 +170,9 @@ func TestDiscoverVisibilityAndFilters(t *testing.T) {
 	if all.Items[0].ThemeID == "" || all.Items[0].OwnerName != "publisher" {
 		t.Fatalf("Discover 项应从快照解析主题与作者, got %+v", all.Items[0])
 	}
+	if all.Items[0].CoverImage != "/api/v1/assets/background/cover-test.jpg" {
+		t.Fatalf("Discover coverImage 应优先 OG 图, got %q", all.Items[0].CoverImage)
+	}
 
 	byTag, err := service.Discover(ctx, "", "tools", "latest", 1, 20)
 	if err != nil {
@@ -274,7 +277,14 @@ func insertPublishedPage(t *testing.T, db *sql.DB, seed publishSeed) {
 		Slug:        seed.slug,
 		Visibility:  navigation.Visibility(seed.visibility),
 		Owner:       navigation.PublishedOwner{Name: mustUsername(t, db, seed.userID)},
-		Settings:    navigation.PageSettings{Appearance: navigation.AppearanceSettings{ThemeID: "slate"}},
+		OGImage:     "/api/v1/assets/background/cover-test.jpg",
+		Settings: navigation.PageSettings{Appearance: navigation.AppearanceSettings{
+			ThemeID: "slate",
+			Background: navigation.BackgroundSettings{
+				Type:  "image",
+				Value: "/api/v1/assets/background/bg-test.jpg",
+			},
+		}},
 		PublishedAt: seed.now,
 		ETag:        "etag_" + seed.pageID,
 	}

@@ -51,11 +51,14 @@ type DirectorySite struct {
 }
 
 type DiscoverPage struct {
-	Slug        string    `json:"slug"`
-	Title       string    `json:"title"`
-	Description string    `json:"description"`
-	OwnerName   string    `json:"ownerName"`
-	ThemeID     string    `json:"themeId"`
+	Slug        string `json:"slug"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	OwnerName   string `json:"ownerName"`
+	ThemeID     string `json:"themeId"`
+	// CoverImage is the share/wallpaper still used as the discover card hero.
+	// Prefer dedicated OG image, then image background, then video poster.
+	CoverImage  string    `json:"coverImage,omitempty"`
 	Tags        []string  `json:"tags"`
 	Featured    bool      `json:"featured"`
 	ViewCount   int64     `json:"viewCount"`
@@ -215,6 +218,7 @@ func (s *Service) Discover(ctx context.Context, search, tag, sort string, page, 
 		}
 		item.Title, item.Description, item.OwnerName = published.Title, published.Description, published.Owner.Name
 		item.ThemeID = published.Settings.Appearance.ThemeID
+		item.CoverImage = discoverCoverImage(published)
 		if err := json.Unmarshal([]byte(tagsJSON), &item.Tags); err != nil {
 			return Page[DiscoverPage]{}, err
 		}
@@ -279,6 +283,23 @@ func (s *Service) DiscoverEnabled(ctx context.Context) (bool, error) {
 	var enabled bool
 	err := s.db.QueryRowContext(ctx, `SELECT discover_enabled FROM system_settings WHERE id = 1`).Scan(&enabled)
 	return enabled, err
+}
+
+// discoverCoverImage picks a still frame suitable for discover card heroes.
+func discoverCoverImage(page navigation.PublishedPage) string {
+	if img := strings.TrimSpace(page.OGImage); img != "" {
+		return img
+	}
+	bg := page.Settings.Appearance.Background
+	switch strings.ToLower(strings.TrimSpace(bg.Type)) {
+	case "image":
+		return strings.TrimSpace(bg.Value)
+	case "video":
+		if bg.Poster != nil {
+			return strings.TrimSpace(*bg.Poster)
+		}
+	}
+	return ""
 }
 
 func normalizePagination(page, pageSize int) (int, int) {

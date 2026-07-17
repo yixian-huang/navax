@@ -2040,6 +2040,9 @@ components:
         description: { type: string }
         ownerName: { type: string }
         themeId: { $ref: '#/components/schemas/ThemeId' }
+        coverImage:
+          type: string
+          description: Hero still for discover cards (OG image, background image, or video poster).
         tags: { type: array, items: { type: string } }
         featured: { type: boolean }
         viewCount: { type: integer, minimum: 0 }

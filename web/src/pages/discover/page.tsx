@@ -13,19 +13,41 @@ function formatCount(n: number): string {
 }
 
 function DiscoverCard({ page }: { page: DiscoveredPage }) {
+  const cover = (page.coverImage || '').trim();
   return (
     <Link
       to={`/u/${page.slug}`}
       className="group material-card overflow-hidden rounded-xl flex flex-col transition-all duration-300 hover:-translate-y-1 cursor-pointer"
     >
       <div className="relative w-full h-[180px] overflow-hidden bg-gradient-to-br from-primary-100 via-background-100 to-secondary-100">
-        <div className="absolute inset-0 flex flex-col items-center justify-center px-6 text-center transition-transform duration-500 group-hover:scale-105">
-          <div className="w-12 h-12 rounded-2xl bg-background-50/80 shadow-sm flex items-center justify-center mb-3 text-primary-500">
-            <i className="ri-compass-3-line text-2xl" />
+        {cover ? (
+          <>
+            <img
+              src={cover}
+              alt=""
+              loading="lazy"
+              referrerPolicy="no-referrer"
+              className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/15 to-black/5" />
+            <div className="absolute inset-x-0 bottom-0 p-4">
+              <span className="font-heading text-base font-semibold text-white line-clamp-1 drop-shadow-sm">
+                {page.title}
+              </span>
+              <span className="mt-0.5 block text-[10px] uppercase tracking-widest text-white/75">
+                {page.themeId}
+              </span>
+            </div>
+          </>
+        ) : (
+          <div className="absolute inset-0 flex flex-col items-center justify-center px-6 text-center transition-transform duration-500 group-hover:scale-105">
+            <div className="w-12 h-12 rounded-2xl bg-background-50/80 shadow-sm flex items-center justify-center mb-3 text-primary-500">
+              <i className="ri-compass-3-line text-2xl" />
+            </div>
+            <span className="font-heading text-base font-semibold text-foreground-800 line-clamp-1">{page.title}</span>
+            <span className="mt-1 text-[10px] uppercase tracking-widest text-foreground-400">{page.themeId}</span>
           </div>
-          <span className="font-heading text-base font-semibold text-foreground-800 line-clamp-1">{page.title}</span>
-          <span className="mt-1 text-[10px] uppercase tracking-widest text-foreground-400">{page.themeId}</span>
-        </div>
+        )}
         {page.featured ? (
           <div className="absolute top-3 right-3 px-2 py-1 rounded-full bg-background-50/90 text-[10px] font-medium text-accent-600">
             <i className="ri-star-fill mr-1" />精选

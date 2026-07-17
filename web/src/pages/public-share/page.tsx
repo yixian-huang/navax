@@ -171,9 +171,26 @@ export default function PublicSharePage() {
     );
   }
 
+  const bg = page.settings?.appearance.background;
+  const backgroundUrl =
+    (bg?.type === 'image' || bg?.type === 'video') && bg.value ? bg.value : undefined;
+  const backgroundMediaType = bg?.type === 'video' ? 'video' as const : 'image' as const;
+  const backgroundPoster = bg?.poster ?? undefined;
+  const wallpaperMode = Boolean(backgroundUrl);
+
   return (
-    <PublicShell showSearch={false} themeId={page.settings?.appearance.themeId}>
-      <div className="mx-auto max-w-4xl px-4 md:px-6 pt-10 md:pt-14 pb-16">
+    <PublicShell
+      showSearch={false}
+      themeId={page.settings?.appearance.themeId}
+      backgroundUrl={backgroundUrl}
+      backgroundOpacity={bg?.opacity ?? 1}
+      backgroundMediaType={backgroundMediaType}
+      backgroundPoster={backgroundPoster}
+    >
+      <div className={cn(
+        'mx-auto max-w-4xl px-4 md:px-6 pb-16',
+        wallpaperMode ? 'pt-10 md:pt-14' : 'pt-10 md:pt-14',
+      )}>
         {/* ---- Author Card ---- */}
         <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 mb-8">
           {/* Avatar */}
@@ -245,7 +262,7 @@ export default function PublicSharePage() {
 
           {/* Share + Copy */}
           <div className="flex items-center gap-2 flex-shrink-0">
-            <div className="flex items-center gap-1 bg-white rounded-lg border border-background-200/70 p-1">
+            <div className="flex items-center gap-1 bg-background-50/90 rounded-lg border border-background-200/70 p-1">
               <span className="hidden sm:block px-2 text-[11px] text-foreground-400 truncate max-w-[180px]">
                 {shareUrl.replace(/^https?:\/\//, '')}
               </span>
@@ -271,7 +288,7 @@ export default function PublicSharePage() {
 
         {/* ---- Search ---- */}
         <div className="relative mb-6">
-          <div className="flex items-center bg-white rounded-xl border border-background-200/70 focus-within:border-primary-300 transition-all duration-200">
+          <div className="flex items-center bg-background-50/90 rounded-xl border border-background-200/70 focus-within:border-primary-300 transition-all duration-200">
             <i className="ri-search-line absolute left-4 w-5 h-5 text-foreground-300" />
             <input
               type="text"

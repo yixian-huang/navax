@@ -109,36 +109,45 @@ export const slateTheme: ThemePackage = {
   background: oklch(var(--background-50));
 }
 
-/* 壁纸上：与列表行同款浅/深 wash，不再用高不透明白霜面板 */
-[data-theme="slate"][data-wallpaper] .material-card {
+/*
+ * 壁纸属性在 PublicShell 容器上，theme 在 <html> 上 —— 必须用后代选择器。
+ * 网格卡与 .site-card-list 行使用同一套 tone wash。
+ */
+[data-theme="slate"] [data-wallpaper] .material-card {
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
   box-shadow: none !important;
 }
-[data-theme="slate"][data-wallpaper][data-wallpaper-tone="light"] .material-card {
+[data-theme="slate"] [data-wallpaper][data-wallpaper-tone="light"] .material-card {
   background: oklch(1 0 0 / 0.2) !important;
   border-color: color-mix(in oklch, var(--wp-ink) 14%, transparent);
 }
-[data-theme="slate"][data-wallpaper][data-wallpaper-tone="dark"] .material-card {
+[data-theme="slate"] [data-wallpaper][data-wallpaper-tone="dark"] .material-card {
   background: oklch(0.12 0.02 260 / 0.34) !important;
   border-color: color-mix(in oklch, var(--wp-ink) 14%, transparent);
 }
-[data-theme="slate"][data-wallpaper][data-wallpaper-tone="light"] .material-card:hover {
+[data-theme="slate"] [data-wallpaper][data-wallpaper-tone="light"] .material-card:hover {
   background: oklch(1 0 0 / 0.3) !important;
 }
-[data-theme="slate"][data-wallpaper][data-wallpaper-tone="dark"] .material-card:hover {
+[data-theme="slate"] [data-wallpaper][data-wallpaper-tone="dark"] .material-card:hover {
   background: oklch(0.12 0.02 260 / 0.48) !important;
 }
-/* wash 面板上改用壁纸墨色，与列表行一致 */
-[data-theme="slate"][data-wallpaper] .wallpaper-ink-scope .material-card .site-card-title,
-[data-theme="slate"][data-wallpaper] .wallpaper-ink-scope .material-card .site-card-title * {
+/* wash 上用壁纸墨色，与列表行一致（覆盖全局 material-card 深色字规则） */
+[data-theme="slate"] [data-wallpaper] .material-card .site-card-title,
+[data-theme="slate"] [data-wallpaper] .material-card .site-card-title *,
+[data-theme="slate"] [data-wallpaper] .wallpaper-ink-scope .material-card .site-card-title,
+[data-theme="slate"] [data-wallpaper] .wallpaper-ink-scope .material-card .site-card-title * {
   color: var(--wp-ink) !important;
   text-shadow: var(--wp-shadow);
 }
-[data-theme="slate"][data-wallpaper] .wallpaper-ink-scope .material-card .site-card-domain,
-[data-theme="slate"][data-wallpaper] .wallpaper-ink-scope .material-card .site-card-domain *,
-[data-theme="slate"][data-wallpaper] .wallpaper-ink-scope .material-card .site-card-desc,
-[data-theme="slate"][data-wallpaper] .wallpaper-ink-scope .material-card .site-card-desc * {
+[data-theme="slate"] [data-wallpaper] .material-card .site-card-domain,
+[data-theme="slate"] [data-wallpaper] .material-card .site-card-domain *,
+[data-theme="slate"] [data-wallpaper] .material-card .site-card-desc,
+[data-theme="slate"] [data-wallpaper] .material-card .site-card-desc *,
+[data-theme="slate"] [data-wallpaper] .wallpaper-ink-scope .material-card .site-card-domain,
+[data-theme="slate"] [data-wallpaper] .wallpaper-ink-scope .material-card .site-card-domain *,
+[data-theme="slate"] [data-wallpaper] .wallpaper-ink-scope .material-card .site-card-desc,
+[data-theme="slate"] [data-wallpaper] .wallpaper-ink-scope .material-card .site-card-desc * {
   color: var(--wp-ink-muted) !important;
   text-shadow: var(--wp-shadow);
 }
