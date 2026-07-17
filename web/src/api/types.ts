@@ -128,9 +128,11 @@ export interface PageSettings {
   appearance: {
     themeId: string;
     background: {
-      type: 'none' | 'color' | 'gradient' | 'image';
+      type: 'none' | 'color' | 'gradient' | 'image' | 'video';
       value: string;
       opacity: number;
+      mediaId?: string | null;
+      poster?: string | null;
     };
   };
   search: {
@@ -274,6 +276,27 @@ export interface Theme {
 }
 
 export type AssetKind = 'avatar' | 'background' | 'site-icon';
+
+export type BackgroundMediaScope = 'instance' | 'user';
+export type BackgroundMediaKind = 'image' | 'video';
+
+export interface BackgroundMedia {
+  id: string;
+  scope: BackgroundMediaScope;
+  ownerUserId?: string | null;
+  assetId: string;
+  mediaKind: BackgroundMediaKind;
+  mimeType: string;
+  url: string;
+  posterUrl?: string | null;
+  width: number;
+  height: number;
+  durationMs?: number | null;
+  sizeBytes: number;
+  sortOrder: number;
+  enabled: boolean;
+  createdAt: string;
+}
 
 export interface Asset {
   id: string;

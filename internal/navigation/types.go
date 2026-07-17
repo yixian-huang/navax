@@ -73,6 +73,10 @@ type BackgroundSettings struct {
 	Type    string  `json:"type"`
 	Value   string  `json:"value"`
 	Opacity float64 `json:"opacity"`
+	// MediaID links to background_media library entry (optional).
+	MediaID *string `json:"mediaId,omitempty"`
+	// Poster is a still frame URL for video backgrounds.
+	Poster *string `json:"poster,omitempty"`
 }
 
 type SearchSettings struct {

@@ -101,14 +101,14 @@ export default function AdminSettingsPage() {
 
         <Section title="平台主题库">
           <p className="text-xs text-foreground-500 leading-relaxed">
-            启用/停用内置主题、设置新建导航的默认主题。这与工作台里用户为自己的导航选外观不同。
+            启用/停用内置主题、设置默认主题，并管理「站长精选」背景库。也可从左侧侧栏进入。
           </p>
           <Link
             to="/admin/themes"
             className="inline-flex items-center gap-2 h-9 px-3 rounded-lg border border-background-200 text-sm text-foreground-700 hover:bg-background-100 transition-colors"
           >
             <Palette className="w-4 h-4 text-primary-600" />
-            管理主题库
+            打开平台主题库
           </Link>
         </Section>
       </div>

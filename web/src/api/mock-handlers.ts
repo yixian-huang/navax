@@ -31,7 +31,7 @@ import {
 import { mockAnalyticsResponse, getDailyStatsForDays, getTopSitesForLimit } from '@/mocks/analytics';
 import { mockDiscoveredPages } from '@/mocks/discover';
 import type { MockPageState, MockPublishedPage } from '@/mocks/data';
-import type { AuthSession, CreateCategoryRequest, UpdateSiteRequest, ReorderRequest, Category, Site, CreateSiteRequest, User } from '@/api/types';
+import type { AuthSession, CreateCategoryRequest, UpdateSiteRequest, ReorderRequest, Category, Site, CreateSiteRequest, User, BackgroundMedia } from '@/api/types';
 
 type MockAuthenticatedSession = AuthSession & { authenticated: true; user: User };
 
@@ -361,6 +361,102 @@ handlers.push(async (url, init) => {
       },
       meta: { message: '', detail: '' },
     }, 201);
+  }
+  return null;
+});
+
+// ---- Background media library ----
+let mockBgSeq = 0;
+const mockPresetBackgrounds: BackgroundMedia[] = [];
+const mockUserBackgrounds: BackgroundMedia[] = [];
+
+async function mockBackgroundFromUpload(body: unknown, scope: 'instance' | 'user'): Promise<BackgroundMedia> {
+  mockBgSeq += 1;
+  let url = 'data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20width=%22320%22%20height=%22180%22%3E%3Crect%20width=%22100%25%22%20height=%22100%25%22%20fill=%22%233b82f6%22/%3E%3C/svg%3E';
+  let mimeType = 'image/jpeg';
+  let size = 1024;
+  let mediaKind: BackgroundMedia['mediaKind'] = 'image';
+  let posterUrl: string | null = null;
+  if (typeof FormData !== 'undefined' && body instanceof FormData) {
+    const file = body.get('file');
+    if (file instanceof Blob) {
+      size = file.size;
+      mimeType = file.type || 'application/octet-stream';
+      if (mimeType.startsWith('video/')) {
+        mediaKind = 'video';
+        posterUrl = 'data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20width=%22320%22%20height=%22180%22%3E%3Crect%20width=%22100%25%22%20height=%22100%25%22%20fill=%22%231e293b%22/%3E%3Ctext%20x=%2250%25%22%20y=%2250%25%22%20fill=%22white%22%20font-size=%2220%22%20text-anchor=%22middle%22%20dominant-baseline=%22middle%22%3EVIDEO%3C/text%3E%3C/svg%3E';
+        url = posterUrl;
+      } else {
+        url = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result || ''));
+          reader.onerror = () => reject(reader.error ?? new Error('read upload failed'));
+          reader.readAsDataURL(file);
+        });
+      }
+    }
+  }
+  const owner = scope === 'user' ? (getCurrentUser()?.user.id ?? 'usr_mock') : null;
+  return {
+    id: `bgm_mock_${mockBgSeq}`,
+    scope,
+    ownerUserId: owner,
+    assetId: `ast_bg_${mockBgSeq}`,
+    mediaKind,
+    mimeType,
+    url,
+    posterUrl,
+    width: 1920,
+    height: 1080,
+    durationMs: mediaKind === 'video' ? 8000 : null,
+    sizeBytes: size,
+    sortOrder: scope === 'instance' ? mockPresetBackgrounds.length : 0,
+    enabled: true,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+handlers.push(async (url, init) => {
+  const method = init?.method || 'GET';
+  if (url.startsWith(`${API_BASE}/backgrounds/presets`)) {
+    const idMatch = url.match(/\/backgrounds\/presets\/([^/?]+)$/);
+    if (idMatch && method === 'DELETE') {
+      const id = decodeURIComponent(idMatch[1]);
+      const idx = mockPresetBackgrounds.findIndex(item => item.id === id);
+      if (idx >= 0) mockPresetBackgrounds.splice(idx, 1);
+      return jsonResponse({ code: 'OK', data: { deleted: true }, meta: { message: '', detail: '' } });
+    }
+    if (url === `${API_BASE}/backgrounds/presets` || url.startsWith(`${API_BASE}/backgrounds/presets?`)) {
+      if (method === 'POST') {
+        if (mockPresetBackgrounds.length >= 12) {
+          return jsonResponse({ code: 'VALIDATION_FAILED', message: 'instance presets limited to 12', meta: { message: '', detail: '' } }, 422);
+        }
+        const media = await mockBackgroundFromUpload(init?.body, 'instance');
+        mockPresetBackgrounds.push(media);
+        return jsonResponse({ code: 'OK', data: media, meta: { message: '', detail: '' } }, 201);
+      }
+      return jsonResponse({ code: 'OK', data: [...mockPresetBackgrounds], meta: { message: '', detail: '' } });
+    }
+  }
+  if (url.startsWith(`${API_BASE}/backgrounds/mine`)) {
+    const idMatch = url.match(/\/backgrounds\/mine\/([^/?]+)$/);
+    if (idMatch && method === 'DELETE') {
+      const id = decodeURIComponent(idMatch[1]);
+      const idx = mockUserBackgrounds.findIndex(item => item.id === id);
+      if (idx >= 0) mockUserBackgrounds.splice(idx, 1);
+      return jsonResponse({ code: 'OK', data: { deleted: true }, meta: { message: '', detail: '' } });
+    }
+    if (url === `${API_BASE}/backgrounds/mine` || url.startsWith(`${API_BASE}/backgrounds/mine?`)) {
+      if (method === 'POST') {
+        if (mockUserBackgrounds.length >= 3) {
+          return jsonResponse({ code: 'VALIDATION_FAILED', message: 'user library limited to 3', meta: { message: '', detail: '' } }, 422);
+        }
+        const media = await mockBackgroundFromUpload(init?.body, 'user');
+        mockUserBackgrounds.unshift(media);
+        return jsonResponse({ code: 'OK', data: media, meta: { message: '', detail: '' } }, 201);
+      }
+      return jsonResponse({ code: 'OK', data: [...mockUserBackgrounds], meta: { message: '', detail: '' } });
+    }
   }
   return null;
 });

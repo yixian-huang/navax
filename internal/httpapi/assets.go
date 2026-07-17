@@ -108,7 +108,13 @@ func (h *AssetHandler) read(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("ETag", `"`+asset.SHA256+`"`)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Cross-Origin-Resource-Policy", "same-site")
-	w.Header().Set("Content-Security-Policy", "default-src 'none'; sandbox")
+	// Allow video playback elements; still sandbox scripts.
+	if strings.HasPrefix(asset.MIMEType, "video/") {
+		w.Header().Set("Content-Security-Policy", "default-src 'none'; media-src 'self'; sandbox")
+		w.Header().Set("Accept-Ranges", "bytes")
+	} else {
+		w.Header().Set("Content-Security-Policy", "default-src 'none'; sandbox")
+	}
 	http.ServeContent(w, r, objectKey, asset.CreatedAt, body)
 }
 

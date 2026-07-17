@@ -30,7 +30,8 @@ RUN --mount=type=cache,target=/go/pkg/mod \
       -o /out/navax ./cmd/navax
 
 FROM alpine:3.22 AS runtime
-RUN apk add --no-cache ca-certificates tzdata \
+# ffmpeg: video background compress + poster frame (background media library)
+RUN apk add --no-cache ca-certificates tzdata ffmpeg \
     && addgroup -S -g 10001 navax \
     && adduser -S -D -H -u 10001 -G navax navax \
     && mkdir -p /data \

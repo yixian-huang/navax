@@ -1,7 +1,16 @@
 # 设计：导航页背景媒体库
 
-状态：草案（产品 + 技术）  
-相关：主题设置 `appearance.background`、资产上传 `internal/assets`、发布快照
+状态：已确认决策，进入实现  
+相关：主题设置 `appearance.background`、资产上传 `internal/assets`、发布快照  
+
+### 已锁定决策（2026-07-17）
+
+| 项 | 决定 |
+|----|------|
+| 预设上限 N | **12** |
+| 视频 | **纳入 P0**（需 ffmpeg） |
+| 删除被引用媒体 | **自动清空**引用方 `appearance.background` |
+| ffmpeg | **允许安装**（部署/本地开发依赖） |
 
 ## 1. 目标
 
@@ -28,9 +37,9 @@
 | 管理员 | 上传/排序/启用禁用/删除预设 | 同上 + 可管理他人策略（可选二期） | 主站（system）草稿 |
 
 **选用规则**：  
-- 选用预设：草稿 `background.value` 存**预设媒体的公开 URL**（或稳定 id，见 §5）。  
-- 选用自有：存用户资产 URL。  
-- 删除：若当前页草稿/已发布仍引用该媒体，删除时 **拒绝** 或 **自动回退** 为 `type:none`（推荐：删除时若引用则要求先换掉，避免线上断图）。
+- 选用预设：草稿 `background` 存 `type`/`value`(URL)/`mediaId`/`poster`(视频)/`opacity`。  
+- 选用自有：同上。  
+- **删除自动清空**（已锁定）：删除媒体时扫描草稿 `settings_json`，凡 `value` 或 `mediaId` 命中则将 `appearance.background` 重置为 `type:none`（已发布快照不回溯改写，需重新发布才会从公开页消失）。
 
 ## 4. 用户流程
 

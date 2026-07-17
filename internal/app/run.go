@@ -19,6 +19,7 @@ import (
 	"github.com/yixian-huang/navax/internal/analytics"
 	"github.com/yixian-huang/navax/internal/assets"
 	"github.com/yixian-huang/navax/internal/auth"
+	"github.com/yixian-huang/navax/internal/backgrounds"
 	"github.com/yixian-huang/navax/internal/catalog"
 	"github.com/yixian-huang/navax/internal/config"
 	"github.com/yixian-huang/navax/internal/database"
@@ -153,6 +154,11 @@ func Run(ctx context.Context, cfg config.Config, build BuildInfo) error {
 		}, nil
 	})
 	assetHandler := httpapi.NewAssetHandler(assetService)
+	backgroundService, err := backgrounds.NewService(db, assetService, cfg.DataDir)
+	if err != nil {
+		return fmt.Errorf("initialize background media: %w", err)
+	}
+	backgroundHandler := httpapi.NewBackgroundHandler(backgroundService)
 	subdomainService := subdomains.NewService(subdomains.NewSQLStore(db))
 	subdomainHandler := httpapi.NewSubdomainHandler(authService, subdomainService)
 	webHandler, err := webui.New(webui.Options{ResolveSEO: func(r *http.Request) (webui.SEO, error) {
@@ -225,6 +231,7 @@ func Run(ctx context.Context, cfg config.Config, build BuildInfo) error {
 				linkCheckHandler.MountProtected(protected)
 				analyticsHandler.MountProtected(protected)
 				assetHandler.MountProtected(protected)
+				backgroundHandler.MountProtected(protected)
 				subdomainHandler.MountUserRoutes(protected)
 				protected.Route("/admin", func(admin chi.Router) {
 					admin.Use(httpapi.RequireAdmin)
@@ -242,10 +249,11 @@ func Run(ctx context.Context, cfg config.Config, build BuildInfo) error {
 	server := &http.Server{
 		Addr: cfg.Addr, Handler: handler,
 		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       15 * time.Second,
-		WriteTimeout:      30 * time.Second,
-		IdleTimeout:       60 * time.Second,
-		MaxHeaderBytes:    1 << 20,
+		// Video background upload + ffmpeg may exceed short defaults.
+		ReadTimeout:    120 * time.Second,
+		WriteTimeout:   180 * time.Second,
+		IdleTimeout:    60 * time.Second,
+		MaxHeaderBytes: 1 << 20,
 	}
 
 	serverErrors := make(chan error, 1)

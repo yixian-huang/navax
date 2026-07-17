@@ -273,7 +273,7 @@ func ValidateSettings(settings PageSettings) error {
 	if settings.Layout.Columns < 1 || settings.Layout.Columns > 8 || !oneOf(settings.Layout.CategoryStyle, "tabs", "sidebar", "grid") {
 		return validation("layout", "columns or category style is invalid")
 	}
-	if strings.TrimSpace(settings.Appearance.ThemeID) == "" || !oneOf(settings.Appearance.Background.Type, "none", "color", "gradient", "image") || len(settings.Appearance.Background.Value) > 2048 || settings.Appearance.Background.Opacity < 0 || settings.Appearance.Background.Opacity > 1 {
+	if strings.TrimSpace(settings.Appearance.ThemeID) == "" || !oneOf(settings.Appearance.Background.Type, "none", "color", "gradient", "image", "video") || len(settings.Appearance.Background.Value) > 2048 || settings.Appearance.Background.Opacity < 0 || settings.Appearance.Background.Opacity > 1 {
 		return validation("appearance", "is invalid")
 	}
 	if !oneOf(settings.Search.DefaultEngine, "google", "bing", "duckduckgo", "baidu") {

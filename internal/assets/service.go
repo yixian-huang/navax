@@ -53,7 +53,7 @@ var (
 	ErrImageTooSmall = errors.New("image too small for background")
 )
 
-var objectKeyPattern = regexp.MustCompile(`^(avatar|background|site-icon)/[a-f0-9]{32}\.(png|jpg|gif|webp)$`)
+var objectKeyPattern = regexp.MustCompile(`^(avatar|background|site-icon)/[a-f0-9]{32}\.(png|jpg|gif|webp|mp4|webm)$`)
 
 // StorageResolver returns the active object storage backend for uploads.
 // Returning (nil, nil) means local filesystem. Errors fail the upload.
@@ -109,6 +109,120 @@ func NewService(db *sql.DB, root string) (*Service, error) {
 // SetStorageResolver wires optional S3 configuration (typically from integrations).
 func (s *Service) SetStorageResolver(resolve StorageResolver) {
 	s.resolve = resolve
+}
+
+// UploadPrepared stores a pre-validated file (e.g. re-encoded image or ffmpeg output)
+// without re-running image decode checks. extension must include the leading dot.
+func (s *Service) UploadPrepared(ctx context.Context, ownerID, kind, extension, mimeType string, source io.Reader, size int64) (Asset, error) {
+	if strings.TrimSpace(ownerID) == "" {
+		return Asset{}, ErrInvalidOwner
+	}
+	if !validKind(kind) {
+		return Asset{}, ErrInvalidKind
+	}
+	extension = strings.ToLower(extension)
+	if !strings.HasPrefix(extension, ".") {
+		extension = "." + extension
+	}
+	switch extension {
+	case ".png", ".jpg", ".gif", ".webp", ".mp4", ".webm":
+	default:
+		return Asset{}, ErrUnsupported
+	}
+	maximum, err := s.MaxUploadBytes(ctx)
+	if err != nil {
+		return Asset{}, err
+	}
+	// Video backgrounds may exceed default image limits; allow up to 40MiB prepared.
+	if size > maximum && size > 40<<20 {
+		return Asset{}, ErrTooLarge
+	}
+	if size <= 0 {
+		return Asset{}, ErrInvalidImage
+	}
+	temporary, err := os.CreateTemp(s.root, ".upload-*")
+	if err != nil {
+		return Asset{}, fmt.Errorf("create upload staging file: %w", err)
+	}
+	temporaryPath := temporary.Name()
+	committed := false
+	defer func() {
+		_ = temporary.Close()
+		if !committed {
+			_ = os.Remove(temporaryPath)
+		}
+	}()
+	_ = temporary.Chmod(0o600)
+	hasher := sha256.New()
+	written, err := io.Copy(io.MultiWriter(temporary, hasher), io.LimitReader(source, size+1))
+	if err != nil {
+		return Asset{}, err
+	}
+	if written != size {
+		return Asset{}, ErrInvalidImage
+	}
+	if err := temporary.Sync(); err != nil {
+		return Asset{}, err
+	}
+	randomName, err := randomHex(16)
+	if err != nil {
+		return Asset{}, err
+	}
+	objectKey := kind + "/" + randomName + extension
+	if _, err := temporary.Seek(0, io.SeekStart); err != nil {
+		return Asset{}, err
+	}
+	driver := "local"
+	publicURL := publicURLPrefix + objectKey
+	usedObjectStorage := false
+	if s.resolve != nil {
+		s3cfg, resolveErr := s.resolve(ctx)
+		if resolveErr == nil && s3cfg != nil {
+			if store, storeErr := newS3Store(*s3cfg); storeErr == nil {
+				if putErr := store.Put(ctx, objectKey, mimeType, temporary, written); putErr == nil {
+					driver = "s3"
+					publicURL = store.PublicURL(objectKey)
+					usedObjectStorage = true
+					_ = temporary.Close()
+					_ = os.Remove(temporaryPath)
+					temporaryPath = ""
+				}
+			}
+		}
+	}
+	if !usedObjectStorage {
+		finalPath, pathErr := s.pathForKey(objectKey)
+		if pathErr != nil {
+			return Asset{}, pathErr
+		}
+		if closeErr := temporary.Close(); closeErr != nil {
+			return Asset{}, closeErr
+		}
+		if renameErr := os.Rename(temporaryPath, finalPath); renameErr != nil {
+			return Asset{}, renameErr
+		}
+		temporaryPath = finalPath
+		_ = os.Chmod(finalPath, 0o600)
+	}
+	id, err := identity.New("ast")
+	if err != nil {
+		return Asset{}, err
+	}
+	now := s.now().UTC()
+	asset := Asset{
+		ID: id, OwnerID: ownerID, Kind: kind, ObjectKey: objectKey,
+		URL: publicURL, MIMEType: mimeType, Size: written, Driver: driver,
+		SHA256: hex.EncodeToString(hasher.Sum(nil)), CreatedAt: now,
+	}
+	_, err = s.db.ExecContext(ctx, `
+		INSERT INTO assets(id, owner_id, kind, storage_driver, object_key, url, mime_type, size_bytes, sha256, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, asset.ID, asset.OwnerID, asset.Kind, driver,
+		asset.ObjectKey, asset.URL, asset.MIMEType, asset.Size, asset.SHA256, dbTime(asset.CreatedAt))
+	if err != nil {
+		return Asset{}, err
+	}
+	committed = true
+	return asset, nil
 }
 
 func (s *Service) MaxUploadBytes(ctx context.Context) (int64, error) {

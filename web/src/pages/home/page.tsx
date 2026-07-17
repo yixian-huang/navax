@@ -127,7 +127,10 @@ export default function HomePage() {
   const greeting = getTimeGreeting();
 
   const bg = settings?.appearance.background;
-  const backgroundUrl = bg?.type === 'image' && bg.value ? bg.value : undefined;
+  const backgroundUrl =
+    (bg?.type === 'image' || bg?.type === 'video') && bg.value ? bg.value : undefined;
+  const backgroundMediaType = bg?.type === 'video' ? 'video' as const : 'image' as const;
+  const backgroundPoster = bg?.poster ?? undefined;
   const wallpaperMode = Boolean(backgroundUrl);
 
   const layoutProps = {
@@ -237,6 +240,8 @@ export default function HomePage() {
       themeId={settings?.appearance.themeId}
       backgroundUrl={backgroundUrl}
       backgroundOpacity={bg?.opacity ?? 1}
+      backgroundMediaType={backgroundMediaType}
+      backgroundPoster={backgroundPoster}
     >
       {renderLayout()}
       {/* Wallpaper already denser visually — skip the onboarding guide chrome */}

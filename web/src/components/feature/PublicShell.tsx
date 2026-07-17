@@ -19,13 +19,17 @@ interface PublicShellProps {
   children: React.ReactNode;
   showSearch?: boolean;
   themeId?: string;
-  /** Full-bleed background image URL (page settings appearance.background). */
+  /** Full-bleed background image or video URL (page settings appearance.background). */
   backgroundUrl?: string;
   /**
    * Image strength 0–1 (higher = more of the photo shows through).
    * Readability uses local glass surfaces on content, not a full-page wash.
    */
   backgroundOpacity?: number;
+  /** image (default) or video loop background. */
+  backgroundMediaType?: 'image' | 'video';
+  /** Poster frame for video backgrounds (tone sampling + first paint). */
+  backgroundPoster?: string;
 }
 
 export default function PublicShell({
@@ -34,11 +38,17 @@ export default function PublicShell({
   themeId = DEFAULT_THEME,
   backgroundUrl,
   backgroundOpacity = 1,
+  backgroundMediaType = 'image',
+  backgroundPoster,
 }: PublicShellProps) {
   const [scrolled, setScrolled] = useState(false);
   const hasBackground = Boolean(backgroundUrl);
   // Sample wallpaper + opacity → light|dark ink (low opacity ⇒ base shows ⇒ dark ink).
-  const wallpaperTone = useWallpaperTone(backgroundUrl, backgroundOpacity);
+  // Prefer poster for video so canvas sampling works without decoding video frames.
+  const wallpaperTone = useWallpaperTone(
+    backgroundMediaType === 'video' ? (backgroundPoster || backgroundUrl) : backgroundUrl,
+    backgroundOpacity,
+  );
 
   // 公开页主题来自服务端发布快照，不在浏览器持久化服务端状态。
   useEffect(() => {
@@ -88,17 +98,33 @@ export default function PublicShell({
     >
       {hasBackground && (
         <div className="fixed inset-0 z-0 pointer-events-none" aria-hidden>
-          <img
-            src={backgroundUrl}
-            alt=""
-            // CORS-friendly load so luminance sampling can read pixels when allowed.
-            crossOrigin="anonymous"
-            // External preset hosts often reject requests that include a site Referer.
-            referrerPolicy="no-referrer"
-            decoding="async"
-            className="absolute inset-0 w-full h-full object-cover"
-            style={{ opacity: imageAlpha }}
-          />
+          {backgroundMediaType === 'video' ? (
+            <video
+              src={backgroundUrl}
+              poster={backgroundPoster}
+              autoPlay
+              muted
+              loop
+              playsInline
+              // External hosts may reject Referer; keep consistent with images.
+              // @ts-expect-error referrerPolicy supported on modern video elements
+              referrerPolicy="no-referrer"
+              className="absolute inset-0 w-full h-full object-cover"
+              style={{ opacity: imageAlpha }}
+            />
+          ) : (
+            <img
+              src={backgroundUrl}
+              alt=""
+              // CORS-friendly load so luminance sampling can read pixels when allowed.
+              crossOrigin="anonymous"
+              // External preset hosts often reject requests that include a site Referer.
+              referrerPolicy="no-referrer"
+              decoding="async"
+              className="absolute inset-0 w-full h-full object-cover"
+              style={{ opacity: imageAlpha }}
+            />
+          )}
           {/* Soft vignette tuned by wallpaper tone for edge chrome */}
           <div className="absolute inset-0" style={{ background: vignette }} />
         </div>

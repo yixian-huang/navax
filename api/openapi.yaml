@@ -660,10 +660,10 @@ paths:
       security: []
       parameters:
         - { in: path, name: kind, required: true, schema: { type: string, enum: [avatar, background, site-icon] } }
-        - { in: path, name: object, required: true, schema: { type: string, pattern: '^[a-f0-9]{32}\.(png|jpg|gif)$' } }
+        - { in: path, name: object, required: true, schema: { type: string, pattern: '^[a-f0-9]{32}\.(png|jpg|gif|webp|mp4|webm)$' } }
       responses:
         '200':
-          description: 不可变图片资源
+          description: 不可变媒体资源（图片或短视频）
           headers:
             Cache-Control: { schema: { type: string } }
             ETag: { schema: { type: string } }
@@ -671,7 +671,142 @@ paths:
             image/png: { schema: { type: string, format: binary } }
             image/jpeg: { schema: { type: string, format: binary } }
             image/gif: { schema: { type: string, format: binary } }
+            image/webp: { schema: { type: string, format: binary } }
+            video/mp4: { schema: { type: string, format: binary } }
+            video/webm: { schema: { type: string, format: binary } }
         '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /api/v1/backgrounds/presets:
+    get:
+      tags: [Data]
+      operationId: listBackgroundPresets
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - in: query
+          name: all
+          schema: { type: string, enum: ['1'] }
+          description: 管理员传 1 时包含已下架预设
+      responses:
+        '200':
+          description: 站长预设背景列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/SuccessEnvelope' }
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/BackgroundMedia' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+    post:
+      tags: [Data]
+      operationId: uploadBackgroundPreset
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        '201':
+          description: 预设背景已创建
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/SuccessEnvelope' }
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/BackgroundMedia' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '422': { $ref: '#/components/responses/ErrorResponse' }
+
+  /api/v1/backgrounds/presets/{id}:
+    delete:
+      tags: [Data]
+      operationId: deleteBackgroundPreset
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: 已删除
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuccessEnvelope' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /api/v1/backgrounds/mine:
+    get:
+      tags: [Data]
+      operationId: listMyBackgrounds
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: 当前用户背景库（最多 3 条）
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/SuccessEnvelope' }
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/BackgroundMedia' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+    post:
+      tags: [Data]
+      operationId: uploadMyBackground
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        '201':
+          description: 用户背景已创建
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/SuccessEnvelope' }
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/BackgroundMedia' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '422': { $ref: '#/components/responses/ErrorResponse' }
+
+  /api/v1/backgrounds/mine/{id}:
+    delete:
+      tags: [Data]
+      operationId: deleteMyBackground
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: 已删除
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuccessEnvelope' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
   /api/v1/me/subdomain:
     get:
       tags: [Pages]
@@ -1707,9 +1842,11 @@ components:
               type: object
               required: [type, value, opacity]
               properties:
-                type: { type: string, enum: [none, color, gradient, image] }
+                type: { type: string, enum: [none, color, gradient, image, video] }
                 value: { type: string, maxLength: 2048 }
                 opacity: { type: number, minimum: 0, maximum: 1 }
+                mediaId: { type: [string, 'null'], maxLength: 64 }
+                poster: { type: [string, 'null'], maxLength: 2048 }
         search:
           type: object
           required: [defaultEngine, showEngineSelector]
@@ -2006,6 +2143,25 @@ components:
         url: { type: string, format: uri-reference }
         mimeType: { type: string }
         size: { type: integer, minimum: 1 }
+        createdAt: { $ref: '#/components/schemas/Timestamp' }
+    BackgroundMedia:
+      type: object
+      required: [id, scope, assetId, mediaKind, mimeType, url, width, height, sizeBytes, sortOrder, enabled, createdAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        scope: { type: string, enum: [instance, user] }
+        ownerUserId: { type: [string, 'null'] }
+        assetId: { $ref: '#/components/schemas/Id' }
+        mediaKind: { type: string, enum: [image, video] }
+        mimeType: { type: string }
+        url: { type: string, format: uri-reference }
+        posterUrl: { type: [string, 'null'], format: uri-reference }
+        width: { type: integer, minimum: 0 }
+        height: { type: integer, minimum: 0 }
+        durationMs: { type: [integer, 'null'], minimum: 0 }
+        sizeBytes: { type: integer, minimum: 1 }
+        sortOrder: { type: integer }
+        enabled: { type: boolean }
         createdAt: { $ref: '#/components/schemas/Timestamp' }
     SubdomainStatus: { type: string, enum: [pending, approved, rejected, revoked] }
     Subdomain:
