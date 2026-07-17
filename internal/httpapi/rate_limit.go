@@ -45,6 +45,7 @@ func AbuseProtection() func(http.Handler) http.Handler {
 		}, 5, 15 * time.Minute},
 		{http.MethodPost, exactPath("/api/v1/public/events"), 120, time.Minute},
 		{http.MethodPost, func(path string) bool { return strings.HasSuffix(path, "/link-checks") }, 10, time.Minute},
+		{http.MethodPost, exactPath("/api/v1/link-preview"), 60, time.Minute},
 		{http.MethodPost, exactPath("/api/v1/assets"), 30, time.Minute},
 	}
 	return func(next http.Handler) http.Handler {

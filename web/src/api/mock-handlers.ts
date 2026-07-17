@@ -365,6 +365,31 @@ handlers.push(async (url, init) => {
   return null;
 });
 
+// ---- Link preview ----
+handlers.push(async (url, init) => {
+  if (url === `${API_BASE}/link-preview` && (init?.method || 'GET') === 'POST') {
+    let raw = '';
+    try {
+      const body = typeof init?.body === 'string' ? JSON.parse(init.body) : {};
+      raw = String(body.url || '');
+    } catch { /* ignore */ }
+    const domain = raw.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0] || 'example.com';
+    const name = domain.split('.')[0];
+    const title = name ? name.charAt(0).toUpperCase() + name.slice(1) : domain;
+    return jsonResponse({
+      code: 'OK',
+      data: {
+        url: raw.startsWith('http') ? raw : `https://${raw}`,
+        title,
+        description: '',
+        faviconUrl: `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`,
+      },
+      meta: { message: '', detail: '' },
+    });
+  }
+  return null;
+});
+
 // ---- Background media library ----
 let mockBgSeq = 0;
 const mockPresetBackgrounds: BackgroundMedia[] = [];

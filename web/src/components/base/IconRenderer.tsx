@@ -33,23 +33,41 @@ interface IconRendererProps {
   containerClassName?: string;
   /** img-only: alt text */
   alt?: string;
+  /** Pixel size for fixed square icons (img + emoji/remix font size). */
   size?: number;
 }
 
 export default function IconRenderer({ icon, className, containerClassName, alt, size }: IconRendererProps) {
   const type = detectIconType(icon);
   const defaultContainer = containerClassName || '';
+  // Prefer explicit size so remote favicons never blow out layout.
+  const boxStyle = size
+    ? { width: size, height: size, minWidth: size, minHeight: size }
+    : undefined;
 
   switch (type) {
     case 'image':
       return (
-        <div className={cn('overflow-hidden rounded-md flex-shrink-0', defaultContainer)}>
+        <div
+          className={cn(
+            'overflow-hidden rounded-md flex-shrink-0 inline-flex items-center justify-center',
+            // Without size prop, containerClassName must supply w/h; default to 1rem box.
+            !size && !defaultContainer && 'w-4 h-4',
+            defaultContainer,
+          )}
+          style={boxStyle}
+        >
           <img
             src={icon.trim()}
             alt={alt || 'icon'}
-            className={cn('w-full h-full object-cover', className)}
+            width={size || 16}
+            height={size || 16}
+            decoding="async"
+            className={cn(
+              'block max-w-full max-h-full w-full h-full object-contain',
+              className,
+            )}
             onError={(e) => {
-              // Fallback to a generic icon on load failure
               const target = e.currentTarget;
               target.style.display = 'none';
               const fallback = target.parentElement?.querySelector('.icon-fallback');
@@ -64,8 +82,16 @@ export default function IconRenderer({ icon, className, containerClassName, alt,
 
     case 'emoji':
       return (
-        <span className={cn('inline-flex items-center justify-center flex-shrink-0', defaultContainer)}>
-          <span className={cn('leading-none', className)} style={size ? { fontSize: size } : undefined} role="img" aria-label={alt || 'icon'}>
+        <span
+          className={cn('inline-flex items-center justify-center flex-shrink-0', defaultContainer)}
+          style={boxStyle}
+        >
+          <span
+            className={cn('leading-none', className)}
+            style={size ? { fontSize: size } : undefined}
+            role="img"
+            aria-label={alt || 'icon'}
+          >
             {icon.trim()}
           </span>
         </span>
@@ -75,8 +101,14 @@ export default function IconRenderer({ icon, className, containerClassName, alt,
     case 'fallback':
     default:
       return (
-        <span className={cn('inline-flex items-center justify-center flex-shrink-0', defaultContainer)}>
-          <i className={cn(icon.trim() || 'ri-link', className)} style={size ? { fontSize: size } : undefined} />
+        <span
+          className={cn('inline-flex items-center justify-center flex-shrink-0', defaultContainer)}
+          style={boxStyle}
+        >
+          <i
+            className={cn(icon.trim() || 'ri-link', className)}
+            style={size ? { fontSize: size } : undefined}
+          />
         </span>
       );
   }

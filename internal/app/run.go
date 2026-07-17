@@ -29,6 +29,7 @@ import (
 	"github.com/yixian-huang/navax/internal/idempotency"
 	"github.com/yixian-huang/navax/internal/integrations"
 	"github.com/yixian-huang/navax/internal/linkcheck"
+	"github.com/yixian-huang/navax/internal/linkpreview"
 	"github.com/yixian-huang/navax/internal/maintenance"
 	"github.com/yixian-huang/navax/internal/navigation"
 	"github.com/yixian-huang/navax/internal/security"
@@ -125,6 +126,7 @@ func Run(ctx context.Context, cfg config.Config, build BuildInfo) error {
 	})
 	dataExchangeHandler := httpapi.NewDataExchangeHandler(dataexchange.NewService(db))
 	linkCheckHandler := httpapi.NewLinkCheckHandler(linkcheck.NewService(db))
+	linkPreviewHandler := httpapi.NewLinkPreviewHandler(linkpreview.NewService())
 	directoryAdminHandler := httpapi.NewDirectoryAdminHandler(authService, directoryadmin.NewService(directoryadmin.NewSQLStore(db)))
 	catalogHandler := httpapi.NewCatalogHandler(catalog.NewService(db))
 	analyticsKey, err := security.LoadOrCreateKey(filepath.Join(cfg.DataDir, "analytics.key"), 32)
@@ -229,6 +231,7 @@ func Run(ctx context.Context, cfg config.Config, build BuildInfo) error {
 				navigationHandler.MountProtected(protected)
 				dataExchangeHandler.MountProtected(protected)
 				linkCheckHandler.MountProtected(protected)
+				linkPreviewHandler.MountProtected(protected)
 				analyticsHandler.MountProtected(protected)
 				assetHandler.MountProtected(protected)
 				backgroundHandler.MountProtected(protected)

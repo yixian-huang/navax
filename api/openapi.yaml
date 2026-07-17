@@ -633,6 +633,46 @@ paths:
         '200': { $ref: '#/components/responses/LinkCheckResponse' }
         '401': { $ref: '#/components/responses/ErrorResponse' }
         '429': { $ref: '#/components/responses/ErrorResponse' }
+  /api/v1/link-preview:
+    post:
+      tags: [Data]
+      operationId: previewLink
+      security: [{ sessionCookie: [] }]
+      summary: 预览链接元数据（标题 / 简介 / favicon）
+      description: |
+        服务端 SSRF 安全抓取公开页面的 title、description 与图标。
+        失败时可能返回域名推导的降级结果；私网/元数据地址拒绝。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url]
+              properties:
+                url: { type: string, minLength: 1, maxLength: 2048 }
+      responses:
+        '200':
+          description: 链接预览
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/SuccessEnvelope' }
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [url, title, description, faviconUrl]
+                        properties:
+                          url: { type: string }
+                          title: { type: string }
+                          description: { type: string }
+                          faviconUrl: { type: string }
+                          siteName: { type: [string, 'null'] }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '422': { $ref: '#/components/responses/ErrorResponse' }
+        '429': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/assets:
     post:
       tags: [Data]

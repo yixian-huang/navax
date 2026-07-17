@@ -9,6 +9,7 @@ import type { PlatformSite, Category } from '@/api/types';
 import IconRenderer from '@/components/base/IconRenderer';
 import { FormField, FormInput, FormSelect, FormTextarea, SearchInput } from '@/components/base/FormField';
 import { isPlausibleUrl, normalizeUrl, recognizeLink } from '@/lib/linkUtils';
+import { linkPreviewApi } from '@/api/linkPreview';
 import { usePlatformDirectory } from '@/hooks/useQueries';
 
 // ---- Add Category Dialog ----
@@ -152,6 +153,7 @@ export function AddSiteDialog({ open, onClose, categories, defaultCategoryId, on
 
   useEffect(() => {
     if (urlTimerRef.current) clearTimeout(urlTimerRef.current);
+    let cancelled = false;
 
     if (!url.trim() || !isPlausibleUrl(url)) {
       setRecognizing(false);
@@ -163,18 +165,36 @@ export function AddSiteDialog({ open, onClose, categories, defaultCategoryId, on
     }
 
     setRecognizing(true);
+    // Instant client-side guess, then upgrade from server preview.
+    const local = recognizeLink(normalizeUrl(url));
+    if (local) {
+      if (!titleTouchedRef.current) setTitle(local.title);
+      if (!descriptionTouchedRef.current) setDescription(local.description);
+      if (!iconTouchedRef.current) setIcon(local.icon);
+      setRecognizedFavicon(local.faviconUrl);
+    }
+
     urlTimerRef.current = setTimeout(() => {
-      const info = recognizeLink(normalizeUrl(url));
-      if (info) {
-        if (!titleTouchedRef.current) setTitle(info.title);
-        if (!descriptionTouchedRef.current) setDescription(info.description);
-        if (!iconTouchedRef.current) setIcon(info.icon);
-        setRecognizedFavicon(info.faviconUrl);
-      }
-      setRecognizing(false);
-    }, 350);
+      void linkPreviewApi
+        .preview(normalizeUrl(url))
+        .then(response => {
+          if (cancelled) return;
+          const data = response.data;
+          if (!titleTouchedRef.current && data.title) setTitle(data.title);
+          if (!descriptionTouchedRef.current) setDescription(data.description || '');
+          if (!iconTouchedRef.current && data.faviconUrl) setIcon(data.faviconUrl);
+          if (data.faviconUrl) setRecognizedFavicon(data.faviconUrl);
+        })
+        .catch(() => {
+          // Keep client-side recognition; silent on network / SSRF / rate-limit.
+        })
+        .finally(() => {
+          if (!cancelled) setRecognizing(false);
+        });
+    }, 400);
 
     return () => {
+      cancelled = true;
       if (urlTimerRef.current) clearTimeout(urlTimerRef.current);
     };
   }, [url]);
@@ -304,7 +324,9 @@ export function AddSiteDialog({ open, onClose, categories, defaultCategoryId, on
                   <img
                     src={recognizedFavicon}
                     alt=""
-                    className="w-4 h-4 absolute right-2.5 top-1/2 -translate-y-1/2 rounded-sm"
+                    width={16}
+                    height={16}
+                    className="w-4 h-4 absolute right-2.5 top-1/2 -translate-y-1/2 rounded-sm object-contain"
                     onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
                   />
                 )}
@@ -316,7 +338,7 @@ export function AddSiteDialog({ open, onClose, categories, defaultCategoryId, on
               <div className="flex items-center gap-2.5 rounded-lg border border-background-200/70 bg-background-50 px-3 py-2">
                 <div className="w-8 h-8 rounded-md bg-background-100 flex items-center justify-center flex-shrink-0 overflow-hidden">
                   {(icon || recognizedFavicon) ? (
-                    <IconRenderer icon={icon || recognizedFavicon} containerClassName="w-5 h-5" className="text-sm" alt="" />
+                    <IconRenderer icon={icon || recognizedFavicon} size={20} alt="" />
                   ) : (
                     <Link2 className="w-4 h-4 text-foreground-300" />
                   )}
@@ -325,7 +347,12 @@ export function AddSiteDialog({ open, onClose, categories, defaultCategoryId, on
                   <div className="text-sm font-medium text-foreground-900 truncate">{previewTitle}</div>
                   <div className="text-[11px] text-foreground-400 truncate">{normalizeUrl(url)}</div>
                 </div>
-                {!recognizing && (
+                {recognizing ? (
+                  <span className="text-[10px] text-foreground-400 inline-flex items-center gap-0.5 flex-shrink-0">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    抓取中
+                  </span>
+                ) : (
                   <span className="text-[10px] text-accent-600 inline-flex items-center gap-0.5 flex-shrink-0">
                     <Sparkles className="w-3 h-3" />
                     已识别
@@ -381,7 +408,7 @@ export function AddSiteDialog({ open, onClose, categories, defaultCategoryId, on
                   <FormField label="图标">
                     <div className="flex items-center gap-2">
                       <div className="w-9 h-9 rounded-md bg-background-100 flex items-center justify-center flex-shrink-0 overflow-hidden">
-                        <IconRenderer icon={icon || recognizedFavicon || 'ri-link'} containerClassName="w-5 h-5" className="text-sm" />
+                        <IconRenderer icon={icon || recognizedFavicon || 'ri-link'} size={20} />
                       </div>
                       <FormInput
                         type="text"
