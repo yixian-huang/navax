@@ -190,7 +190,16 @@ export default function LinksPage() {
         icon: data.icon,
         description: data.description,
       },
-      { onSuccess: () => markSaved(), onError: () => markError('添加站点失败') },
+      {
+        onSuccess: () => {
+          markSaved();
+          toast('success', draftSaveToastMessage(page?.publication, `已添加「${data.title}」`));
+        },
+        onError: (cause) => {
+          markError('添加站点失败');
+          toast('error', cause instanceof Error ? cause.message : '添加站点失败');
+        },
+      },
     );
   };
 

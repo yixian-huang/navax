@@ -2,13 +2,13 @@
 // nav.ax AddCategoryDialog & AddSiteDialog
 // ============================================================
 
-import { useDeferredValue, useState, useEffect, useRef } from 'react';
-import { X, Plus, Sparkles, Loader2 } from 'lucide-react';
+import { useDeferredValue, useState, useEffect, useRef, useMemo } from 'react';
+import { X, Plus, Sparkles, Loader2, ChevronDown, Link2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { PlatformSite, Category } from '@/api/types';
 import IconRenderer from '@/components/base/IconRenderer';
 import { FormField, FormInput, FormSelect, FormTextarea, SearchInput } from '@/components/base/FormField';
-import { recognizeLink } from '@/lib/linkUtils';
+import { isPlausibleUrl, normalizeUrl, recognizeLink } from '@/lib/linkUtils';
 import { usePlatformDirectory } from '@/hooks/useQueries';
 
 // ---- Add Category Dialog ----
@@ -104,7 +104,7 @@ export function AddCategoryDialog({ open, onClose, onConfirm }: AddCategoryDialo
   );
 }
 
-// ---- Add Site Dialog ----
+// ---- Add Site Dialog (URL-first) ----
 interface AddSiteDialogProps {
   open: boolean;
   onClose: () => void;
@@ -113,82 +113,129 @@ interface AddSiteDialogProps {
   onConfirm: (data: { title: string; url: string; icon: string; description: string; categoryId: string }) => void;
 }
 
+function pickDefaultCategoryId(categories: Category[], preferred?: string): string {
+  if (preferred && categories.some(c => c.id === preferred)) return preferred;
+  const uncategorized = categories.find(c => c.name === '未分类');
+  if (uncategorized) return uncategorized.id;
+  return categories[0]?.id || '';
+}
+
 export function AddSiteDialog({ open, onClose, categories, defaultCategoryId, onConfirm }: AddSiteDialogProps) {
   const [title, setTitle] = useState('');
   const [url, setUrl] = useState('');
-  const [icon, setIcon] = useState('ri-link');
+  const [icon, setIcon] = useState('');
   const [description, setDescription] = useState('');
-  const [categoryId, setCategoryId] = useState(defaultCategoryId || categories[0]?.id || '');
-  const [tab, setTab] = useState<'manual' | 'directory'>('manual');
+  const [categoryId, setCategoryId] = useState(() => pickDefaultCategoryId(categories, defaultCategoryId));
+  const [tab, setTab] = useState<'quick' | 'directory'>('quick');
   const [search, setSearch] = useState('');
   const deferredSearch = useDeferredValue(search.trim());
   const [recognizing, setRecognizing] = useState(false);
   const [recognizedFavicon, setRecognizedFavicon] = useState('');
+  const [showMore, setShowMore] = useState(false);
   const urlTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const manualEditRef = useRef(false);
+  const titleTouchedRef = useRef(false);
+  const descriptionTouchedRef = useRef(false);
+  const iconTouchedRef = useRef(false);
+  const urlInputRef = useRef<HTMLInputElement>(null);
   const directoryQuery = usePlatformDirectory(
     { search: deferredSearch || undefined, page: 1, pageSize: 50 },
     open && tab === 'directory',
   );
 
+  // Sync category when dialog opens / categories load.
   useEffect(() => {
-    if (manualEditRef.current) return;
+    if (!open) return;
+    setCategoryId(pickDefaultCategoryId(categories, defaultCategoryId));
+    // Focus URL on open
+    requestAnimationFrame(() => urlInputRef.current?.focus());
+  }, [open, categories, defaultCategoryId]);
+
+  useEffect(() => {
     if (urlTimerRef.current) clearTimeout(urlTimerRef.current);
 
-    if (!url.trim()) {
+    if (!url.trim() || !isPlausibleUrl(url)) {
+      setRecognizing(false);
+      if (!titleTouchedRef.current) setTitle('');
+      if (!descriptionTouchedRef.current) setDescription('');
+      if (!iconTouchedRef.current) setIcon('');
       setRecognizedFavicon('');
       return;
     }
 
     setRecognizing(true);
     urlTimerRef.current = setTimeout(() => {
-      const info = recognizeLink(url);
+      const info = recognizeLink(normalizeUrl(url));
       if (info) {
-        setTitle(info.title);
-        setIcon(info.icon);
-        setDescription(info.description);
+        if (!titleTouchedRef.current) setTitle(info.title);
+        if (!descriptionTouchedRef.current) setDescription(info.description);
+        if (!iconTouchedRef.current) setIcon(info.icon);
         setRecognizedFavicon(info.faviconUrl);
       }
       setRecognizing(false);
-    }, 600);
+    }, 350);
 
     return () => {
       if (urlTimerRef.current) clearTimeout(urlTimerRef.current);
     };
   }, [url]);
 
-  const handleTitleChange = (val: string) => {
-    manualEditRef.current = true;
-    setTitle(val);
-  };
-
   const directorySites = directoryQuery.data?.items ?? [];
+
+  const canSubmit = useMemo(() => {
+    if (!isPlausibleUrl(url)) return false;
+    if (!categoryId) return false;
+    // Title optional in UI — we fill from domain on submit if empty
+    return true;
+  }, [url, categoryId]);
+
+  const previewTitle = title.trim() || (isPlausibleUrl(url) ? (recognizeLink(normalizeUrl(url))?.title ?? '') : '');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !url.trim()) return;
-    onConfirm({ title: title.trim(), url: url.trim(), icon: icon || 'ri-link', description: description.trim(), categoryId });
+    if (!canSubmit) return;
+    const finalUrl = normalizeUrl(url);
+    const info = recognizeLink(finalUrl);
+    const finalTitle = title.trim() || info?.title || finalUrl;
+    const finalIcon = icon.trim() || info?.faviconUrl || info?.icon || 'ri-link';
+    const finalDescription = description.trim();
+    onConfirm({
+      title: finalTitle,
+      url: finalUrl,
+      icon: finalIcon,
+      description: finalDescription,
+      categoryId,
+    });
     reset();
     onClose();
   };
 
   const handleDirectoryPick = (site: PlatformSite) => {
-    setTitle(site.title);
-    setUrl(site.url);
-    setIcon(site.icon);
-    setDescription(site.description);
-    setTab('manual');
+    // One-click add from directory with smart defaults.
+    const targetCategory = categoryId || pickDefaultCategoryId(categories, defaultCategoryId);
+    if (!targetCategory) return;
+    onConfirm({
+      title: site.title,
+      url: site.url,
+      icon: site.icon || '',
+      description: site.description || '',
+      categoryId: targetCategory,
+    });
+    reset();
+    onClose();
   };
 
   const reset = () => {
     setTitle('');
     setUrl('');
-    setIcon('ri-link');
+    setIcon('');
     setDescription('');
     setSearch('');
-    setTab('manual');
+    setTab('quick');
+    setShowMore(false);
     setRecognizedFavicon('');
-    manualEditRef.current = false;
+    titleTouchedRef.current = false;
+    descriptionTouchedRef.current = false;
+    iconTouchedRef.current = false;
   };
 
   const handleClose = () => {
@@ -202,18 +249,20 @@ export function AddSiteDialog({ open, onClose, categories, defaultCategoryId, on
     <div className="fixed inset-0 z-[100] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={handleClose} />
       <div className="relative bg-background-50 rounded-xl p-6 w-full max-w-lg mx-4 max-h-[85vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-5">
-          <h3 className="text-lg font-semibold text-foreground-900">添加站点</h3>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-lg font-semibold text-foreground-900">添加站点</h3>
+            <p className="text-[11px] text-foreground-400 mt-0.5">粘贴链接即可，名称与图标会自动填充</p>
+          </div>
           <button onClick={handleClose} className="w-8 h-8 flex items-center justify-center rounded-lg text-foreground-400 hover:bg-background-100 transition-colors duration-150">
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Tabs */}
         <div className="flex items-center bg-background-100 rounded-lg p-0.5 mb-4">
           {([
-            { key: 'manual' as const, label: '手动添加' },
-            { key: 'directory' as const, label: '从平台推荐库' },
+            { key: 'quick' as const, label: '快速添加' },
+            { key: 'directory' as const, label: '从推荐库' },
           ]).map(t => (
             <button
               key={t.key}
@@ -231,35 +280,22 @@ export function AddSiteDialog({ open, onClose, categories, defaultCategoryId, on
           ))}
         </div>
 
-        {tab === 'manual' ? (
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <FormField label="站点名称 *">
-                <FormInput
-                  type="text"
-                  value={title}
-                  onChange={e => handleTitleChange(e.target.value)}
-                  placeholder="GitHub"
-                  autoFocus
-                />
-              </FormField>
-              <FormField label="分类">
-                <FormSelect value={categoryId} onChange={e => setCategoryId(e.target.value)}>
-                  {categories.map(c => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </FormSelect>
-              </FormField>
-            </div>
-
-            <FormField label="网址 *">
+        {tab === 'quick' ? (
+          <form onSubmit={handleSubmit} className="space-y-3">
+            {/* Primary: URL */}
+            <FormField label="链接">
               <div className="relative">
+                <Link2 className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-foreground-300 pointer-events-none" />
                 <FormInput
-                  type="url"
+                  ref={urlInputRef}
+                  type="text"
+                  inputMode="url"
+                  autoComplete="url"
                   value={url}
                   onChange={e => setUrl(e.target.value)}
-                  placeholder="https://github.com"
-                  className="pr-8"
+                  placeholder="粘贴或输入 URL，如 github.com"
+                  className="pl-9 pr-9"
+                  autoFocus
                 />
                 {recognizing && (
                   <Loader2 className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 text-primary-500 animate-spin" />
@@ -273,33 +309,98 @@ export function AddSiteDialog({ open, onClose, categories, defaultCategoryId, on
                   />
                 )}
               </div>
-              {!recognizing && recognizedFavicon && (
-                <p className="text-[10px] text-accent-500 mt-1 flex items-center gap-1">
-                  <Sparkles className="w-3 h-3" />
-                  已自动识别站点信息，可手动修改
-                </p>
+            </FormField>
+
+            {/* Live preview chip */}
+            {isPlausibleUrl(url) && previewTitle && (
+              <div className="flex items-center gap-2.5 rounded-lg border border-background-200/70 bg-background-50 px-3 py-2">
+                <div className="w-8 h-8 rounded-md bg-background-100 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                  {(icon || recognizedFavicon) ? (
+                    <IconRenderer icon={icon || recognizedFavicon} containerClassName="w-5 h-5" className="text-sm" alt="" />
+                  ) : (
+                    <Link2 className="w-4 h-4 text-foreground-300" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium text-foreground-900 truncate">{previewTitle}</div>
+                  <div className="text-[11px] text-foreground-400 truncate">{normalizeUrl(url)}</div>
+                </div>
+                {!recognizing && (
+                  <span className="text-[10px] text-accent-600 inline-flex items-center gap-0.5 flex-shrink-0">
+                    <Sparkles className="w-3 h-3" />
+                    已识别
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Category — compact, smart default */}
+            <FormField label="放到分类">
+              <FormSelect value={categoryId} onChange={e => setCategoryId(e.target.value)}>
+                {categories.map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </FormSelect>
+            </FormField>
+
+            {/* Advanced — collapsed */}
+            <div className="rounded-lg border border-background-200/60 overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setShowMore(v => !v)}
+                className="w-full flex items-center justify-between px-3 py-2 text-xs text-foreground-500 hover:bg-background-50 transition-colors"
+              >
+                <span>更多选项（名称 / 简介 / 图标）</span>
+                <ChevronDown className={cn('w-3.5 h-3.5 transition-transform', showMore && 'rotate-180')} />
+              </button>
+              {showMore && (
+                <div className="px-3 pb-3 space-y-3 border-t border-background-100 pt-3">
+                  <FormField label="名称">
+                    <FormInput
+                      type="text"
+                      value={title}
+                      onChange={e => {
+                        titleTouchedRef.current = true;
+                        setTitle(e.target.value);
+                      }}
+                      placeholder="留空则用自动识别"
+                    />
+                  </FormField>
+                  <FormField label="简介">
+                    <FormTextarea
+                      value={description}
+                      onChange={e => {
+                        descriptionTouchedRef.current = true;
+                        setDescription(e.target.value);
+                      }}
+                      maxLength={200}
+                      rows={2}
+                      placeholder="可选"
+                    />
+                  </FormField>
+                  <FormField label="图标">
+                    <div className="flex items-center gap-2">
+                      <div className="w-9 h-9 rounded-md bg-background-100 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                        <IconRenderer icon={icon || recognizedFavicon || 'ri-link'} containerClassName="w-5 h-5" className="text-sm" />
+                      </div>
+                      <FormInput
+                        type="text"
+                        value={icon}
+                        onChange={e => {
+                          iconTouchedRef.current = true;
+                          setIcon(e.target.value);
+                        }}
+                        placeholder="自动 favicon，或填 Remix 名 / 图片 URL"
+                        className="flex-1"
+                      />
+                    </div>
+                    <p className="text-[10px] text-foreground-300 mt-1">默认使用站点 favicon，一般无需修改</p>
+                  </FormField>
+                </div>
               )}
-            </FormField>
+            </div>
 
-            <FormField label="图标">
-              <FormInput
-                type="text"
-                value={icon}
-                onChange={e => setIcon(e.target.value)}
-                placeholder="ri-github-fill"
-              />
-            </FormField>
-
-            <FormField label="简介">
-              <FormTextarea
-                value={description}
-                onChange={e => setDescription(e.target.value)}
-                maxLength={200}
-                rows={2}
-              />
-            </FormField>
-
-            <div className="flex justify-end gap-3 pt-2">
+            <div className="flex justify-end gap-3 pt-1">
               <button
                 type="button"
                 onClick={handleClose}
@@ -309,7 +410,7 @@ export function AddSiteDialog({ open, onClose, categories, defaultCategoryId, on
               </button>
               <button
                 type="submit"
-                disabled={!title.trim() || !url.trim()}
+                disabled={!canSubmit}
                 className="h-9 px-4 rounded-lg bg-primary-500 text-background-50 dark:text-foreground-950 text-sm font-medium hover:bg-primary-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-150 flex items-center gap-1.5 whitespace-nowrap"
               >
                 <Plus className="w-4 h-4" />
@@ -319,6 +420,14 @@ export function AddSiteDialog({ open, onClose, categories, defaultCategoryId, on
           </form>
         ) : (
           <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-foreground-400 flex-shrink-0">加入分类</span>
+              <FormSelect value={categoryId} onChange={e => setCategoryId(e.target.value)} className="flex-1">
+                {categories.map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </FormSelect>
+            </div>
             <SearchInput
               value={search}
               onChange={e => setSearch(e.target.value)}
@@ -339,7 +448,7 @@ export function AddSiteDialog({ open, onClose, categories, defaultCategoryId, on
                     <div className="text-sm font-medium text-foreground-900">{site.title}</div>
                     <div className="text-xs text-foreground-400 truncate">{site.description}</div>
                   </div>
-                  <span className="text-xs text-foreground-300">{site.categoryName}</span>
+                  <span className="text-[10px] text-primary-600 font-medium flex-shrink-0">添加</span>
                 </button>
               ))}
               {directoryQuery.isLoading && (

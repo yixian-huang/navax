@@ -1,6 +1,7 @@
 // ============================================================
 // nav.ax FormField — shared input/textarea/select with consistent styling
 // ============================================================
+import { forwardRef } from 'react';
 import { cn } from '@/lib/utils';
 
 interface FormFieldProps {
@@ -25,9 +26,12 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   className?: string;
 }
 
-export function FormInput({ className, ...props }: InputProps) {
-  return <input {...props} className={cn(inputBase, className)} />;
-}
+export const FormInput = forwardRef<HTMLInputElement, InputProps>(function FormInput(
+  { className, ...props },
+  ref,
+) {
+  return <input ref={ref} {...props} className={cn(inputBase, className)} />;
+});
 
 interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
   className?: string;

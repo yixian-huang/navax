@@ -69,23 +69,57 @@ export function extractDomain(url: string): string {
 }
 
 /**
+ * Normalize user paste into a full http(s) URL.
+ * Accepts "github.com", "www.x.com/path", already-qualified URLs.
+ */
+export function normalizeUrl(input: string): string {
+  const raw = input.trim();
+  if (!raw) return '';
+  if (/^https?:\/\//i.test(raw)) return raw;
+  // Reject obvious non-URLs (spaces, missing host-ish shape)
+  if (/\s/.test(raw)) return raw;
+  return `https://${raw}`;
+}
+
+/** Loose check: has a host with a dot or is localhost / IP. */
+export function isPlausibleUrl(input: string): boolean {
+  const normalized = normalizeUrl(input);
+  if (!normalized) return false;
+  try {
+    const u = new URL(normalized);
+    if (!u.hostname) return false;
+    if (u.hostname === 'localhost') return true;
+    if (/^\d{1,3}(\.\d{1,3}){3}$/.test(u.hostname)) return true;
+    return u.hostname.includes('.');
+  } catch {
+    return false;
+  }
+}
+
+function faviconForDomain(domain: string): string {
+  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`;
+}
+
+/**
  * Auto-recognize link info from a URL
- * Returns title, icon, description, and favicon URL
+ * Returns title, icon (prefer favicon URL for storage), description, and favicon URL
  */
 export function recognizeLink(url: string): RecognizedLinkInfo | null {
   if (!url.trim()) return null;
 
   const domain = extractDomain(url);
   if (!domain) return null;
+  const faviconUrl = faviconForDomain(domain);
 
   // Check known sites
   const matched = SITE_PATTERNS[domain];
   if (matched) {
     return {
       title: matched.title,
-      icon: matched.icon,
+      // Prefer favicon URL so cards/DnD show real site icons; remix kept as last resort.
+      icon: faviconUrl,
       description: matched.description,
-      faviconUrl: `https://www.google.com/s2/favicons?domain=${domain}&sz=64`,
+      faviconUrl,
     };
   }
 
@@ -94,9 +128,9 @@ export function recognizeLink(url: string): RecognizedLinkInfo | null {
     if (domain.endsWith(`.${pattern}`) || domain === pattern) {
       return {
         title: info.title,
-        icon: info.icon,
+        icon: faviconUrl,
         description: info.description,
-        faviconUrl: `https://www.google.com/s2/favicons?domain=${domain}&sz=64`,
+        faviconUrl,
       };
     }
   }
@@ -107,8 +141,8 @@ export function recognizeLink(url: string): RecognizedLinkInfo | null {
 
   return {
     title: capitalized,
-    icon: 'ri-link',
-    description: `${capitalized} 官方网站`,
-    faviconUrl: `https://www.google.com/s2/favicons?domain=${domain}&sz=64`,
+    icon: faviconUrl,
+    description: '',
+    faviconUrl,
   };
 }
