@@ -151,23 +151,21 @@ func (s *s3Store) newRequest(ctx context.Context, method, objectKey string, payl
 		headers["content-type"] = contentType
 	}
 
+	// AWS SigV4: each canonical header line ends with '\n', then one extra '\n'
+	// separates the header block from SignedHeaders. Build the request with
+	// explicit newlines — strings.Join on an already-terminated block added an
+	// extra blank line and broke signatures against RustFS/MinIO.
 	canonicalHeaders, signedHeaders := canonicalSignedHeaders(headers)
-	canonicalRequest := strings.Join([]string{
-		method,
-		uriEncodePath(path),
-		"",
-		canonicalHeaders + "\n",
-		signedHeaders,
-		payloadHash,
-	}, "\n")
+	canonicalRequest := method + "\n" +
+		uriEncodePath(path) + "\n" +
+		"\n" + // empty query string + trailing newline
+		canonicalHeaders + // ends with '\n'
+		"\n" +
+		signedHeaders + "\n" +
+		payloadHash
 
 	credentialScope := dateStamp + "/" + s.cfg.Region + "/s3/aws4_request"
-	stringToSign := strings.Join([]string{
-		"AWS4-HMAC-SHA256",
-		amzDate,
-		credentialScope,
-		sha256Hex([]byte(canonicalRequest)),
-	}, "\n")
+	stringToSign := "AWS4-HMAC-SHA256\n" + amzDate + "\n" + credentialScope + "\n" + sha256Hex([]byte(canonicalRequest))
 	signature := hex.EncodeToString(hmacSHA256(signingKey(s.cfg.SecretKey, dateStamp, s.cfg.Region, "s3"), []byte(stringToSign)))
 	authorization := fmt.Sprintf(
 		"AWS4-HMAC-SHA256 Credential=%s/%s, SignedHeaders=%s, Signature=%s",
@@ -182,6 +180,9 @@ func (s *s3Store) newRequest(ctx context.Context, method, objectKey string, payl
 	if err != nil {
 		return nil, err
 	}
+	// Set Host explicitly so transport and signature use the same value
+	// (especially host:port for path-style IP endpoints).
+	req.Host = host
 	for name, value := range headers {
 		if name == "host" {
 			continue
@@ -219,16 +220,39 @@ func canonicalSignedHeaders(headers map[string]string) (string, string) {
 		b.WriteString(strings.TrimSpace(headers[name]))
 		b.WriteByte('\n')
 	}
-	return strings.TrimSuffix(b.String(), "\n") + "\n", strings.Join(names, ";")
+	// Trailing newline after the last header is required; do not strip it.
+	return b.String(), strings.Join(names, ";")
 }
 
 func uriEncodePath(path string) string {
+	// AWS URI encode: preserve '/', encode each segment with AWS rules
+	// (unreserved characters stay literal). url.PathEscape is close enough
+	// for object keys we generate (hex + safe punctuation).
+	if path == "" {
+		return "/"
+	}
 	parts := strings.Split(path, "/")
 	for i, part := range parts {
-		parts[i] = url.PathEscape(part)
-		parts[i] = strings.ReplaceAll(parts[i], "+", "%20")
+		if part == "" {
+			continue
+		}
+		parts[i] = awsURIEncode(part)
 	}
 	return strings.Join(parts, "/")
+}
+
+func awsURIEncode(value string) string {
+	var b strings.Builder
+	for i := 0; i < len(value); i++ {
+		c := value[i]
+		if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
+			c == '-' || c == '_' || c == '.' || c == '~' {
+			b.WriteByte(c)
+			continue
+		}
+		fmt.Fprintf(&b, "%%%02X", c)
+	}
+	return b.String()
 }
 
 func sha256Hex(payload []byte) string {

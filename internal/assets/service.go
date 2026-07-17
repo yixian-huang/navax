@@ -17,6 +17,7 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -170,15 +171,18 @@ func (s *Service) Upload(ctx context.Context, ownerID, kind, filename, declaredM
 	if s.resolve != nil {
 		s3cfg, err = s.resolve(ctx)
 		if err != nil {
+			slog.Error("resolve object storage", "error", err)
 			return Asset{}, fmt.Errorf("%w: %v", ErrStorage, err)
 		}
 	}
 	if s3cfg != nil {
 		store, err := newS3Store(*s3cfg)
 		if err != nil {
+			slog.Error("init object storage client", "error", err)
 			return Asset{}, fmt.Errorf("%w: %v", ErrStorage, err)
 		}
 		if err := store.Put(ctx, objectKey, detectedMIME, temporary, written); err != nil {
+			slog.Error("object storage put", "error", err, "object_key", objectKey, "bytes", written)
 			return Asset{}, fmt.Errorf("%w: %v", ErrStorage, err)
 		}
 		driver = "s3"
