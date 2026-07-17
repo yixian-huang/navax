@@ -150,6 +150,14 @@ func (s *SQLStore) InvitationByHash(ctx context.Context, hash string, now time.T
 	return info, nil
 }
 
+func (s *SQLStore) RegistrationMode(ctx context.Context) (string, error) {
+	var mode string
+	if err := s.db.QueryRowContext(ctx, "SELECT registration_mode FROM system_settings WHERE id = 1").Scan(&mode); err != nil {
+		return "", fmt.Errorf("read registration mode: %w", err)
+	}
+	return mode, nil
+}
+
 func (s *SQLStore) RegisterWithInvitation(ctx context.Context, params RegistrationParams, now time.Time) error {
 	return database.WithinTx(ctx, s.db, nil, func(tx *sql.Tx) error {
 		var invitationID string
@@ -202,6 +210,25 @@ func (s *SQLStore) RegisterWithInvitation(ctx context.Context, params Registrati
 		changed, _ := result.RowsAffected()
 		if changed != 1 {
 			return ErrInvitationExhausted
+		}
+		return insertSession(ctx, tx, params.Session)
+	})
+}
+
+func (s *SQLStore) RegisterOpen(ctx context.Context, params RegistrationParams, now time.Time) error {
+	return database.WithinTx(ctx, s.db, nil, func(tx *sql.Tx) error {
+		var mode string
+		if err := tx.QueryRowContext(ctx, "SELECT registration_mode FROM system_settings WHERE id = 1").Scan(&mode); err != nil {
+			return err
+		}
+		if mode != "open" {
+			return ErrRegistrationClosed
+		}
+		if err := insertUser(ctx, tx, params.User); err != nil {
+			return mapConflict(err)
+		}
+		if err := insertPersonalPage(ctx, tx, params.PageID, params.UncategorizedID, params.User, params.Slug); err != nil {
+			return mapConflict(err)
 		}
 		return insertSession(ctx, tx, params.Session)
 	})

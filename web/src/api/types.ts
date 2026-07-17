@@ -66,6 +66,13 @@ export interface Invitation {
   isRevoked?: boolean;
 }
 
+/** Create response only — full token is never stored server-side in plain form. */
+export interface InvitationCreated extends Invitation {
+  token: string;
+  inviteUrl: string;
+  emailSent?: boolean;
+}
+
 export interface Site {
   id: string;
   categoryId: string;
@@ -281,7 +288,7 @@ export interface PublicConfig {
   instanceName: string;
   publicBaseUrl: string;
   rootDomain: string | null;
-  registrationMode: 'invite' | 'closed';
+  registrationMode: 'invite' | 'closed' | 'open';
   features: {
     discover: boolean;
     analytics: boolean;
@@ -373,7 +380,7 @@ export interface AdminLink {
 export interface SystemSettings {
   instanceName: string;
   publicBaseUrl: string;
-  registrationMode: 'invite' | 'closed';
+  registrationMode: 'invite' | 'closed' | 'open';
   limits: {
     maxCategoriesPerPage: number;
     maxSitesPerPage: number;

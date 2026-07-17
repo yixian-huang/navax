@@ -759,7 +759,7 @@ handlers.push((url) => {
 });
 
 // ---- Admin handlers ----
-handlers.push((url) => {
+handlers.push((url, init) => {
   if (url === `${API_BASE}/admin/overview`) {
     return Promise.resolve(jsonResponse({ code: 'OK', data: mockAdminOverview, meta: { message: '', detail: '' } }));
   }
@@ -767,6 +767,24 @@ handlers.push((url) => {
     return Promise.resolve(jsonResponse({ code: 'OK', data: paginate(mockUsers, 1, 10), meta: { message: '', detail: '' } }));
   }
   if (url === `${API_BASE}/admin/invitations` || url.startsWith(`${API_BASE}/admin/invitations?`)) {
+    const method = init?.method || 'GET';
+    if (method === 'POST') {
+      const token = `mock-invite-token-${Date.now()}`;
+      const created = {
+        id: `inv_${Date.now()}`,
+        tokenPreview: `${token.slice(0, 8)}…`,
+        creatorName: 'admin',
+        maxUses: 10,
+        usedCount: 0,
+        expiresAt: new Date(Date.now() + 30 * 864e5).toISOString(),
+        createdAt: new Date().toISOString(),
+        token,
+        inviteUrl: `${window.location.origin}/invite/${token}`,
+        emailSent: false,
+      };
+      mockInvitations.unshift(created);
+      return Promise.resolve(jsonResponse({ code: 'OK', data: created, meta: { message: '', detail: '' } }, 201));
+    }
     return Promise.resolve(jsonResponse({ code: 'OK', data: paginate(mockInvitations, 1, 10), meta: { message: '', detail: '' } }));
   }
   if (url === `${API_BASE}/admin/directory/sites` || url.startsWith(`${API_BASE}/admin/directory/sites?`)) {

@@ -359,7 +359,8 @@ func (s *Service) CreateInvitation(ctx context.Context, actor Actor, input Invit
 	if err := s.store.InsertInvitation(ctx, InvitationInsert{Invitation: invitation, TokenHash: tokenHash, CreatorID: actor.ID}, audit); err != nil {
 		return InvitationCreated{}, err
 	}
-	inviteURL := input.PublicBaseURL + "/invite?token=" + url.QueryEscape(token)
+	// Path-style URL matches the SPA route /invite/:token and is copy-friendly.
+	inviteURL := input.PublicBaseURL + "/invite/" + url.PathEscape(token)
 	return InvitationCreated{Invitation: invitation, Token: token, InviteURL: inviteURL}, nil
 }
 
@@ -419,11 +420,50 @@ func (s *Service) UpdateSettings(ctx context.Context, actor Actor, patch SystemS
 	if err := validateSettingsPatch(patch); err != nil {
 		return SystemSettings{}, err
 	}
+	// Enabling subdomains requires a non-empty root domain. If the admin toggles
+	// the flag without setting one, derive the host from the public base URL.
+	if patch.Domain != nil && patch.Domain.SubdomainsEnabled != nil && *patch.Domain.SubdomainsEnabled {
+		needsRoot := patch.Domain.RootDomain == nil || *patch.Domain.RootDomain == nil || strings.TrimSpace(**patch.Domain.RootDomain) == ""
+		if needsRoot {
+			current, err := s.store.Settings(ctx)
+			if err != nil {
+				return SystemSettings{}, err
+			}
+			baseURL := current.PublicBaseURL
+			if patch.PublicBaseURL != nil {
+				baseURL = *patch.PublicBaseURL
+			}
+			if host := rootDomainFromPublicURL(baseURL); host != "" {
+				root := host
+				rootPtr := &root
+				if patch.Domain.RootDomain == nil {
+					patch.Domain.RootDomain = &rootPtr
+				} else {
+					*patch.Domain.RootDomain = rootPtr
+				}
+			} else {
+				return SystemSettings{}, ErrInvalidInput
+			}
+		}
+	}
 	audit, err := s.audit(actor, "settings.update", "system_settings", "1", nil, patch.RequestID)
 	if err != nil {
 		return SystemSettings{}, err
 	}
 	return s.store.UpdateSettings(ctx, patch, s.now().UTC(), audit)
+}
+
+func rootDomainFromPublicURL(publicBaseURL string) string {
+	parsed, err := url.Parse(strings.TrimSpace(publicBaseURL))
+	if err != nil || parsed.Host == "" {
+		return ""
+	}
+	host := strings.ToLower(parsed.Hostname())
+	host = strings.TrimPrefix(host, "www.")
+	if host == "" || host == "localhost" || strings.HasPrefix(host, "127.") {
+		return ""
+	}
+	return host
 }
 
 func (s *Service) WriteAudit(ctx context.Context, actor Actor, action, targetType, targetID string, detail any, requestID string) error {
@@ -551,7 +591,7 @@ func validateSettingsPatch(patch SystemSettingsPatch) error {
 		}
 		*patch.PublicBaseURL = value
 	}
-	if patch.RegistrationMode != nil && *patch.RegistrationMode != "invite" && *patch.RegistrationMode != "closed" {
+	if patch.RegistrationMode != nil && *patch.RegistrationMode != "invite" && *patch.RegistrationMode != "closed" && *patch.RegistrationMode != "open" {
 		return ErrInvalidInput
 	}
 	if patch.Limits != nil {

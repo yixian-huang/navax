@@ -249,11 +249,17 @@ func (s *SQLStore) site(ctx context.Context, siteID string) (Site, error) {
 }
 
 func (s *SQLStore) Links(ctx context.Context, filter LinkFilter) (Page[AdminLink], error) {
-	where := " WHERE p.kind = 'personal'"
+	// Include personal + system navigation sites (not the public directory catalog).
+	// System pages have NULL owner_id, so users must be LEFT JOIN'd.
+	where := " WHERE p.kind IN ('personal', 'system')"
 	arguments := make([]any, 0, 6)
 	if filter.OwnerID != "" {
-		where += " AND u.id = ?"
-		arguments = append(arguments, filter.OwnerID)
+		if filter.OwnerID == "system" {
+			where += " AND p.kind = 'system'"
+		} else {
+			where += " AND u.id = ?"
+			arguments = append(arguments, filter.OwnerID)
+		}
 	}
 	if filter.Search != "" {
 		where += " AND (s.title LIKE ? ESCAPE '\\' OR s.url LIKE ? ESCAPE '\\' OR s.description LIKE ? ESCAPE '\\')"
@@ -261,7 +267,8 @@ func (s *SQLStore) Links(ctx context.Context, filter LinkFilter) (Page[AdminLink
 		arguments = append(arguments, pattern, pattern, pattern)
 	}
 	joins := ` FROM sites s JOIN categories c ON c.id = s.category_id
-		JOIN navigation_pages p ON p.id = s.page_id JOIN users u ON u.id = p.owner_id`
+		JOIN navigation_pages p ON p.id = s.page_id
+		LEFT JOIN users u ON u.id = p.owner_id`
 	var total int
 	if err := s.db.QueryRowContext(ctx, "SELECT COUNT(*)"+joins+where, arguments...).Scan(&total); err != nil {
 		return Page[AdminLink]{}, err
@@ -294,7 +301,7 @@ func (s *SQLStore) DeletePersonalLink(ctx context.Context, siteID string, now ti
 		var pageID string
 		err := tx.QueryRowContext(ctx, `
 			SELECT s.page_id FROM sites s JOIN navigation_pages p ON p.id = s.page_id
-			WHERE s.id = ? AND p.kind = 'personal'`, siteID).Scan(&pageID)
+			WHERE s.id = ? AND p.kind IN ('personal', 'system')`, siteID).Scan(&pageID)
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrNotFound
 		}
@@ -359,12 +366,20 @@ func scanSite(row rowScanner) (Site, error) {
 
 func scanAdminLink(row rowScanner) (AdminLink, error) {
 	var item AdminLink
+	var ownerID, ownerName sql.NullString
 	var createdAt, updatedAt string
 	if err := row.Scan(
-		&item.ID, &item.PageID, &item.CategoryID, &item.CategoryName, &item.OwnerID, &item.OwnerName,
+		&item.ID, &item.PageID, &item.CategoryID, &item.CategoryName, &ownerID, &ownerName,
 		&item.Title, &item.URL, &item.Icon, &item.Description, &item.SortOrder, &createdAt, &updatedAt,
 	); err != nil {
 		return AdminLink{}, err
+	}
+	if ownerID.Valid {
+		item.OwnerID = ownerID.String
+		item.OwnerName = ownerName.String
+	} else {
+		item.OwnerID = "system"
+		item.OwnerName = "主站"
 	}
 	var err error
 	if item.CreatedAt, err = parseDBTime(createdAt); err != nil {

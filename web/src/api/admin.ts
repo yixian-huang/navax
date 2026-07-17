@@ -8,6 +8,7 @@ import type {
   AdminOverview,
   User,
   Invitation,
+  InvitationCreated,
   PlatformSite,
   PlatformCategory,
   Theme,
@@ -82,7 +83,7 @@ export const adminApi = {
     request<ApiResponse<Invitation[] | PaginatedResponse<Invitation>>>('/admin/invitations', { params }).then(asPaginated),
 
   createInvitation: (data: CreateInvitationRequest) =>
-    request<ApiResponse<Invitation>>('/admin/invitations', { method: 'POST', body: data }),
+    request<ApiResponse<InvitationCreated>>('/admin/invitations', { method: 'POST', body: data }),
 
   revokeInvitation: (id: string) =>
     request<ApiResponse<Invitation>>(`/admin/invitations/${id}`, { method: 'DELETE' }),

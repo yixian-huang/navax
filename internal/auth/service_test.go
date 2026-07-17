@@ -64,6 +64,13 @@ func (f *fakeStore) RegisterWithInvitation(_ context.Context, params Registratio
 	f.sessions[params.Session.TokenHash] = Session{ID: params.Session.ID, User: params.User, ExpiresAt: params.Session.ExpiresAt}
 	return nil
 }
+func (f *fakeStore) RegistrationMode(_ context.Context) (string, error) { return "invite", nil }
+func (f *fakeStore) RegisterOpen(_ context.Context, params RegistrationParams, _ time.Time) error {
+	f.registration = params
+	f.users[params.User.Email] = params.User
+	f.sessions[params.Session.TokenHash] = Session{ID: params.Session.ID, User: params.User, ExpiresAt: params.Session.ExpiresAt}
+	return nil
+}
 
 func TestBootstrapThenAuthenticate(t *testing.T) {
 	store := newFakeStore()

@@ -135,7 +135,7 @@ func TestAdminInputValidation(t *testing.T) {
 	if _, err := service.CreateInvitation(context.Background(), actor, InvitationCreate{MaxUses: 0, ExpiresInDays: 7, PublicBaseURL: "https://nav.ax"}); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("invalid invite error = %v", err)
 	}
-	badMode := "open"
+	badMode := "public"
 	if _, err := service.UpdateSettings(context.Background(), actor, SystemSettingsPatch{RegistrationMode: &badMode}); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("invalid settings error = %v", err)
 	}

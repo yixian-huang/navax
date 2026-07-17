@@ -3,12 +3,12 @@
 // ============================================================
 
 import { useState, useCallback } from 'react';
-import { Plus, Copy, XCircle, Clock, Users } from 'lucide-react';
+import { Plus, Copy, XCircle, Clock, Users, Check } from 'lucide-react';
 import { useAdminInvitations, useCreateInvitation, useRevokeInvitation } from '@/hooks/useQueries';
 import { DataTable, type Column } from '@/components/base/DataTable';
 import { ConfirmDialog, Badge } from '@/components/base/SharedUI';
 import { useToast } from '@/components/base/Toast';
-import type { Invitation } from '@/api/types';
+import type { Invitation, InvitationCreated } from '@/api/types';
 
 export default function AdminInvitationsPage() {
   const [page, setPage] = useState(1);
@@ -23,14 +23,18 @@ export default function AdminInvitationsPage() {
   const [maxUses, setMaxUses] = useState(10);
   const [expiresDays, setExpiresDays] = useState(30);
   const [revokeTarget, setRevokeTarget] = useState<Invitation | null>(null);
+  /** Full token is only returned once at create time. */
+  const [createdInvite, setCreatedInvite] = useState<InvitationCreated | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const handleCreate = useCallback(() => {
     createMutation.mutate({ maxUses, expiresInDays: expiresDays }, {
-      onSuccess: () => {
-        toast('success', '邀请链接已创建');
+      onSuccess: (response) => {
+        setCreatedInvite(response.data);
         setShowCreate(false);
+        toast('success', '邀请已创建，请立即复制链接（完整令牌仅显示一次）');
       },
-      onError: () => toast('error', '创建失败'),
+      onError: (err) => toast('error', err instanceof Error ? err.message : '创建失败'),
     });
   }, [maxUses, expiresDays, createMutation, toast]);
 
@@ -43,16 +47,21 @@ export default function AdminInvitationsPage() {
     setRevokeTarget(null);
   }, [revokeTarget, revokeMutation, toast]);
 
-  const handleCopy = useCallback((code: string) => {
-    const url = `${window.location.origin}/invite/${code}`;
-    navigator.clipboard.writeText(url);
-    toast('info', '邀请链接已复制到剪贴板');
+  const handleCopyUrl = useCallback(async (url: string) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      toast('info', '邀请链接已复制到剪贴板');
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast('error', '复制失败，请手动选择文本');
+    }
   }, [toast]);
 
   const invitations = paginated?.items || [];
 
   const getStatus = (inv: Invitation) => {
-    if (inv.isRevoked) return { label: '已撤销', variant: 'danger' as const };
+    if (inv.revokedAt || inv.isRevoked) return { label: '已撤销', variant: 'danger' as const };
     if (inv.usedCount >= inv.maxUses) return { label: '已用完', variant: 'warning' as const };
     if (new Date(inv.expiresAt) < new Date()) return { label: '已过期', variant: 'default' as const };
     return { label: '有效', variant: 'success' as const };
@@ -60,8 +69,12 @@ export default function AdminInvitationsPage() {
 
   const columns: Column<Invitation>[] = [
     {
-      key: 'code', header: '邀请码', sortable: true,
-      render: (inv) => <span className="text-sm font-mono font-medium text-foreground-900">{inv.code}</span>,
+      key: 'tokenPreview', header: '令牌预览', sortable: true,
+      render: (inv) => (
+        <span className="text-sm font-mono font-medium text-foreground-900">
+          {inv.tokenPreview || inv.code || '—'}
+        </span>
+      ),
     },
     {
       key: 'usage', header: '使用情况',
@@ -98,15 +111,7 @@ export default function AdminInvitationsPage() {
       className: 'text-right',
       render: (inv) => (
         <div className="flex items-center justify-end gap-0.5">
-          <button
-            onClick={() => handleCopy(inv.code)}
-            className="w-7 h-7 flex items-center justify-center rounded-md text-foreground-300 hover:text-primary-500 hover:bg-primary-50 transition-colors duration-150"
-            aria-label="复制邀请链接"
-            title="复制邀请链接"
-          >
-            <Copy className="w-3.5 h-3.5" />
-          </button>
-          {!inv.isRevoked && new Date(inv.expiresAt) > new Date() && (
+          {!(inv.revokedAt || inv.isRevoked) && new Date(inv.expiresAt) > new Date() && (
             <button
               onClick={() => setRevokeTarget(inv)}
               className="w-7 h-7 flex items-center justify-center rounded-md text-foreground-300 hover:text-red-500 hover:bg-red-50 transition-colors duration-150"
@@ -122,7 +127,7 @@ export default function AdminInvitationsPage() {
   ];
 
   const revokeDesc = revokeTarget
-    ? `确定要撤销邀请「${revokeTarget.code}」吗？\n\n影响范围：\n• 该邀请链接将立即失效\n• 已通过该邀请注册的用户不受影响\n• 未使用的剩余次数将被废弃\n• 此操作不可撤销`
+    ? `确定要撤销邀请「${revokeTarget.tokenPreview || revokeTarget.id}」吗？\n\n影响范围：\n• 该邀请链接将立即失效\n• 已通过该邀请注册的用户不受影响\n• 未使用的剩余次数将被废弃\n• 此操作不可撤销`
     : '';
 
   return (
@@ -130,7 +135,7 @@ export default function AdminInvitationsPage() {
       <div className="flex items-center justify-between mb-5">
         <div>
           <h1 className="text-xl font-bold font-heading text-foreground-950">邀请管理</h1>
-          <p className="text-xs text-foreground-400 mt-0.5">创建、复制和撤销注册邀请链接</p>
+          <p className="text-xs text-foreground-400 mt-0.5">创建邀请链接；完整令牌仅在创建成功时显示一次</p>
         </div>
         <button
           onClick={() => setShowCreate(true)}
@@ -141,6 +146,35 @@ export default function AdminInvitationsPage() {
         </button>
       </div>
 
+      {createdInvite && (
+        <div className="mb-4 rounded-xl border border-green-200 bg-green-50 p-4 space-y-3">
+          <div className="text-sm font-semibold text-green-800">邀请已创建 — 请立即复制（关闭后无法再查看完整令牌）</div>
+          <div className="space-y-1">
+            <div className="text-xs text-green-700">邀请链接</div>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 text-xs sm:text-sm break-all bg-white border border-green-100 rounded-lg px-3 py-2 text-foreground-800">
+                {createdInvite.inviteUrl}
+              </code>
+              <button
+                type="button"
+                onClick={() => handleCopyUrl(createdInvite.inviteUrl)}
+                className="h-9 px-3 rounded-lg bg-green-600 text-white text-xs font-medium inline-flex items-center gap-1.5 shrink-0"
+              >
+                {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                复制
+              </button>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setCreatedInvite(null)}
+            className="text-xs text-green-700 hover:text-green-900 underline"
+          >
+            我已保存，关闭提示
+          </button>
+        </div>
+      )}
+
       <DataTable<Invitation>
         columns={columns}
         data={invitations}
@@ -148,8 +182,8 @@ export default function AdminInvitationsPage() {
         isLoading={isLoading}
         error={error ? (error as Error).message : undefined}
         onRetry={() => refetch()}
-        searchPlaceholder="搜索邀请码..."
-        searchFields={['code']}
+        searchPlaceholder="搜索令牌预览..."
+        searchFields={['tokenPreview', 'code']}
         currentPage={page}
         totalPages={paginated?.totalPages}
         totalItems={paginated?.total}
@@ -159,7 +193,6 @@ export default function AdminInvitationsPage() {
         emptyDescription="创建第一个邀请链接来邀请新用户"
       />
 
-      {/* Create Modal */}
       {showCreate && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/30" onClick={() => setShowCreate(false)} />

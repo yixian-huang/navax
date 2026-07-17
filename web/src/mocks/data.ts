@@ -370,9 +370,9 @@ export const mockThemes: Theme[] = [
 
 // ---- Mock Invitations ----
 export const mockInvitations: Invitation[] = [
-  { id: 'inv_001', code: 'NAV-ALPHA-2026', createdBy: 'usr_admin', creatorName: 'admin', maxUses: 10, usedCount: 6, expiresAt: '2026-12-31T23:59:59Z', isRevoked: false, createdAt: '2026-06-01T00:00:00Z' },
-  { id: 'inv_002', code: 'DEV-TEAM-07', createdBy: 'usr_admin', creatorName: 'admin', maxUses: 5, usedCount: 5, expiresAt: '2026-08-15T23:59:59Z', isRevoked: false, createdAt: '2026-07-01T00:00:00Z' },
-  { id: 'inv_003', code: 'FRIENDS-2026', createdBy: 'usr_admin', creatorName: 'admin', maxUses: 20, usedCount: 0, expiresAt: '2026-09-30T23:59:59Z', isRevoked: false, createdAt: '2026-07-14T00:00:00Z' },
+  { id: 'inv_001', tokenPreview: 'navalpha…', creatorName: 'admin', maxUses: 10, usedCount: 6, expiresAt: '2026-12-31T23:59:59Z', createdAt: '2026-06-01T00:00:00Z' },
+  { id: 'inv_002', tokenPreview: 'devteam0…', creatorName: 'admin', maxUses: 5, usedCount: 5, expiresAt: '2026-08-15T23:59:59Z', createdAt: '2026-07-01T00:00:00Z' },
+  { id: 'inv_003', tokenPreview: 'friends2…', creatorName: 'admin', maxUses: 20, usedCount: 0, expiresAt: '2026-09-30T23:59:59Z', createdAt: '2026-07-14T00:00:00Z' },
 ];
 
 // ---- Mock Users (admin view) ----

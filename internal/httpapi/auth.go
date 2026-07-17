@@ -50,6 +50,7 @@ func (h *AuthHandler) Mount(router chi.Router) {
 	router.Post("/auth/password/reset", h.resetPassword)
 	router.Get("/auth/invitations/{token}", h.validateInvitation)
 	router.Post("/auth/invitations/{token}/register", h.register)
+	router.Post("/auth/register", h.registerOpen)
 }
 
 type bootstrapRequest struct {
@@ -201,6 +202,26 @@ func (h *AuthHandler) register(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, r, http.StatusCreated, authSessionData(session))
 }
 
+func (h *AuthHandler) registerOpen(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		Username string `json:"username"`
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+	session, token, err := h.service.RegisterOpen(r.Context(), auth.RegisterInput{
+		Username: request.Username, Email: request.Email, Password: request.Password, Device: deviceSummary(r),
+	})
+	if err != nil {
+		h.writeAuthError(w, r, err)
+		return
+	}
+	h.setSessionCookie(w, token, session.ExpiresAt)
+	WriteJSON(w, r, http.StatusCreated, authSessionData(session))
+}
+
 func (h *AuthHandler) writeAuthError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, auth.ErrTooManyAttempts):
@@ -217,6 +238,8 @@ func (h *AuthHandler) writeAuthError(w http.ResponseWriter, r *http.Request, err
 		WriteError(w, r, http.StatusUnauthorized, "INVALID_CREDENTIALS", "初始化令牌无效", nil)
 	case errors.Is(err, auth.ErrAlreadyInitialized):
 		WriteError(w, r, http.StatusConflict, "INSTANCE_ALREADY_INITIALIZED", "实例已完成初始化", nil)
+	case errors.Is(err, auth.ErrRegistrationClosed):
+		WriteError(w, r, http.StatusForbidden, "REGISTRATION_CLOSED", "当前未开放公开注册", nil)
 	case errors.Is(err, auth.ErrInvitationExpired):
 		WriteError(w, r, http.StatusGone, "INVITATION_EXPIRED", "邀请已过期", nil)
 	case errors.Is(err, auth.ErrInvitationExhausted):

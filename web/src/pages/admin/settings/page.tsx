@@ -59,8 +59,9 @@ export default function AdminSettingsPage() {
             <input type="url" value={form.publicBaseUrl} onChange={event => setForm({ ...form, publicBaseUrl: event.target.value })} required className={inputClass} />
           </Field>
           <Field label="注册模式">
-            <select value={form.registrationMode} onChange={event => setForm({ ...form, registrationMode: event.target.value as 'invite' | 'closed' })} className={inputClass}>
+            <select value={form.registrationMode} onChange={event => setForm({ ...form, registrationMode: event.target.value as 'invite' | 'closed' | 'open' })} className={inputClass}>
               <option value="invite">仅邀请注册</option>
+              <option value="open">公开注册</option>
               <option value="closed">关闭注册</option>
             </select>
           </Field>
@@ -80,10 +81,22 @@ export default function AdminSettingsPage() {
         </Section>
 
         <Section title="子域名">
-          <Field label="根域名（可留空）">
-            <input value={form.domain.rootDomain ?? ''} onChange={event => setForm({ ...form, domain: { ...form.domain, rootDomain: event.target.value.trim() || null } })} className={inputClass} />
+          <Field label="根域名（启用子域名时必填；留空并开启时将尝试从公开 URL 推导）">
+            <input
+              value={form.domain.rootDomain ?? ''}
+              onChange={event => setForm({ ...form, domain: { ...form.domain, rootDomain: event.target.value.trim() || null } })}
+              placeholder="例如 nav.ax"
+              className={inputClass}
+            />
           </Field>
-          <Toggle label="允许用户申请子域名" checked={form.domain.subdomainsEnabled} onChange={subdomainsEnabled => setForm({ ...form, domain: { ...form.domain, subdomainsEnabled } })} />
+          <Toggle
+            label="允许用户申请子域名"
+            checked={form.domain.subdomainsEnabled}
+            onChange={subdomainsEnabled => setForm({ ...form, domain: { ...form.domain, subdomainsEnabled } })}
+          />
+          {form.domain.subdomainsEnabled && !form.domain.rootDomain && (
+            <p className="text-xs text-accent-600">开启后若未填写根域名，保存时将用公开基础 URL 的主机名作为根域名；否则申请接口会报「尚未启用」。</p>
+          )}
         </Section>
 
         <Section title="平台主题库">

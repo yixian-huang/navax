@@ -8,6 +8,7 @@ import AdminShell from "@/components/feature/AdminShell";
 const NotFound = lazy(() => import("@/pages/NotFound"));
 const Home = lazy(() => import("@/pages/home/page"));
 const LoginPage = lazy(() => import("@/pages/login/page"));
+const RegisterPage = lazy(() => import("@/pages/register/page"));
 const ForgotPasswordPage = lazy(() => import("@/pages/forgot-password/page"));
 const ResetPasswordPage = lazy(() => import("@/pages/reset-password/page"));
 const SetupPage = lazy(() => import("@/pages/setup/page"));
@@ -49,6 +50,10 @@ const routes: RouteObject[] = [
     element: <LoginPage />,
   },
   {
+    path: "/register",
+    element: <RegisterPage />,
+  },
+  {
     path: "/forgot-password",
     element: <ForgotPasswordPage />,
   },
@@ -62,6 +67,11 @@ const routes: RouteObject[] = [
   },
   {
     path: "/invite/:token",
+    element: <InvitePage />,
+  },
+  {
+    // Legacy query-string invite links: /invite?token=...
+    path: "/invite",
     element: <InvitePage />,
   },
   {

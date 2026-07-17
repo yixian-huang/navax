@@ -2,8 +2,8 @@
 // nav.ax Invite Registration Page
 // ============================================================
 
-import { useState, useEffect } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useState, useEffect, useMemo } from 'react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import PublicShell from '@/components/feature/PublicShell';
 import { User, Lock, Mail, ArrowRight, CheckCircle, Loader2 } from 'lucide-react';
 import { useToast } from '@/components/base/Toast';
@@ -11,7 +11,13 @@ import { authApi } from '@/api/auth';
 import { useQueryClient } from '@tanstack/react-query';
 
 export default function InvitePage() {
-  const { token } = useParams<{ token: string }>();
+  const { token: pathToken } = useParams<{ token: string }>();
+  const [searchParams] = useSearchParams();
+  // Support both /invite/:token and legacy /invite?token=
+  const token = useMemo(
+    () => pathToken || searchParams.get('token') || '',
+    [pathToken, searchParams],
+  );
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');

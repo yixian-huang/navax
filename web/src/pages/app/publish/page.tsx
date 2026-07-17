@@ -19,6 +19,7 @@ import { LoadingSkeleton, ErrorState } from '@/components/base/SharedUI';
 import { useToast } from '@/components/base/Toast';
 import { cn } from '@/lib/utils';
 import { request } from '@/api/client';
+import { getPublicConfig } from '@/api/assets';
 import type { ApiResponse, SubdomainStatus, Visibility } from '@/api/types';
 
 function formatTime(iso: string | null | undefined): string | null {
@@ -46,6 +47,20 @@ export default function PublishPage() {
   const cancelMutation = useCancelSubdomainApplication();
   const { toast } = useToast();
 
+  const [subdomainsEnabled, setSubdomainsEnabled] = useState(true);
+  const [publicRootDomain, setPublicRootDomain] = useState<string | null>(null);
+
+  useEffect(() => {
+    getPublicConfig()
+      .then(response => {
+        setSubdomainsEnabled(Boolean(response.data.features.subdomains));
+        setPublicRootDomain(response.data.rootDomain);
+      })
+      .catch(() => {
+        setSubdomainsEnabled(false);
+      });
+  }, []);
+
   const [copied, setCopied] = useState(false);
   const [domainInput, setDomainInput] = useState('');
   const [cnameInput, setCnameInput] = useState('');
@@ -71,7 +86,7 @@ export default function PublishPage() {
   const customDomainUrl = cnameHost ? `https://${cnameHost}` : subdomainUrl;
   const rootSuffix = subdomainInfo?.fullDomain?.includes('.')
     ? subdomainInfo.fullDomain.split('.').slice(1).join('.')
-    : 'nav.ax';
+    : (publicRootDomain || 'nav.ax');
 
   useEffect(() => {
     if (!publication) return;
@@ -406,13 +421,22 @@ export default function PublishPage() {
           <div className="bg-background-50 border border-background-200/70 rounded-xl p-5 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-foreground-900">子域名</h3>
-              <span className={cn('flex items-center gap-1 text-xs', s.color)}>
-                {s.icon}
-                {s.label}
-              </span>
+              {subdomainsEnabled ? (
+                <span className={cn('flex items-center gap-1 text-xs', s.color)}>
+                  {s.icon}
+                  {s.label}
+                </span>
+              ) : (
+                <span className="text-xs text-foreground-400">实例未启用</span>
+              )}
             </div>
 
-            {status === 'approved' && subdomain ? (
+            {!subdomainsEnabled ? (
+              <p className="text-sm text-foreground-500">
+                管理员尚未启用子域名（需在系统配置中开启并设置根域名）。当前可使用公开路径{' '}
+                <code className="text-foreground-700">/u/{slug}</code> 访问已发布页面。
+              </p>
+            ) : status === 'approved' && subdomain ? (
               <div className="space-y-3">
                 <div className="flex items-center gap-2">
                   <Globe className="w-4 h-4 text-green-500" />

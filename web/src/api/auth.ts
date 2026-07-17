@@ -45,6 +45,9 @@ export const authApi = {
   registerViaInvite: (token: string, data: InviteRegisterRequest) =>
     request<ApiResponse<AuthSession>>(`/auth/invitations/${encodeURIComponent(token)}/register`, { method: 'POST', body: data }),
 
+  registerOpen: (data: InviteRegisterRequest) =>
+    request<ApiResponse<AuthSession>>('/auth/register', { method: 'POST', body: data }),
+
   validateInviteToken: (token: string) =>
     request<ApiResponse<{ valid: true; inviterName: string; expiresAt: string }>>(`/auth/invitations/${encodeURIComponent(token)}`),
 

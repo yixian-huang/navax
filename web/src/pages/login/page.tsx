@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import PublicShell from '@/components/feature/PublicShell';
 import { Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react';
 import { useToast } from '@/components/base/Toast';
 import { authApi } from '@/api/auth';
+import { getPublicConfig } from '@/api/assets';
 import { useQueryClient } from '@tanstack/react-query';
 
 export default function LoginPage() {
@@ -11,9 +12,16 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [registrationMode, setRegistrationMode] = useState<'invite' | 'closed' | 'open'>('invite');
   const { toast } = useToast();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+
+  useEffect(() => {
+    getPublicConfig()
+      .then(response => setRegistrationMode(response.data.registrationMode))
+      .catch(() => { /* keep default */ });
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -113,7 +121,11 @@ export default function LoginPage() {
           </form>
 
           <p className="mt-6 text-center text-sm text-foreground-400">
-            还没有账号？需要邀请码才能注册
+            {registrationMode === 'open' && (
+              <>还没有账号？{' '}<Link to="/register" className="text-primary-600 hover:underline font-medium">公开注册</Link></>
+            )}
+            {registrationMode === 'invite' && '还没有账号？需要邀请链接才能注册'}
+            {registrationMode === 'closed' && '当前未开放新用户注册'}
           </p>
         </div>
       </div>

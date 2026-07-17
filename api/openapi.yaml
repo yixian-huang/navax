@@ -244,6 +244,21 @@ paths:
         '409': { $ref: '#/components/responses/ErrorResponse' }
         '410': { $ref: '#/components/responses/ErrorResponse' }
 
+  /api/v1/auth/register:
+    post:
+      tags: [Auth]
+      operationId: registerOpen
+      summary: 公开注册（仅 registrationMode=open）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/AuthSessionResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+        '422': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/me/profile:
     get:
       tags: [Auth]
@@ -1493,7 +1508,7 @@ components:
         instanceName: { type: string }
         publicBaseUrl: { type: string, format: uri }
         rootDomain: { type: [string, 'null'] }
-        registrationMode: { type: string, enum: [invite, closed] }
+        registrationMode: { type: string, enum: [invite, closed, open] }
         features:
           type: object
           required: [discover, analytics, subdomains, mail]
@@ -2130,7 +2145,7 @@ components:
       properties:
         instanceName: { type: string }
         publicBaseUrl: { type: string, format: uri }
-        registrationMode: { type: string, enum: [invite, closed] }
+        registrationMode: { type: string, enum: [invite, closed, open] }
         limits: { $ref: '#/components/schemas/Limits' }
         analytics:
           type: object
@@ -2149,7 +2164,7 @@ components:
       properties:
         instanceName: { type: string, minLength: 1, maxLength: 60 }
         publicBaseUrl: { type: string, format: uri, maxLength: 2048 }
-        registrationMode: { type: string, enum: [invite, closed] }
+        registrationMode: { type: string, enum: [invite, closed, open] }
         limits: { $ref: '#/components/schemas/Limits' }
         analytics: { type: object, properties: { enabled: { type: boolean }, retentionDays: { type: integer, minimum: 7, maximum: 365 } } }
         domain: { type: object, properties: { rootDomain: { type: [string, 'null'] }, subdomainsEnabled: { type: boolean } } }

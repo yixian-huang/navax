@@ -23,6 +23,7 @@ var (
 	ErrInvitationInvalid   = errors.New("invitation is invalid")
 	ErrInvitationExpired   = errors.New("invitation is expired")
 	ErrInvitationExhausted = errors.New("invitation is exhausted")
+	ErrRegistrationClosed  = errors.New("registration is closed")
 	ErrConflict            = errors.New("identity conflict")
 )
 
@@ -112,6 +113,8 @@ type Store interface {
 	DeleteSessionByHash(context.Context, string) error
 	InvitationByHash(context.Context, string, time.Time) (InvitationInfo, error)
 	RegisterWithInvitation(context.Context, RegistrationParams, time.Time) error
+	RegistrationMode(context.Context) (string, error)
+	RegisterOpen(context.Context, RegistrationParams, time.Time) error
 }
 
 type Service struct {
@@ -213,47 +216,74 @@ func (s *Service) Register(ctx context.Context, invitationToken string, input Re
 	if invitationToken == "" {
 		return Session{}, "", ErrInvitationInvalid
 	}
-	if err := validateIdentity(input.Username, input.Email, input.Password); err != nil {
+	params, plainToken, err := s.prepareRegistration(input)
+	if err != nil {
 		return Session{}, "", err
+	}
+	params.InvitationHash = security.HashToken(invitationToken)
+	if err := s.store.RegisterWithInvitation(ctx, params, s.now().UTC()); err != nil {
+		return Session{}, "", err
+	}
+	return Session{ID: params.Session.ID, User: params.User, ExpiresAt: params.Session.ExpiresAt}, plainToken, nil
+}
+
+// RegisterOpen creates a user without an invitation when registration_mode is open.
+func (s *Service) RegisterOpen(ctx context.Context, input RegisterInput) (Session, string, error) {
+	mode, err := s.store.RegistrationMode(ctx)
+	if err != nil {
+		return Session{}, "", err
+	}
+	if mode != "open" {
+		return Session{}, "", ErrRegistrationClosed
+	}
+	params, plainToken, err := s.prepareRegistration(input)
+	if err != nil {
+		return Session{}, "", err
+	}
+	if err := s.store.RegisterOpen(ctx, params, s.now().UTC()); err != nil {
+		return Session{}, "", err
+	}
+	return Session{ID: params.Session.ID, User: params.User, ExpiresAt: params.Session.ExpiresAt}, plainToken, nil
+}
+
+func (s *Service) prepareRegistration(input RegisterInput) (RegistrationParams, string, error) {
+	if err := validateIdentity(input.Username, input.Email, input.Password); err != nil {
+		return RegistrationParams{}, "", err
 	}
 	passwordHash, err := security.HashPassword(input.Password)
 	if err != nil {
-		return Session{}, "", err
+		return RegistrationParams{}, "", err
 	}
 	now := s.now().UTC()
 	userID, err := identity.New("usr")
 	if err != nil {
-		return Session{}, "", err
+		return RegistrationParams{}, "", err
 	}
 	pageID, err := identity.New("pag")
 	if err != nil {
-		return Session{}, "", err
+		return RegistrationParams{}, "", err
 	}
 	categoryID, err := identity.New("cat")
 	if err != nil {
-		return Session{}, "", err
+		return RegistrationParams{}, "", err
 	}
 	sessionID, err := identity.New("ses")
 	if err != nil {
-		return Session{}, "", err
+		return RegistrationParams{}, "", err
 	}
 	plainToken, tokenHash, err := security.NewToken()
 	if err != nil {
-		return Session{}, "", err
+		return RegistrationParams{}, "", err
 	}
 	user := User{
 		ID: userID, Username: strings.TrimSpace(input.Username), Email: normalizeEmail(input.Email),
 		PasswordHash: passwordHash, Role: "user", Status: "active", CreatedAt: now, UpdatedAt: now,
 	}
 	sessionInput := SessionInput{ID: sessionID, TokenHash: tokenHash, UserID: userID, Device: input.Device, ExpiresAt: now.Add(s.sessionTTL), Now: now}
-	err = s.store.RegisterWithInvitation(ctx, RegistrationParams{
-		InvitationHash: security.HashToken(invitationToken), User: user, PageID: pageID,
-		UncategorizedID: categoryID, Slug: defaultSlug(user.Username, user.ID), Session: sessionInput,
-	}, now)
-	if err != nil {
-		return Session{}, "", err
-	}
-	return Session{ID: sessionID, User: user, ExpiresAt: sessionInput.ExpiresAt}, plainToken, nil
+	return RegistrationParams{
+		User: user, PageID: pageID, UncategorizedID: categoryID,
+		Slug: defaultSlug(user.Username, user.ID), Session: sessionInput,
+	}, plainToken, nil
 }
 
 func (s *Service) ValidateInvitation(ctx context.Context, invitationToken string) (InvitationInfo, error) {
