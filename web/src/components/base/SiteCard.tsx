@@ -164,7 +164,7 @@ export default function SiteCard({ site, density, onOpen, onEdit, onDelete, sear
     return (
       <CardWrapper
         {...shared}
-        className="site-card-list flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-background-100 transition-colors duration-200 focus-visible:outline-offset-[-2px]"
+        className="site-card-list flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors duration-200 focus-visible:outline-offset-[-2px] hover:bg-background-100/60"
       >
         <span className="site-card-favicon flex h-9 w-9 flex-shrink-0 items-center justify-center">
           <Favicon url={site.url} className="w-5 h-5" />

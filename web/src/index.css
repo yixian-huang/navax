@@ -303,31 +303,52 @@ body {
 }
 
 /*
- * List density: no frosted plate — text sits on the photo with wallpaper ink only.
- * Hover stays a subtle wash (no blur).
+ * List density panel + rows over wallpaper.
+ * (Root cause of "list still frosted": list used to wrap in .material-card.)
  */
-[data-wallpaper] .site-card-list {
+.site-card-list-panel {
+  /* Default (no wallpaper): quiet surface, not full material elevation */
+  background: oklch(var(--background-50));
+  border: 1px solid oklch(var(--background-200) / 0.55);
+  border-radius: var(--radius-xl, 12px);
+}
+[data-wallpaper] .site-card-list-panel {
   background: transparent;
+  border-color: transparent;
+  border-radius: 0;
+  box-shadow: none;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }
+[data-wallpaper] .site-card-list-panel {
+  --tw-divide-opacity: 1;
+  border-color: transparent;
+}
+[data-wallpaper] .site-card-list-panel > * + * {
+  border-color: color-mix(in oklch, var(--wp-ink) 14%, transparent);
+}
+
+[data-wallpaper] .site-card-list {
+  background: transparent !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  box-shadow: none !important;
+}
 [data-wallpaper] .site-card-list:hover {
-  background: oklch(var(--background-50) / 0.14);
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
+  background: color-mix(in oklch, var(--wp-ink) 10%, transparent) !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+[data-wallpaper] .site-card-list .site-card-title,
+[data-wallpaper] .site-card-list .site-card-title * {
+  color: var(--wp-ink) !important;
+  text-shadow: var(--wp-shadow);
 }
 [data-wallpaper] .site-card-list .site-card-list-domain,
 [data-wallpaper] .site-card-list .site-card-list-desc,
-[data-wallpaper] .wallpaper-ink-scope .site-card-list .site-card-list-domain,
-[data-wallpaper] .wallpaper-ink-scope .site-card-list .site-card-list-desc,
-[data-wallpaper] .wallpaper-ink-scope .site-card-list .site-card-list-domain *,
-[data-wallpaper] .wallpaper-ink-scope .site-card-list .site-card-list-desc * {
-  color: var(--wp-ink-muted);
-  text-shadow: var(--wp-shadow);
-}
-[data-wallpaper] .wallpaper-ink-scope .site-card-list .site-card-title,
-[data-wallpaper] .wallpaper-ink-scope .site-card-list .site-card-title * {
-  color: var(--wp-ink);
+[data-wallpaper] .site-card-list .site-card-list-domain *,
+[data-wallpaper] .site-card-list .site-card-list-desc * {
+  color: var(--wp-ink-muted) !important;
   text-shadow: var(--wp-shadow);
 }
 

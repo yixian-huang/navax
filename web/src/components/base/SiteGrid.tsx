@@ -75,8 +75,10 @@ export default function SiteGrid({
   }
 
   if (density === 'list') {
+    // Not material-card: a frosted slab around the whole list fights wallpaper.
+    // Plain panel + dividers; wallpaper mode is restyled in index.css.
     return (
-      <div className={cn('material-card p-2 divide-y divide-secondary-100/25', className)}>
+      <div className={cn('site-card-list-panel p-1 sm:p-2 divide-y divide-background-200/40', className)}>
         {sites.map(site => (
           <SiteCard
             key={site.id}
