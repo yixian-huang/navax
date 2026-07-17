@@ -11,9 +11,10 @@ test.describe('用户登录', () => {
 
   test('邮箱密码登录后进入工作台', async ({ page }) => {
     await page.goto('/login');
-    await page.getByPlaceholder('your@email.com').fill(USER.email);
-    await page.getByPlaceholder('输入密码').fill(USER.password);
-    await page.getByRole('button', { name: '登录' }).click();
+    // 登录页默认停在「密码登录」tab；提交按钮用 exact 区分「密码登录/验证码登录」等按钮。
+    await page.getByLabel('邮箱').fill(USER.email);
+    await page.getByLabel('密码', { exact: true }).fill(USER.password);
+    await page.getByRole('button', { name: '登录', exact: true }).click();
     await page.waitForURL(/\/app/);
     await expect(page.getByText('工作台').first()).toBeVisible();
   });
