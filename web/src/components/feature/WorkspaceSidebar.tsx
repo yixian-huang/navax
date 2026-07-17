@@ -8,6 +8,8 @@ export interface SidebarNavItem {
   path: string;
   icon: LucideIcon;
   label: string;
+  /** Open in a new tab (absolute https homepage / subdomain). */
+  external?: boolean;
 }
 
 type SidebarVariant = 'admin' | 'app';
@@ -125,24 +127,42 @@ export default function WorkspaceSidebar({
           })}
           {quickLinks.length > 0 && (
             <div className="pt-2 mt-2 border-t border-background-200/70 space-y-0.5">
-              {quickLinks.map(item => (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  onClick={onClose}
-                  className={cn(
-                    'flex items-center transition-all duration-200 whitespace-nowrap text-foreground-500 hover:bg-background-100 hover:text-foreground-800',
-                    v.itemH,
-                    v.itemGap,
-                    v.itemPx,
-                    v.itemRadius,
-                    v.itemTextSize,
-                  )}
-                >
-                  <item.icon className={cn(v.iconSize, 'flex-shrink-0')} />
-                  {item.label}
-                </Link>
-              ))}
+              {quickLinks.map(item => {
+                const className = cn(
+                  'flex items-center transition-all duration-200 whitespace-nowrap text-foreground-500 hover:bg-background-100 hover:text-foreground-800',
+                  v.itemH,
+                  v.itemGap,
+                  v.itemPx,
+                  v.itemRadius,
+                  v.itemTextSize,
+                );
+                if (item.external || /^https?:\/\//i.test(item.path)) {
+                  return (
+                    <a
+                      key={item.path}
+                      href={item.path}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={onClose}
+                      className={className}
+                    >
+                      <item.icon className={cn(v.iconSize, 'flex-shrink-0')} />
+                      {item.label}
+                    </a>
+                  );
+                }
+                return (
+                  <Link
+                    key={item.path}
+                    to={item.path}
+                    onClick={onClose}
+                    className={className}
+                  >
+                    <item.icon className={cn(v.iconSize, 'flex-shrink-0')} />
+                    {item.label}
+                  </Link>
+                );
+              })}
             </div>
           )}
         </nav>

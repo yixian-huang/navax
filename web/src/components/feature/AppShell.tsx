@@ -9,12 +9,13 @@ import {
   ChevronRight, Home, Shield, Sparkles, ChevronDown, BookOpen, BarChart3
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useCurrentUser } from '@/hooks/useQueries';
+import { useCurrentUser, useMyPage, useSubdomain } from '@/hooks/useQueries';
 import { LoadingSkeleton } from '@/components/base/SharedUI';
 import WorkspaceSidebar, { type SidebarNavItem } from '@/components/feature/WorkspaceSidebar';
 import PublishStatusControl from '@/components/feature/PublishStatusControl';
 import PublishDraftBanner from '@/components/feature/PublishDraftBanner';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
+import { isExternalHomeUrl, resolveWorkspaceHomeUrl } from '@/lib/workspaceHomeUrl';
 
 const navItems: SidebarNavItem[] = [
   { path: '/app', icon: LayoutDashboard, label: '概览' },
@@ -38,7 +39,15 @@ const breadcrumbLabels: Record<string, string> = {
   '/app/settings': '账号设置',
 };
 
-function AppSidebarBottom({ admin }: { admin: boolean }) {
+function AppSidebarBottom({
+  admin,
+  homePath,
+}: {
+  admin: boolean;
+  homePath: string;
+}) {
+  const leaveClass =
+    'flex items-center gap-2.5 h-8 px-2.5 rounded-md text-sm text-foreground-400 hover:text-foreground-700 transition-colors duration-150 whitespace-nowrap';
   return (
     <div className="border-t border-background-200/70 p-2 space-y-0.5">
       {admin && (
@@ -50,13 +59,17 @@ function AppSidebarBottom({ admin }: { admin: boolean }) {
           管理后台
         </Link>
       )}
-      <Link
-        to="/"
-        className="flex items-center gap-2.5 h-8 px-2.5 rounded-md text-sm text-foreground-400 hover:text-foreground-700 transition-colors duration-150 whitespace-nowrap"
-      >
-        <ArrowLeft className="w-3.5 h-3.5 flex-shrink-0" />
-        退出工作台
-      </Link>
+      {isExternalHomeUrl(homePath) ? (
+        <a href={homePath} target="_blank" rel="noopener noreferrer" className={leaveClass}>
+          <ArrowLeft className="w-3.5 h-3.5 flex-shrink-0" />
+          退出工作台
+        </a>
+      ) : (
+        <Link to={homePath} className={leaveClass}>
+          <ArrowLeft className="w-3.5 h-3.5 flex-shrink-0" />
+          退出工作台
+        </Link>
+      )}
     </div>
   );
 }
@@ -90,6 +103,8 @@ export default function AppShell() {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const { data: authUser, isLoading, error, status } = useCurrentUser();
+  const { data: page } = useMyPage();
+  const { data: subdomainInfo } = useSubdomain();
 
   const user = authUser?.user;
   const isAdminUser = user?.role === 'admin';
@@ -109,9 +124,20 @@ export default function AppShell() {
     return '访问我的主页';
   }, [isAdminUser, scope]);
 
-  const visibleQuickLinks = useMemo(() => [
-    { path: '/', icon: Home, label: quickLinkLabel },
-  ], [quickLinkLabel]);
+  const homePath = useMemo(() => resolveWorkspaceHomeUrl({
+    scope,
+    subdomain: subdomainInfo,
+    publication: page?.publication,
+  }), [scope, subdomainInfo, page?.publication]);
+
+  const visibleQuickLinks = useMemo((): SidebarNavItem[] => [
+    {
+      path: homePath,
+      icon: Home,
+      label: quickLinkLabel,
+      external: isExternalHomeUrl(homePath),
+    },
+  ], [homePath, quickLinkLabel]);
 
   const currentPageLabel = breadcrumbLabels[location.pathname] || '';
 
@@ -161,7 +187,7 @@ export default function AppShell() {
         quickLinks={visibleQuickLinks}
         variant="app"
         badge="工作台"
-        bottomContent={<AppSidebarBottom admin={isAdminUser} />}
+        bottomContent={<AppSidebarBottom admin={isAdminUser} homePath={homePath} />}
       />
 
       {/* Main */}

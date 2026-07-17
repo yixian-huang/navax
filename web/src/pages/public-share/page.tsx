@@ -6,6 +6,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Globe, ShieldCheck, Calendar, Bookmark, Layers, Copy, Check } from 'lucide-react';
 import PublicShell from '@/components/feature/PublicShell';
+import BrowserPageMenu from '@/components/feature/BrowserPageMenu';
 import SiteCard from '@/components/base/SiteCard';
 import CategoryTabs from '@/components/base/CategoryTabs';
 import DensitySwitcher from '@/components/base/DensitySwitcher';
@@ -381,6 +382,7 @@ export default function PublicSharePage() {
           </div>
         </div>
       </div>
+      <BrowserPageMenu />
     </PublicShell>
   );
 }
