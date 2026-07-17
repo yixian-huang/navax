@@ -301,7 +301,11 @@ export function usePublish() {
       if (!page) throw new Error('导航页尚未加载');
       return navigationApi.forPage(page.id).publish(page.draftRevision ?? 0);
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['navigation', 'page', scope] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['navigation', 'page', scope] });
+      // Homepage / public share read from this cache key tree.
+      void qc.invalidateQueries({ queryKey: ['public', 'page'] });
+    },
   });
 }
 
@@ -314,7 +318,10 @@ export function useUnpublish() {
       if (!page) throw new Error('导航页尚未加载');
       return navigationApi.forPage(page.id).unpublish();
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['navigation', 'page', scope] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['navigation', 'page', scope] });
+      void qc.invalidateQueries({ queryKey: ['public', 'page'] });
+    },
   });
 }
 
@@ -327,6 +334,7 @@ export function usePublicPage(slug: string) {
       return res.data;
     },
     enabled: !!slug,
+    staleTime: 0,
   });
 }
 
@@ -338,6 +346,8 @@ export function useSystemPage() {
       const res = await navigationApi.getPublicPage('nav');
       return res.data;
     },
+    // Publish can land between navigations; prefer network over long client staleness.
+    staleTime: 0,
     // 契约规定主站未发布时返回 404，属稳定状态，重试只会拖慢空状态展示。
     retry: (failureCount, error) =>
       !(error instanceof ApiError && error.status === 404) && failureCount < 3,

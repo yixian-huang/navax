@@ -391,10 +391,13 @@ func writePublishedPage(w http.ResponseWriter, r *http.Request, page navigation.
 		return
 	}
 	w.Header().Set("ETag", page.ETag)
+	// Always revalidate against ETag so publish (theme/opacity/links) is visible
+	// on the next refresh. max-age + stale-while-revalidate previously left
+	// browsers serving pre-publish JSON for up to ~6 minutes.
 	if page.Visibility == navigation.VisibilityPublic || page.Kind == navigation.PageKindSystem {
-		w.Header().Set("Cache-Control", "public, max-age=60, stale-while-revalidate=300")
+		w.Header().Set("Cache-Control", "public, max-age=0, must-revalidate")
 	} else {
-		w.Header().Set("Cache-Control", "private, max-age=60")
+		w.Header().Set("Cache-Control", "private, no-cache")
 	}
 	WriteJSON(w, r, http.StatusOK, page)
 }

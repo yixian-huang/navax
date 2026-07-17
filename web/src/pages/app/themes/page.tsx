@@ -38,7 +38,9 @@ export default function ThemesPage() {
   const { markSaving, markSaved } = useSaveStatus();
 
   // Background image state
-  const [bgConfig, setBgConfig] = useState<BgConfig>({ image: '', opacity: 0.15 });
+  const [bgConfig, setBgConfig] = useState<BgConfig>({ image: '', opacity: 0.8 });
+  const bgConfigRef = useRef(bgConfig);
+  bgConfigRef.current = bgConfig;
   const [bgUrlInput, setBgUrlInput] = useState('');
   const [showBgUrlInput, setShowBgUrlInput] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -127,8 +129,9 @@ export default function ThemesPage() {
   }, [bgConfig, persistBackground, toast, page?.publication]);
 
   const handleRemoveBg = useCallback(async () => {
-    const updated = { image: '', opacity: 0.15 };
+    const updated = { image: '', opacity: 0.8 };
     setBgConfig(updated);
+    bgConfigRef.current = updated;
     setBgUrlInput('');
     try {
       await persistBackground(updated);
@@ -164,18 +167,25 @@ export default function ThemesPage() {
   }, [handleUploadBg]);
 
   const handleOpacityChange = useCallback((opacity: number) => {
-    setBgConfig(current => ({ ...current, opacity }));
+    setBgConfig(current => {
+      const next = { ...current, opacity };
+      bgConfigRef.current = next;
+      return next;
+    });
   }, []);
 
+  // Commit on pointer-up / key-up: always read the latest ref so we don't
+  // persist a pre-drag opacity (React state is async across the drag).
   const handleOpacityCommit = useCallback(() => {
-    void persistBackground(bgConfig)
+    const next = bgConfigRef.current;
+    void persistBackground(next)
       .then(() => {
         toast('success', draftSaveToastMessage(page?.publication));
       })
       .catch(cause => {
         toast('error', cause instanceof Error ? cause.message : '透明度保存失败');
       });
-  }, [bgConfig, persistBackground, toast, page?.publication]);
+  }, [persistBackground, toast, page?.publication]);
 
   if (isLoading) return <LoadingSkeleton count={4} />;
   if (isError || !page?.settings) {
