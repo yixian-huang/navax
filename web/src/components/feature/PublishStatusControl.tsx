@@ -9,6 +9,7 @@ import { useToast } from '@/components/base/Toast';
 import { usePublish } from '@/hooks/useQueries';
 import { usePublishUiState } from '@/hooks/usePublishUiState';
 import {
+  handlePublishError,
   navigateToVisibilityFix,
   publishSettingsPath,
   resolvePrimaryPublishIntent,
@@ -21,14 +22,10 @@ function shortLabelClass(stateId: string): string {
   return 'text-foreground-400';
 }
 
-function isVisibilityRelatedError(message: string): boolean {
-  return /visibility|private|可见性|私密/i.test(message);
-}
-
 export default function PublishStatusControl() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { state, scope, isLoading } = usePublishUiState('toolbar');
+  const { state, scope, isLoading, refetch } = usePublishUiState('toolbar');
   const { mutate: publishMutation, isPending: publishing } = usePublish();
 
   if (isLoading) {
@@ -53,11 +50,11 @@ export default function PublishStatusControl() {
         toast('success', toastForPublishSuccess(stateBefore));
       },
       onError: (error: Error) => {
-        const message = error.message || '发布失败';
-        toast('error', message);
-        if (isVisibilityRelatedError(message)) {
-          navigateToVisibilityFix(navigate, scope);
-        }
+        handlePublishError(error, {
+          toast,
+          refetch: () => { void refetch(); },
+          navigateToVisibilityFix: () => navigateToVisibilityFix(navigate, scope),
+        });
       },
     });
   };

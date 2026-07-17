@@ -1,4 +1,5 @@
 import type { NavigateFunction } from 'react-router-dom';
+import { ApiError } from '@/api/client';
 import type { PublishUiState } from '@/lib/publish-state';
 import { publishSuccessToastMessage } from '@/lib/publish-state';
 
@@ -24,4 +25,24 @@ export function toastForPublishSuccess(stateBefore: PublishUiState): string {
 
 export function navigateToVisibilityFix(navigate: NavigateFunction, scope: string): void {
   navigate(publishSettingsPath(scope, 'visibility'));
+}
+
+export function handlePublishError(
+  error: unknown,
+  opts: {
+    toast: (type: 'error', message: string) => void;
+    refetch?: () => void;
+    navigateToVisibilityFix?: () => void;
+  },
+): void {
+  const message = error instanceof Error ? error.message : '发布失败';
+  if (error instanceof ApiError && error.status === 409) {
+    opts.toast('error', '内容已变更，请刷新后重试');
+    opts.refetch?.();
+    return;
+  }
+  opts.toast('error', message || '发布失败');
+  if (/visibility|private|可见性|私密/i.test(message)) {
+    opts.navigateToVisibilityFix?.();
+  }
 }

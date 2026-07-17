@@ -9,6 +9,7 @@ import { ArrowLeft, ExternalLink, Globe, Loader2 } from 'lucide-react';
 import { useMyPage, usePublish } from '@/hooks/useQueries';
 import { usePublishUiState } from '@/hooks/usePublishUiState';
 import {
+  handlePublishError,
   navigateToVisibilityFix,
   publishSettingsPath,
   resolvePrimaryPublishIntent,
@@ -20,10 +21,6 @@ import { request } from '@/api/client';
 import type { ApiResponse, PublishedPage } from '@/api/types';
 import IconRenderer from '@/components/base/IconRenderer';
 
-function isVisibilityRelatedError(message: string): boolean {
-  return /visibility|private|可见性|私密/i.test(message);
-}
-
 export default function PreviewPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -33,6 +30,7 @@ export default function PreviewPage() {
     scope,
     slug,
     publication,
+    refetch,
   } = usePublishUiState('preview');
   const { mutate: publishMutation, isPending: publishing } = usePublish();
   const [preview, setPreview] = useState<PublishedPage | null>(null);
@@ -84,11 +82,11 @@ export default function PreviewPage() {
         toast('success', toastForPublishSuccess(stateBefore));
       },
       onError: (cause: Error) => {
-        const message = cause.message || '发布失败';
-        toast('error', message);
-        if (isVisibilityRelatedError(message)) {
-          navigateToVisibilityFix(navigate, scope);
-        }
+        handlePublishError(cause, {
+          toast,
+          refetch: () => { void refetch(); },
+          navigateToVisibilityFix: () => navigateToVisibilityFix(navigate, scope),
+        });
       },
     });
   };

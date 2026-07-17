@@ -43,9 +43,14 @@ test.describe('用户工作台', () => {
     await page.goto('/app/publish');
     await expect(page.getByText('未发布').first()).toBeVisible();
 
-    await page.getByRole('button', { name: '发布', exact: true }).click();
-    await expect(page.getByText('发布成功！')).toBeVisible();
-    await expect(page.getByText('已发布').first()).toBeVisible();
+    // Prefer page primary CTA over AppShell header toolbar (both label「发布」).
+    await page
+      .locator('div.space-y-5')
+      .filter({ has: page.getByRole('heading', { name: '发布 & 域名' }) })
+      .getByRole('button', { name: '发布', exact: true })
+      .click();
+    await expect(page.getByText('发布成功')).toBeVisible();
+    await expect(page.getByText('已是最新').first()).toBeVisible();
 
     const publication = await page.request.get('/api/v1/pages/current?scope=personal');
     const slug = (await publication.json()).data.publication.slug;
@@ -59,7 +64,7 @@ test.describe('用户工作台', () => {
     await page.goto('/app/themes');
     await expect(page.getByText('Slate Dark').first()).toBeVisible();
     await page.getByRole('button', { name: /Slate Dark/ }).click();
-    await expect(page.getByText('主题已切换为「Slate Dark」')).toBeVisible();
+    await expect(page.getByText(/主题已写入草稿：「Slate Dark」/)).toBeVisible();
   });
 
   test('导入书签并导出备份', async ({ page }) => {

@@ -14,7 +14,7 @@ import {
   useUpdatePublication,
 } from '@/hooks/useQueries';
 import { usePublishUiState } from '@/hooks/usePublishUiState';
-import { previewPath, toastForPublishSuccess } from '@/lib/publish-actions';
+import { handlePublishError, previewPath, toastForPublishSuccess } from '@/lib/publish-actions';
 import { LoadingSkeleton, ErrorState } from '@/components/base/SharedUI';
 import { useToast } from '@/components/base/Toast';
 import { cn } from '@/lib/utils';
@@ -107,7 +107,13 @@ export default function PublishPage() {
     const stateBefore = state;
     publishMutation(undefined, {
       onSuccess: () => toast('success', toastForPublishSuccess(stateBefore)),
-      onError: (e: Error) => toast('error', e.message || '发布失败'),
+      // Already on publish page — skip visibility navigation; still refetch on 409.
+      onError: (e: Error) => {
+        handlePublishError(e, {
+          toast,
+          refetch: () => { void refetch(); },
+        });
+      },
     });
   };
 

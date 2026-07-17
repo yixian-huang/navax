@@ -7,6 +7,7 @@ import { Link2, Puzzle, Palette, Globe, Upload, Eye, Clock, ArrowUpRight, Shield
 import { usePublish, useSubdomain } from '@/hooks/useQueries';
 import { usePublishUiState } from '@/hooks/usePublishUiState';
 import {
+  handlePublishError,
   navigateToVisibilityFix,
   previewPath,
   publishSettingsPath,
@@ -16,10 +17,6 @@ import {
 import { LoadingSkeleton, ErrorState } from '@/components/base/SharedUI';
 import { useToast } from '@/components/base/Toast';
 import { cn } from '@/lib/utils';
-
-function isVisibilityRelatedError(message: string): boolean {
-  return /visibility|private|可见性|私密/i.test(message);
-}
 
 function step0Desc(stateId: string): string {
   if (stateId === 'published_with_draft') return '有草稿未上线 · 访客仍看线上版';
@@ -92,11 +89,11 @@ export default function AppOverview() {
         toast('success', toastForPublishSuccess(stateBefore));
       },
       onError: (error: Error) => {
-        const message = error.message || '发布失败';
-        toast('error', message);
-        if (isVisibilityRelatedError(message)) {
-          navigateToVisibilityFix(navigate, scope);
-        }
+        handlePublishError(error, {
+          toast,
+          refetch: () => { void refetch(); },
+          navigateToVisibilityFix: () => navigateToVisibilityFix(navigate, scope),
+        });
       },
     });
   };

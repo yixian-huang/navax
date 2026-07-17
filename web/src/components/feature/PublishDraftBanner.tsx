@@ -10,6 +10,7 @@ import { useToast } from '@/components/base/Toast';
 import { usePublish } from '@/hooks/useQueries';
 import { usePublishUiState } from '@/hooks/usePublishUiState';
 import {
+  handlePublishError,
   navigateToVisibilityFix,
   previewPath,
   resolvePrimaryPublishIntent,
@@ -20,14 +21,10 @@ function dismissKey(scope: string, pageId: string) {
   return `navax:publish-banner-dismissed:${scope}:${pageId}`;
 }
 
-function isVisibilityRelatedError(message: string): boolean {
-  return /visibility|private|可见性|私密/i.test(message);
-}
-
 export default function PublishDraftBanner({ className }: { className?: string }) {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { state, scope, pageId } = usePublishUiState('banner');
+  const { state, scope, pageId, refetch } = usePublishUiState('banner');
   const { mutate: publishMutation, isPending: publishing } = usePublish();
   const [dismissed, setDismissed] = useState(false);
 
@@ -57,11 +54,11 @@ export default function PublishDraftBanner({ className }: { className?: string }
         toast('success', toastForPublishSuccess(stateBefore));
       },
       onError: (error: Error) => {
-        const message = error.message || '发布失败';
-        toast('error', message);
-        if (isVisibilityRelatedError(message)) {
-          navigateToVisibilityFix(navigate, scope);
-        }
+        handlePublishError(error, {
+          toast,
+          refetch: () => { void refetch(); },
+          navigateToVisibilityFix: () => navigateToVisibilityFix(navigate, scope),
+        });
       },
     });
   };
