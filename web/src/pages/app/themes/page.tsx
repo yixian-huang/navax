@@ -16,7 +16,7 @@ import { ErrorState, LoadingSkeleton } from '@/components/base/SharedUI';
 import { assetsApi, getPublicConfig } from '@/api/assets';
 import { ApiError } from '@/api/client';
 
-const UPLOAD_ACCEPT = 'image/png,image/jpeg,image/gif';
+const UPLOAD_ACCEPT = 'image/png,image/jpeg,image/jpg,image/gif,image/webp';
 const DEFAULT_MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 
 import '@/themes/packages';
@@ -147,7 +147,7 @@ export default function ThemesPage() {
       await handleSaveBg(response.data.url);
     } catch (cause) {
       const message = cause instanceof ApiError && cause.status === 415
-        ? '仅支持 PNG、JPEG 或 GIF 图片'
+        ? '仅支持 PNG、JPEG、GIF 或 WebP 图片'
         : cause instanceof Error ? cause.message : '背景图上传失败';
       toast('error', message);
     } finally {

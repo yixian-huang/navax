@@ -4,6 +4,7 @@
 package assets
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -22,6 +23,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	_ "golang.org/x/image/webp"
 
 	"github.com/yixian-huang/navax/internal/identity"
 )
@@ -42,7 +45,7 @@ const (
 	maxImagePixels  = uint64(40_000_000)
 )
 
-var objectKeyPattern = regexp.MustCompile(`^(avatar|background|site-icon)/[a-f0-9]{32}\.(png|jpg|gif)$`)
+var objectKeyPattern = regexp.MustCompile(`^(avatar|background|site-icon)/[a-f0-9]{32}\.(png|jpg|gif|webp)$`)
 
 // StorageResolver returns the active object storage backend for uploads.
 // Returning (nil, nil) means local filesystem. Errors fail the upload.
@@ -364,6 +367,10 @@ func (b *bytesReadSeekCloser) Seek(offset int64, whence int) (int64, error) {
 
 func (b *bytesReadSeekCloser) Close() error { return nil }
 
+// inspectImage identifies raster type from file content. Client MIME and
+// filename extension are treated as soft hints only: browsers often send
+// image/jpg, empty type, or mismatched extensions for otherwise valid files.
+// Storage extension always follows the verified content type.
 func inspectImage(file *os.File, filename, declaredMIME string) (string, string, error) {
 	if _, err := file.Seek(0, io.SeekStart); err != nil {
 		return "", "", err
@@ -374,19 +381,17 @@ func inspectImage(file *os.File, filename, declaredMIME string) (string, string,
 		return "", "", ErrInvalidImage
 	}
 	header = header[:count]
-	detected := http.DetectContentType(header)
-	extension, accepted := imageTypes[detected]
-	if !accepted {
+	if isBlockedImagePayload(header) {
 		return "", "", ErrUnsupported
 	}
-	declaredMIME = strings.ToLower(strings.TrimSpace(strings.Split(declaredMIME, ";")[0]))
-	if declaredMIME != "" && declaredMIME != "application/octet-stream" && declaredMIME != detected {
-		return "", "", ErrUnsupported
+
+	sniffed := normalizeImageMIME(http.DetectContentType(header))
+	if _, ok := imageTypes[sniffed]; !ok {
+		// Fall back to format decoders when the sniffer is inconclusive
+		// (e.g. application/octet-stream for short or unusual headers).
+		sniffed = ""
 	}
-	filenameExtension := strings.ToLower(filepath.Ext(filename))
-	if !acceptedExtension(detected, filenameExtension) {
-		return "", "", ErrUnsupported
-	}
+
 	if _, err := file.Seek(0, io.SeekStart); err != nil {
 		return "", "", err
 	}
@@ -394,33 +399,69 @@ func inspectImage(file *os.File, filename, declaredMIME string) (string, string,
 	if err != nil || config.Width <= 0 || config.Height <= 0 {
 		return "", "", ErrInvalidImage
 	}
-	if !formatMatchesMIME(format, detected) || uint64(config.Width)*uint64(config.Height) > maxImagePixels {
+	if uint64(config.Width)*uint64(config.Height) > maxImagePixels {
 		return "", "", ErrInvalidImage
 	}
-	return detected, extension, nil
+	detected, ok := formatToMIME[format]
+	if !ok {
+		return "", "", ErrUnsupported
+	}
+	// Sniffer and decoder must agree when both identify an image type.
+	if sniffed != "" && sniffed != detected {
+		return "", "", ErrInvalidImage
+	}
+	_ = declaredMIME // client MIME is a soft hint only; content is authoritative
+	filenameExtension := strings.ToLower(filepath.Ext(filename))
+	if filenameExtension == ".svg" || filenameExtension == ".svgz" {
+		return "", "", ErrUnsupported
+	}
+	return detected, imageTypes[detected], nil
 }
 
 var imageTypes = map[string]string{
 	"image/png":  ".png",
 	"image/jpeg": ".jpg",
 	"image/gif":  ".gif",
+	"image/webp": ".webp",
 }
 
-func acceptedExtension(mimeType, extension string) bool {
-	switch mimeType {
-	case "image/jpeg":
-		return extension == ".jpg" || extension == ".jpeg"
-	case "image/png":
-		return extension == ".png"
-	case "image/gif":
-		return extension == ".gif"
+var formatToMIME = map[string]string{
+	"png":  "image/png",
+	"jpeg": "image/jpeg",
+	"gif":  "image/gif",
+	"webp": "image/webp",
+}
+
+func normalizeImageMIME(value string) string {
+	value = strings.ToLower(strings.TrimSpace(strings.Split(value, ";")[0]))
+	switch value {
+	case "image/jpg", "image/pjpeg", "image/x-jpeg":
+		return "image/jpeg"
+	case "image/x-png":
+		return "image/png"
 	default:
-		return false
+		return value
 	}
 }
 
-func formatMatchesMIME(format, mimeType string) bool {
-	return format == "jpeg" && mimeType == "image/jpeg" || format == "png" && mimeType == "image/png" || format == "gif" && mimeType == "image/gif"
+func isBlockedImagePayload(header []byte) bool {
+	// Reject obvious non-raster / active content before decoder registration
+	// could confuse type detection (SVG, HTML, XML polyglots).
+	trimmed := bytes.TrimSpace(header)
+	if len(trimmed) == 0 {
+		return true
+	}
+	lower := bytes.ToLower(trimmed[:min(len(trimmed), 256)])
+	switch {
+	case bytes.HasPrefix(lower, []byte("<svg")),
+		bytes.HasPrefix(lower, []byte("<?xml")),
+		bytes.HasPrefix(lower, []byte("<!doctype html")),
+		bytes.HasPrefix(lower, []byte("<html")),
+		bytes.Contains(lower, []byte("<script")):
+		return true
+	default:
+		return false
+	}
 }
 
 func validKind(kind string) bool {
