@@ -219,11 +219,16 @@ export default function SiteCard({ site, density, onOpen, onEdit, onDelete, sear
     );
   }
 
-  // Comfortable: fixed min-height so cards with/without desc align in the grid.
+  // Comfortable: title + one secondary line. Prefer description; fall back to domain
+  // so cards without a written desc still feel complete (no empty reserved line).
+  const secondary = desc || domain;
   return (
     <CardWrapper
       {...shared}
-      className="material-card site-card-comfortable flex items-start gap-3 p-3.5 min-h-[5.75rem]"
+      className={cn(
+        'material-card site-card-comfortable flex gap-3 p-3.5 min-h-[5.25rem]',
+        desc ? 'items-start' : 'items-center',
+      )}
     >
       <span className="site-card-favicon flex h-10 w-10 flex-shrink-0 items-center justify-center">
         <SiteIcon site={site} size={24} />
@@ -235,19 +240,16 @@ export default function SiteCard({ site, density, onOpen, onEdit, onDelete, sear
           </h3>
           <i className="ri-arrow-right-up-line mt-0.5 text-sm text-foreground-300 opacity-0 -translate-x-0.5 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300 flex-shrink-0" />
         </div>
-        <p className="site-card-domain text-[11px] text-foreground-500 truncate font-mono mt-0.5">
-          <HighlightText text={domain} query={q} />
+        <p
+          className={cn(
+            'text-[11px] line-clamp-1 mt-0.5 leading-snug',
+            desc
+              ? 'site-card-desc text-foreground-600'
+              : 'site-card-domain text-foreground-500 font-mono',
+          )}
+        >
+          <HighlightText text={secondary} query={q} />
         </p>
-        {desc ? (
-          <p className="site-card-desc text-[11px] text-foreground-600 line-clamp-1 mt-0.5 leading-snug">
-            <HighlightText text={desc} query={q} />
-          </p>
-        ) : (
-          // Reserve a line so grid rows stay even when some sites lack description.
-          <p className="site-card-desc-placeholder text-[11px] mt-0.5 leading-snug invisible select-none" aria-hidden>
-            &nbsp;
-          </p>
-        )}
       </div>
     </CardWrapper>
   );

@@ -8,6 +8,9 @@ import { sakuraTheme } from '@/themes/packages/sakura';
 import { mochiTheme } from '@/themes/packages/mochi';
 import { pastelskyTheme } from '@/themes/packages/pastelsky';
 import { monoTheme } from '@/themes/packages/mono';
+import { cyberTheme } from '@/themes/packages/cyber';
+import { orbitTheme } from '@/themes/packages/orbit';
+import { terminalTheme } from '@/themes/packages/terminal';
 
 themeRegistry.registerAll([
   slateTheme,
@@ -19,4 +22,7 @@ themeRegistry.registerAll([
   mochiTheme,
   pastelskyTheme,
   monoTheme,
+  cyberTheme,
+  orbitTheme,
+  terminalTheme,
 ]);

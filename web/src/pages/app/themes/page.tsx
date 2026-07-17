@@ -358,14 +358,14 @@ export default function ThemesPage() {
         onClick={() => handleActivate(pkg.id)}
         disabled={isPending}
         className={cn(
-          'relative flex flex-col rounded-xl border-2 transition-all duration-200 text-left cursor-pointer',
+          'relative flex flex-col rounded-lg border transition-all duration-200 text-left cursor-pointer',
           isActive && !isPending
-            ? 'border-primary-500'
+            ? 'border-primary-500 ring-1 ring-primary-500/30'
             : 'border-background-200/70 hover:border-background-300',
           isPending && 'opacity-70',
         )}
       >
-        <div className="h-16 flex items-end rounded-t-[10px] overflow-hidden">
+        <div className="h-10 flex items-end rounded-t-[7px] overflow-hidden">
           {pkg.meta.swatches.map((c, i) => (
             <div
               key={i}
@@ -375,26 +375,28 @@ export default function ThemesPage() {
           ))}
         </div>
 
-        <div className="p-3.5 bg-background-50 rounded-b-[10px]">
-          <div className="flex items-center justify-between mb-1">
-            <div className="flex items-center gap-1.5">
-              <span className="text-sm font-semibold text-foreground-900">{pkg.meta.name}</span>
-              <span className="text-[10px] text-foreground-400 tracking-wide">{pkg.meta.subtitle}</span>
+        <div className="px-2.5 py-2 bg-background-50 rounded-b-[7px]">
+          <div className="flex items-center justify-between gap-1.5">
+            <div className="min-w-0 flex items-baseline gap-1">
+              <span className="text-xs font-semibold text-foreground-900 truncate">{pkg.meta.name}</span>
+              <span className="text-[9px] text-foreground-400 tracking-wide truncate hidden sm:inline">
+                {pkg.meta.subtitle}
+              </span>
             </div>
             {isActive && !isPending && (
-              <div className="w-6 h-6 rounded-full bg-primary-500 flex items-center justify-center flex-shrink-0">
-                <Check className="w-3.5 h-3.5 text-background-50" />
+              <div className="w-4 h-4 rounded-full bg-primary-500 flex items-center justify-center flex-shrink-0">
+                <Check className="w-2.5 h-2.5 text-background-50" />
               </div>
             )}
             {isPending && (
-              <div className="w-6 h-6 rounded-full border-2 border-primary-400 border-t-transparent animate-spin flex-shrink-0" />
+              <div className="w-4 h-4 rounded-full border-2 border-primary-400 border-t-transparent animate-spin flex-shrink-0" />
             )}
           </div>
-          <p className="text-[11px] text-foreground-400 leading-relaxed">
+          <p className="mt-0.5 text-[10px] text-foreground-400 leading-snug line-clamp-2">
             {pkg.meta.description}
           </p>
           <span className={cn(
-            'inline-block mt-2 text-[10px] font-medium px-2 py-0.5 rounded-full',
+            'inline-block mt-1.5 text-[9px] font-medium px-1.5 py-px rounded-full',
             pkg.meta.vibe === 'cute'
               ? 'bg-pink-50 text-pink-600'
               : 'bg-slate-100 text-slate-600',
@@ -752,7 +754,7 @@ export default function ThemesPage() {
             <span className="w-1.5 h-4 rounded-full bg-slate-400" />
             Classic 经典
           </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
             {seriousThemes.map(renderThemeCard)}
           </div>
         </div>
@@ -764,7 +766,7 @@ export default function ThemesPage() {
             <span className="w-1.5 h-4 rounded-full bg-pink-400" />
             Kawaii 可爱
           </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
             {cuteThemes.map(renderThemeCard)}
           </div>
         </div>

@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/yixian-huang/navax/internal/auth"
 	"github.com/yixian-huang/navax/internal/database"
+	projectmigrations "github.com/yixian-huang/navax/migrations"
 	_ "modernc.org/sqlite"
 )
 
@@ -50,9 +52,13 @@ func TestCreateBackupProducesValidSQLite(t *testing.T) {
 	if err := copyDB.QueryRowContext(ctx, "PRAGMA integrity_check").Scan(&integrity); err != nil || integrity != "ok" {
 		t.Fatalf("integrity_check = %q, %v", integrity, err)
 	}
+	sqlFiles, globErr := fs.Glob(projectmigrations.Files, "*.sql")
+	if globErr != nil {
+		t.Fatalf("glob migrations: %v", globErr)
+	}
 	var migrationCount int
-	if err := copyDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM schema_migrations").Scan(&migrationCount); err != nil || migrationCount != 4 {
-		t.Fatalf("migration count = %d, %v", migrationCount, err)
+	if err := copyDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM schema_migrations").Scan(&migrationCount); err != nil || migrationCount != len(sqlFiles) {
+		t.Fatalf("migration count = %d, want %d, %v", migrationCount, len(sqlFiles), err)
 	}
 }
 

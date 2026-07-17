@@ -27,6 +27,8 @@ GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -buildvcs=false \
 bash install-navax.sh /root/navax
 ```
 
+脚本会尝试安装 `ffmpeg`（视频背景压缩与 poster）。若自动安装失败，请手动：`apt-get install -y ffmpeg`（或发行版等价包）。
+
 脚本结束会打印 `NAVAX_SETUP_TOKEN`；`NAVAX_MASTER_KEY` 已写入 `/opt/navax/.env`，**请离线备份该文件**（跨机灾备需保留同一个主密钥）。
 
 ## 之后（NS 生效后）

@@ -31,6 +31,27 @@ die() { printf '\033[1;31m[navax] ERROR:\033[0m %s\n' "$*" >&2; exit 1; }
 
 [ "$(id -u)" = 0 ] || die "must run as root"
 
+# 0. runtime deps — ffmpeg for video background compress + poster frame
+if ! command -v ffmpeg >/dev/null 2>&1; then
+  log "installing ffmpeg (required for video backgrounds) ..."
+  if command -v apt-get >/dev/null 2>&1; then
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -qq
+    apt-get install -y -qq ffmpeg
+  elif command -v dnf >/dev/null 2>&1; then
+    dnf install -y ffmpeg
+  elif command -v apk >/dev/null 2>&1; then
+    apk add --no-cache ffmpeg
+  else
+    log "warning: could not install ffmpeg automatically — video backgrounds will be unavailable until it is on PATH"
+  fi
+fi
+if command -v ffmpeg >/dev/null 2>&1; then
+  log "ffmpeg ok: $(command -v ffmpeg)"
+else
+  log "warning: ffmpeg not found — video background upload will return 503"
+fi
+
 # 1. user + dirs
 id navax >/dev/null 2>&1 || useradd --system --home-dir "$APP_DIR" --shell /usr/sbin/nologin navax
 mkdir -p "$APP_DIR/bin" "$APP_DIR/data"

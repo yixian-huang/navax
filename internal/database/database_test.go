@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"io/fs"
 	"path/filepath"
 	"testing"
 	"testing/fstest"
@@ -33,8 +34,12 @@ func TestOpenAndMigrate(t *testing.T) {
 	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM schema_migrations").Scan(&migrationCount); err != nil {
 		t.Fatalf("query migrations: %v", err)
 	}
-	if migrationCount != 6 {
-		t.Fatalf("migration count = %d, want 6", migrationCount)
+	sqlFiles, err := fs.Glob(projectmigrations.Files, "*.sql")
+	if err != nil {
+		t.Fatalf("glob migrations: %v", err)
+	}
+	if migrationCount != len(sqlFiles) {
+		t.Fatalf("migration count = %d, want %d", migrationCount, len(sqlFiles))
 	}
 
 	var defaultTheme string

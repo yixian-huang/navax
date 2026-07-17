@@ -119,7 +119,17 @@ server {
 
 ## 7. 原生二进制 + systemd（重要）
 
-原生二进制支持签名自更新，但**更新/恢复后进程只会优雅退出、不会自拉起**——必须由进程管理器负责重启。请使用 `Restart=always` 的 systemd 单元：
+原生二进制支持签名自更新，但**更新/恢复后进程只会优雅退出、不会自拉起**——必须由进程管理器负责重启。请使用 `Restart=always` 的 systemd 单元。
+
+**视频背景依赖**：原生部署需本机安装 `ffmpeg`（及通常随包提供的 `ffprobe`），用于视频压缩与 poster 截帧。官方 Docker 镜像已内置；`deploy/install-navax.sh` 会在缺包时尝试通过 apt/dnf/apk 安装。未安装时上传视频会返回 503「服务器未安装 ffmpeg」。
+
+```bash
+# Debian / Ubuntu
+sudo apt-get update && sudo apt-get install -y ffmpeg
+
+# 校验（systemd 服务用户也须能在默认 PATH 找到）
+which ffmpeg ffprobe
+```
 
 ```ini
 # /etc/systemd/system/navax.service
@@ -152,5 +162,6 @@ WantedBy=multi-user.target
 - [ ] `NAVAX_MASTER_KEY`、`NAVAX_SETUP_TOKEN` 由 `openssl rand` 显式提供并妥善备份
 - [ ] 启用子域名时：通配 DNS + 通配 TLS 就绪，反代保留 `Host`
 - [ ] 原生部署：systemd `Restart=always` 已配置
+- [ ] 原生部署：已安装 `ffmpeg`（视频背景）；`which ffmpeg` 对运行用户可见
 - [ ] 首次访问 `https://nav.ax/setup` 用 `NAVAX_SETUP_TOKEN` 完成初始化
 - [ ] `/readyz` 返回 200，`/healthz` 存活
