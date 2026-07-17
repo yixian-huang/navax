@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { USER } from './accounts';
 
-// 管理员关键路径：运营概览、用户管理、主题管理。
+// 管理员关键路径：运营概览、用户管理、平台主题库（系统配置入口）。
 test.describe('管理员', () => {
   test.use({ storageState: '.auth/admin.json' });
 
@@ -16,8 +16,10 @@ test.describe('管理员', () => {
     await expect(page.getByText(USER.username).first()).toBeVisible();
   });
 
-  test('主题管理页展示主题包', async ({ page }) => {
-    await page.goto('/admin/themes');
+  test('系统配置可进入平台主题库', async ({ page }) => {
+    await page.goto('/admin/settings');
+    await page.getByRole('link', { name: '管理主题库' }).click();
+    await expect(page.getByRole('heading', { name: '平台主题库' })).toBeVisible();
     await expect(page.getByText('Slate Dark').first()).toBeVisible();
   });
 });

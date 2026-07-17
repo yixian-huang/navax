@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { RotateCw, Save } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { RotateCw, Save, Palette } from 'lucide-react';
 import { useAdminSettings, useUpdateAdminSettings } from '@/hooks/useQueries';
 import { ErrorState, LoadingSkeleton } from '@/components/base/SharedUI';
 import { useToast } from '@/components/base/Toast';
@@ -83,6 +84,19 @@ export default function AdminSettingsPage() {
             <input value={form.domain.rootDomain ?? ''} onChange={event => setForm({ ...form, domain: { ...form.domain, rootDomain: event.target.value.trim() || null } })} className={inputClass} />
           </Field>
           <Toggle label="允许用户申请子域名" checked={form.domain.subdomainsEnabled} onChange={subdomainsEnabled => setForm({ ...form, domain: { ...form.domain, subdomainsEnabled } })} />
+        </Section>
+
+        <Section title="平台主题库">
+          <p className="text-xs text-foreground-500 leading-relaxed">
+            启用/停用内置主题、设置新建导航的默认主题。这与工作台里用户为自己的导航选外观不同。
+          </p>
+          <Link
+            to="/admin/themes"
+            className="inline-flex items-center gap-2 h-9 px-3 rounded-lg border border-background-200 text-sm text-foreground-700 hover:bg-background-100 transition-colors"
+          >
+            <Palette className="w-4 h-4 text-primary-600" />
+            管理主题库
+          </Link>
         </Section>
       </div>
     </div>

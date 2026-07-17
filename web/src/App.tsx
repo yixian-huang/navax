@@ -25,15 +25,6 @@ function ScrollToTop() {
   return null;
 }
 
-function PageTransitionWrapper({ children }: { children: React.ReactNode }) {
-  const location = useLocation();
-  return (
-    <div key={location.pathname} className="page-enter">
-      {children}
-    </div>
-  );
-}
-
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -42,11 +33,14 @@ function App() {
           <ErrorBoundary>
             <BrowserRouter basename={__BASE_PATH__}>
               <ScrollToTop />
-              <PageTransitionWrapper>
-                <Suspense fallback={<div className="min-h-screen bg-background-50" aria-label="页面加载中" />}>
-                  <AppRoutes />
-                </Suspense>
-              </PageTransitionWrapper>
+              {/*
+                Shell layouts are eagerly loaded so only route page chunks suspend.
+                Do not key the whole tree on pathname — that remounted AppShell/AdminShell
+                on every sidebar click and felt like a full page refresh.
+              */}
+              <Suspense fallback={<div className="min-h-screen bg-background-50" aria-label="页面加载中" />}>
+                <AppRoutes />
+              </Suspense>
             </BrowserRouter>
           </ErrorBoundary>
         </ToastProvider>

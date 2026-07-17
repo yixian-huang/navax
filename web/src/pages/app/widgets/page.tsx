@@ -2,7 +2,6 @@ import { Calendar, Clock, MessageCircle } from 'lucide-react';
 import { useMyPage, useUpdatePageSettings } from '@/hooks/useQueries';
 import { ErrorState, LoadingSkeleton } from '@/components/base/SharedUI';
 import { useToast } from '@/components/base/Toast';
-import PublishDraftBanner from '@/components/feature/PublishDraftBanner';
 import { draftSaveToastMessage } from '@/lib/publish-state';
 
 const displayOptions = [
@@ -38,7 +37,6 @@ export default function WidgetsPage() {
         <h1 className="text-2xl font-bold font-heading text-foreground-950">首页信息</h1>
         <p className="text-sm text-foreground-400 mt-1">控制导航首页的时钟、日期和欢迎词</p>
       </div>
-      <PublishDraftBanner />
       <div className="space-y-3">
         {displayOptions.map(option => {
           const Icon = option.icon;

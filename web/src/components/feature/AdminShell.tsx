@@ -1,14 +1,14 @@
-import { useState, useMemo } from 'react';
+import { Suspense, useState } from 'react';
 import { Link, useLocation, Outlet, Navigate } from 'react-router-dom';
 import {
-  LayoutDashboard, Users, Link2, FolderOpen, Palette,
+  LayoutDashboard, Users, Link2, FolderOpen,
   Settings, FileSearch, Shield, Menu, Home, ChevronRight, ArrowLeft, Globe, Wrench, Star
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import { useCurrentUser } from '@/hooks/useQueries';
 import { LoadingSkeleton } from '@/components/base/SharedUI';
 import WorkspaceSidebar, { type SidebarNavItem } from '@/components/feature/WorkspaceSidebar';
 
+// 主题启用/默认是低频平台配置，不占侧栏主位；页面仍保留在 /admin/themes（系统配置内入口）。
 const navItems: SidebarNavItem[] = [
   { path: '/admin', icon: LayoutDashboard, label: '运营概览' },
   { path: '/admin/users', icon: Users, label: '用户管理' },
@@ -16,7 +16,6 @@ const navItems: SidebarNavItem[] = [
   { path: '/admin/discover', icon: Star, label: '发现页运营' },
   { path: '/admin/links', icon: Globe, label: '链接管理' },
   { path: '/admin/categories', icon: FolderOpen, label: '公共分类' },
-  { path: '/admin/themes', icon: Palette, label: '主题管理' },
   { path: '/admin/settings', icon: Settings, label: '系统配置' },
   { path: '/admin/operations', icon: Wrench, label: '运维中心' },
   { path: '/admin/audit', icon: FileSearch, label: '操作审计' },
@@ -29,7 +28,7 @@ const breadcrumbLabels: Record<string, string> = {
   '/admin/discover': '发现页运营',
   '/admin/links': '链接管理',
   '/admin/categories': '公共分类',
-  '/admin/themes': '主题管理',
+  '/admin/themes': '平台主题库',
   '/admin/settings': '系统配置',
   '/admin/operations': '运维中心',
   '/admin/audit': '操作审计',
@@ -115,7 +114,18 @@ export default function AdminShell() {
         </header>
 
         <div className="flex-1 p-4 md:p-5">
-          <Outlet />
+          <Suspense
+            fallback={(
+              <div className="space-y-3" aria-label="页面加载中">
+                <div className="skeleton h-8 w-48" />
+                <LoadingSkeleton count={3} />
+              </div>
+            )}
+          >
+            <div key={location.pathname} className="page-enter">
+              <Outlet />
+            </div>
+          </Suspense>
         </div>
       </div>
     </div>

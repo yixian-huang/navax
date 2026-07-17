@@ -2,17 +2,18 @@
 // nav.ax App Shell — layout wrapper for /app/* routes
 // ============================================================
 
-import { useState, useMemo } from 'react';
+import { Suspense, useState, useMemo } from 'react';
 import { Link, Navigate, useLocation, Outlet, useSearchParams } from 'react-router-dom';
 import {
   LayoutDashboard, Link2, Puzzle, Palette, Settings, Globe, ArrowLeft, Menu,
-  ChevronRight, Home, Shield, Sparkles, ChevronDown, ExternalLink, BookOpen, BarChart3
+  ChevronRight, Home, Shield, Sparkles, ChevronDown, BookOpen, BarChart3
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useCurrentUser } from '@/hooks/useQueries';
 import { LoadingSkeleton } from '@/components/base/SharedUI';
 import WorkspaceSidebar, { type SidebarNavItem } from '@/components/feature/WorkspaceSidebar';
 import PublishStatusControl from '@/components/feature/PublishStatusControl';
+import PublishDraftBanner from '@/components/feature/PublishDraftBanner';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 
 const navItems: SidebarNavItem[] = [
@@ -210,8 +211,27 @@ export default function AppShell() {
           </Link>
         </header>
 
+        {/* Global draft strip — one place for all edit surfaces (not publish/preview pages). */}
+        {!location.pathname.startsWith('/app/publish')
+          && !location.pathname.startsWith('/app/preview') && (
+          <PublishDraftBanner
+            className="rounded-none border-x-0 border-t-0 mb-0 sticky top-12 z-20"
+          />
+        )}
+
         <div className="flex-1 p-4 md:p-5">
-          <Outlet />
+          <Suspense
+            fallback={(
+              <div className="space-y-3" aria-label="页面加载中">
+                <div className="skeleton h-8 w-48" />
+                <LoadingSkeleton count={3} />
+              </div>
+            )}
+          >
+            <div key={location.pathname} className="page-enter">
+              <Outlet />
+            </div>
+          </Suspense>
         </div>
       </div>
     </div>

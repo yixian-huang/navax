@@ -163,10 +163,10 @@ export default function AdminThemesPage() {
           <div className="w-8 h-8 rounded-lg bg-primary-500 flex items-center justify-center">
             <Paintbrush className="w-4 h-4 text-background-50" />
           </div>
-          <h1 className="text-xl font-bold font-heading text-foreground-950">导航主题</h1>
+          <h1 className="text-xl font-bold font-heading text-foreground-950">平台主题库</h1>
         </div>
         <p className="text-xs text-foreground-400 mt-0.5">
-          点击预览设为默认；右侧开关控制用户可选主题。默认主题不可停用 · 共 {themes.length} 套主题
+          控制实例内用户可选哪些主题，以及新建导航页的默认主题。各导航页自己的外观请在工作台「主题设置」中配置 · 共 {themes.length} 套
         </p>
       </div>
 

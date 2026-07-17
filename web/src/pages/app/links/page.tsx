@@ -55,7 +55,6 @@ import { draftSaveToastMessage } from '@/lib/publish-state';
 import SiteTable, { type FlatSite } from '@/pages/app/links/components/SiteTable';
 import BatchLinkChecker from '@/pages/app/links/components/BatchLinkChecker';
 import IconRenderer from '@/components/base/IconRenderer';
-import PublishDraftBanner from '@/components/feature/PublishDraftBanner';
 import type { NavigationPage, Category, Site, Density } from '@/api/types';
 
 type Viewport = 'desktop' | 'tablet' | 'mobile';
@@ -533,7 +532,6 @@ export default function LinksPage() {
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold font-heading text-foreground-950">导航编辑</h1>
         </div>
-        <PublishDraftBanner />
         <EmptyState
           iconClass="ri-link-m"
           title="开始构建你的导航"
@@ -559,7 +557,6 @@ export default function LinksPage() {
 
   return (
     <div className="-m-4 md:-m-6 flex flex-col h-[calc(100vh-7.5rem)]">
-      <PublishDraftBanner className="mx-4 md:mx-6 mt-3 mb-0" />
       <div className="flex flex-1 min-h-0">
       {/* ---- Left Panel ---- */}
       <div

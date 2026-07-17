@@ -14,7 +14,6 @@ import { draftSaveToastMessage } from '@/lib/publish-state';
 import type { ThemePackage } from '@/themes/types';
 import { useMyPage, useThemes, useUpdatePageSettings } from '@/hooks/useQueries';
 import { ErrorState, LoadingSkeleton } from '@/components/base/SharedUI';
-import PublishDraftBanner from '@/components/feature/PublishDraftBanner';
 import { assetsApi, getPublicConfig } from '@/api/assets';
 import { ApiError } from '@/api/client';
 
@@ -251,11 +250,9 @@ export default function ThemesPage() {
           <h1 className="text-2xl font-bold font-heading text-foreground-950">主题设置</h1>
         </div>
         <p className="text-sm text-foreground-400 mt-1">
-          选择导航站的全局主题风格，切换后立即对首页生效 · 共 {themes.length} 套主题
+          选择当前导航页的主题与背景；保存后写入草稿，发布后访客才可见 · 共 {themes.length} 套主题
         </p>
       </div>
-
-      <PublishDraftBanner />
 
       {/* Background Image Section */}
       <div className="mb-8">

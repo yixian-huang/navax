@@ -1,6 +1,9 @@
 import { Navigate } from "react-router-dom";
 import { lazy } from "react";
 import type { RouteObject } from "react-router-dom";
+// Eager shells keep sidebar/header mounted across child navigations.
+import AppShell from "@/components/feature/AppShell";
+import AdminShell from "@/components/feature/AdminShell";
 
 const NotFound = lazy(() => import("@/pages/NotFound"));
 const Home = lazy(() => import("@/pages/home/page"));
@@ -14,8 +17,6 @@ const DiscoverPage = lazy(() => import("@/pages/discover/page"));
 const PrivacyPage = lazy(() => import("@/pages/legal/privacy/page"));
 const TermsPage = lazy(() => import("@/pages/legal/terms/page"));
 const CookiesPage = lazy(() => import("@/pages/legal/cookies/page"));
-const AppShell = lazy(() => import("@/components/feature/AppShell"));
-const AdminShell = lazy(() => import("@/components/feature/AdminShell"));
 const AppOverview = lazy(() => import("@/pages/app/overview/page"));
 const LinksPage = lazy(() => import("@/pages/app/links/page"));
 const AnalyticsPage = lazy(() => import("@/pages/app/analytics/page"));
