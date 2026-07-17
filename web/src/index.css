@@ -302,14 +302,19 @@ body {
   display: block !important;
 }
 
-/* List rows float on wallpaper — light frost + wallpaper ink (no solid white card). */
+/*
+ * List density: no frosted plate — text sits on the photo with wallpaper ink only.
+ * Hover stays a subtle wash (no blur).
+ */
 [data-wallpaper] .site-card-list {
-  background: oklch(var(--background-50) / 0.22);
-  -webkit-backdrop-filter: blur(10px) saturate(1.05);
-  backdrop-filter: blur(10px) saturate(1.05);
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 [data-wallpaper] .site-card-list:hover {
-  background: oklch(var(--background-50) / 0.36);
+  background: oklch(var(--background-50) / 0.14);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 [data-wallpaper] .site-card-list .site-card-list-domain,
 [data-wallpaper] .site-card-list .site-card-list-desc,
