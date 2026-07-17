@@ -328,16 +328,28 @@ body {
   border-color: color-mix(in oklch, var(--wp-ink) 14%, transparent);
 }
 
+/*
+ * Per-row low-opacity scrim (no blur): keeps title/desc readable on photo
+ * without a heavy frosted slab. Tone-aware so ink stays correct.
+ */
 [data-wallpaper] .site-card-list {
-  background: transparent !important;
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
   box-shadow: none !important;
 }
-[data-wallpaper] .site-card-list:hover {
-  background: color-mix(in oklch, var(--wp-ink) 10%, transparent) !important;
-  -webkit-backdrop-filter: none !important;
-  backdrop-filter: none !important;
+[data-wallpaper][data-wallpaper-tone="light"] .site-card-list {
+  /* Bright photo → light wash under dark ink */
+  background: oklch(1 0 0 / 0.2) !important;
+}
+[data-wallpaper][data-wallpaper-tone="dark"] .site-card-list {
+  /* Dark photo → dark wash under light ink */
+  background: oklch(0.12 0.02 260 / 0.34) !important;
+}
+[data-wallpaper][data-wallpaper-tone="light"] .site-card-list:hover {
+  background: oklch(1 0 0 / 0.3) !important;
+}
+[data-wallpaper][data-wallpaper-tone="dark"] .site-card-list:hover {
+  background: oklch(0.12 0.02 260 / 0.48) !important;
 }
 [data-wallpaper] .site-card-list .site-card-title,
 [data-wallpaper] .site-card-list .site-card-title * {
@@ -350,6 +362,20 @@ body {
 [data-wallpaper] .site-card-list .site-card-list-desc * {
   color: var(--wp-ink-muted) !important;
   text-shadow: var(--wp-shadow);
+}
+
+/* Density switcher: readable on wallpaper */
+[data-wallpaper] .density-switcher-btn {
+  color: var(--wp-ink-soft);
+  text-shadow: var(--wp-shadow);
+}
+[data-wallpaper] .density-switcher-btn:hover {
+  color: var(--wp-ink);
+  background: color-mix(in oklch, var(--wp-ink) 10%, transparent);
+}
+[data-wallpaper] .density-switcher-btn-active {
+  color: oklch(var(--primary-400));
+  background: color-mix(in oklch, var(--wp-ink) 12%, transparent);
 }
 
 /*

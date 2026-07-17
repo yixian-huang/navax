@@ -299,17 +299,19 @@ try {
     );
   }
 
-  // List background should be transparent or very low alpha (hover may raise slightly — check unhovered)
-  const listOpaque = listCards.filter(c => {
+  // List rows should have low-opacity wash (readable) but not opaque solid plates
+  const listAlpha = listCards.map(c => {
+    const oklch = String(c.backgroundColor).match(/oklch\([^/]+\/\s*([\d.]+)\)/);
+    if (oklch) return +oklch[1];
     const m = String(c.backgroundColor).match(/rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?\)/);
-    if (!m) return !isTransparentBg(c.backgroundColor);
-    const a = m[4] === undefined ? 1 : +m[4];
-    return a > 0.2; // >20% opaque plate is unwanted for list
+    if (!m) return isTransparentBg(c.backgroundColor) ? 0 : 1;
+    return m[4] === undefined ? 1 : +m[4];
   });
+  const goodWash = listAlpha.filter(a => a > 0.08 && a < 0.55);
   ok(
-    'list: no solid frosted plate background',
-    listOpaque.length === 0,
-    listOpaque.length ? `opaque=${listOpaque.map(c => c.backgroundColor).join('; ')}` : 'transparent/low-alpha',
+    'list: low-opacity row wash (readable, not solid)',
+    goodWash.length >= Math.min(1, listCards.length),
+    `alphas=${listAlpha.slice(0, 3).join(',')} samples=${listCards[0]?.backgroundColor}`,
   );
 
   const listFavPlate = listCards.filter(c => c.faviconBg && !isTransparentBg(c.faviconBg));

@@ -101,13 +101,15 @@ export function SitesSection({
         </div>
       )}
 
-      <SiteGrid
-        sites={activeSites}
-        density={density}
-        query={query}
-        onSiteOpen={onSiteOpen}
-        showAddLink={canManageLinks && !query}
-      />
+      <div className={cn(wallpaperMode && 'wallpaper-sites-scope')}>
+        <SiteGrid
+          sites={activeSites}
+          density={density}
+          query={query}
+          onSiteOpen={onSiteOpen}
+          showAddLink={canManageLinks && !query}
+        />
+      </div>
     </div>
   );
 }

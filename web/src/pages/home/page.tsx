@@ -8,6 +8,7 @@ import LayoutSearchFocus from '@/pages/home/components/LayoutSearchFocus';
 import LayoutBrowseFirst from '@/pages/home/components/LayoutBrowseFirst';
 import LayoutSidebar from '@/pages/home/components/LayoutSidebar';
 import BrowserGuide from '@/pages/home/components/BrowserGuide';
+import QuickAddSiteFab from '@/components/feature/QuickAddSiteFab';
 import { semanticFilterSites, buildSearchSuggestions } from '@/lib/searchIntel';
 import type { HomeLayout } from '@/types/layout';
 import type { Density, Site } from '@/api/types';
@@ -246,6 +247,8 @@ export default function HomePage() {
       {renderLayout()}
       {/* Wallpaper already denser visually — skip the onboarding guide chrome */}
       {!wallpaperMode && <BrowserGuide />}
+      {/* Logged-in users can add links without leaving the public page */}
+      <QuickAddSiteFab />
     </PublicShell>
   );
 }

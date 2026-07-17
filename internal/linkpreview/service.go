@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -20,10 +21,12 @@ import (
 )
 
 const (
-	maxBodyBytes   = 512 << 10 // 512 KiB is enough for <head>
-	requestTimeout = 6 * time.Second
-	maxRedirects   = 3
-	userAgent      = "nav.ax-link-preview/1.0 (+https://nav.ax)"
+	maxBodyBytes    = 512 << 10 // 512 KiB is enough for <head>
+	requestTimeout  = 6 * time.Second
+	maxRedirects    = 3
+	userAgent       = "nav.ax-link-preview/1.0 (+https://nav.ax)"
+	cacheTTL        = 5 * time.Minute
+	cacheMaxEntries = 256
 )
 
 var (
@@ -40,14 +43,22 @@ type Preview struct {
 	SiteName    *string `json:"siteName,omitempty"`
 }
 
+type cacheEntry struct {
+	preview Preview
+	expires time.Time
+}
+
 type Service struct {
 	client *http.Client
+	mu     sync.Mutex
+	cache  map[string]cacheEntry
 }
 
 func NewService() *Service {
 	validator := netguard.NewValidator(nil)
 	return &Service{
 		client: netguard.GuardedClient(validator, requestTimeout, maxRedirects),
+		cache:  make(map[string]cacheEntry),
 	}
 }
 
@@ -62,6 +73,58 @@ func (s *Service) Preview(ctx context.Context, raw string) (Preview, error) {
 		return Preview{}, fmt.Errorf("%w: %v", ErrInvalidURL, err)
 	}
 
+	cacheKey := parsed.String()
+	if cached, ok := s.getCache(cacheKey); ok {
+		return cached, nil
+	}
+
+	preview, err := s.fetchPreview(ctx, parsed)
+	if err != nil {
+		return Preview{}, err
+	}
+	s.putCache(cacheKey, preview)
+	return preview, nil
+}
+
+func (s *Service) getCache(key string) (Preview, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	entry, ok := s.cache[key]
+	if !ok || time.Now().After(entry.expires) {
+		if ok {
+			delete(s.cache, key)
+		}
+		return Preview{}, false
+	}
+	return entry.preview, true
+}
+
+func (s *Service) putCache(key string, preview Preview) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.cache) >= cacheMaxEntries {
+		// Drop expired first; if still full, clear half arbitrarily.
+		now := time.Now()
+		for k, v := range s.cache {
+			if now.After(v.expires) {
+				delete(s.cache, k)
+			}
+		}
+		if len(s.cache) >= cacheMaxEntries {
+			n := 0
+			for k := range s.cache {
+				delete(s.cache, k)
+				n++
+				if n >= cacheMaxEntries/2 {
+					break
+				}
+			}
+		}
+	}
+	s.cache[key] = cacheEntry{preview: preview, expires: time.Now().Add(cacheTTL)}
+}
+
+func (s *Service) fetchPreview(ctx context.Context, parsed *url.URL) (Preview, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, parsed.String(), nil)
 	if err != nil {
 		return Preview{}, fmt.Errorf("%w: %v", ErrInvalidURL, err)

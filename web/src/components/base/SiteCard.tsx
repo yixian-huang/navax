@@ -1,7 +1,6 @@
 // ============================================================
 // nav.ax SiteCard — Refined Neutral / Material
-// Comfortable: icon + text side-by-side (not icon-alone row).
-// Description: compact hidden; comfortable/list one line when present.
+// Comfortable: icon + text side-by-side; list: low-opacity row wash on wallpaper.
 // ============================================================
 
 import { useCallback } from 'react';
@@ -9,6 +8,7 @@ import { cn } from '@/lib/utils';
 import type { Site, Density } from '@/api/types';
 import { useContextMenu, createSiteContextActions } from '@/components/base/ContextMenu';
 import { useToast } from '@/components/base/Toast';
+import IconRenderer from '@/components/base/IconRenderer';
 
 interface SiteCardProps {
   site: Site;
@@ -31,16 +31,35 @@ function getFaviconUrl(url: string): string {
   return `https://www.google.com/s2/favicons?domain=${getDomain(url)}&sz=64`;
 }
 
-function Favicon({ url, className }: { url: string; className: string }) {
-  return (
-    <img
-      src={getFaviconUrl(url)}
-      alt=""
-      loading="lazy"
-      className={`${className} object-contain`}
-      onError={e => { (e.target as HTMLImageElement).style.visibility = 'hidden'; }}
-    />
-  );
+/** Prefer stored image icon; fall back to domain favicon (never leave empty). */
+function resolveSiteIcon(site: Site): string {
+  const icon = (site.icon || '').trim();
+  if (/^https?:\/\//i.test(icon)) return icon;
+  return getFaviconUrl(site.url);
+}
+
+function SiteIcon({ site, size, className }: { site: Site; size: number; className?: string }) {
+  const src = resolveSiteIcon(site);
+  if (/^https?:\/\//i.test(src)) {
+    return (
+      <img
+        src={src}
+        alt=""
+        width={size}
+        height={size}
+        loading="lazy"
+        className={cn('object-contain', className)}
+        style={{ width: size, height: size }}
+        onError={e => {
+          const el = e.currentTarget;
+          const fallback = getFaviconUrl(site.url);
+          if (el.src !== fallback) el.src = fallback;
+          else el.style.visibility = 'hidden';
+        }}
+      />
+    );
+  }
+  return <IconRenderer icon={src || 'ri-link'} size={size} className={className} />;
 }
 
 function HighlightText({ text, query }: { text: string; query: string }) {
@@ -167,7 +186,7 @@ export default function SiteCard({ site, density, onOpen, onEdit, onDelete, sear
         className="site-card-list flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors duration-200 focus-visible:outline-offset-[-2px] hover:bg-background-100/60"
       >
         <span className="site-card-favicon flex h-9 w-9 flex-shrink-0 items-center justify-center">
-          <Favicon url={site.url} className="w-5 h-5" />
+          <SiteIcon site={site} size={20} />
         </span>
         <span className="min-w-0 flex-1">
           <span className="site-card-title block text-sm font-medium text-foreground-800 truncate group-hover:text-accent-500 transition-colors duration-200">
@@ -175,7 +194,7 @@ export default function SiteCard({ site, density, onOpen, onEdit, onDelete, sear
           </span>
           <span
             className={cn(
-              'block text-[11px] truncate',
+              'block text-[11px] truncate max-w-full',
               desc
                 ? 'site-card-list-desc text-foreground-500'
                 : 'site-card-list-domain text-foreground-400 font-mono',
@@ -191,27 +210,27 @@ export default function SiteCard({ site, density, onOpen, onEdit, onDelete, sear
 
   if (density === 'compact') {
     return (
-      <CardWrapper {...shared} className="material-card flex flex-col items-center gap-2 p-3">
-        <Favicon url={site.url} className="w-6 h-6" />
-        <span className="site-card-title text-[11px] font-medium text-foreground-700 text-center truncate w-full leading-tight group-hover:text-accent-500 transition-colors duration-200">
+      <CardWrapper {...shared} className="material-card flex flex-col items-center gap-2 p-3 min-h-[4.5rem]">
+        <SiteIcon site={site} size={24} />
+        <span className="site-card-title text-[11px] font-medium text-foreground-700 text-center line-clamp-2 w-full leading-tight group-hover:text-accent-500 transition-colors duration-200">
           <HighlightText text={site.title} query={q} />
         </span>
       </CardWrapper>
     );
   }
 
-  // Comfortable: icon left, title / domain / description stacked right.
+  // Comfortable: fixed min-height so cards with/without desc align in the grid.
   return (
     <CardWrapper
       {...shared}
-      className="material-card site-card-comfortable flex items-start gap-3 p-3.5"
+      className="material-card site-card-comfortable flex items-start gap-3 p-3.5 min-h-[5.75rem]"
     >
       <span className="site-card-favicon flex h-10 w-10 flex-shrink-0 items-center justify-center">
-        <Favicon url={site.url} className="w-6 h-6" />
+        <SiteIcon site={site} size={24} />
       </span>
       <div className="min-w-0 flex-1">
         <div className="flex items-start gap-1.5">
-          <h3 className="site-card-title min-w-0 flex-1 text-sm font-semibold text-foreground-900 truncate group-hover:text-accent-500 transition-colors duration-200">
+          <h3 className="site-card-title min-w-0 flex-1 text-sm font-semibold text-foreground-900 line-clamp-1 group-hover:text-accent-500 transition-colors duration-200">
             <HighlightText text={site.title} query={q} />
           </h3>
           <i className="ri-arrow-right-up-line mt-0.5 text-sm text-foreground-300 opacity-0 -translate-x-0.5 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300 flex-shrink-0" />
@@ -220,10 +239,15 @@ export default function SiteCard({ site, density, onOpen, onEdit, onDelete, sear
           <HighlightText text={domain} query={q} />
         </p>
         {desc ? (
-          <p className="site-card-desc text-[11px] text-foreground-600 truncate mt-0.5 leading-snug">
+          <p className="site-card-desc text-[11px] text-foreground-600 line-clamp-1 mt-0.5 leading-snug">
             <HighlightText text={desc} query={q} />
           </p>
-        ) : null}
+        ) : (
+          // Reserve a line so grid rows stay even when some sites lack description.
+          <p className="site-card-desc-placeholder text-[11px] mt-0.5 leading-snug invisible select-none" aria-hidden>
+            &nbsp;
+          </p>
+        )}
       </div>
     </CardWrapper>
   );

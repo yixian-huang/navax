@@ -203,6 +203,8 @@ export default function LinksPage() {
     );
   };
 
+  // Batch adds fire multiple handleCreateSite calls; coalesce toast noise is acceptable.
+
   const confirmDelete = () => {
     if (!deleteTarget) return;
     markSaving();

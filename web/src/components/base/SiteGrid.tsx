@@ -99,7 +99,8 @@ export default function SiteGrid({
       className={cn(
         'grid',
         density === 'comfortable'
-          ? (comfortableCols || 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4')
+          // Prefer 3 columns on md so title+desc stay readable; override via prop.
+          ? (comfortableCols || 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3.5')
           : (compactCols || 'grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3'),
         className,
       )}

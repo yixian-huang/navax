@@ -26,4 +26,30 @@ test.describe('游客', () => {
     await tab.focus();
     await expect(tab).toBeFocused();
   });
+
+  test('站点列表密度无整块毛玻璃容器', async ({ page }) => {
+    await page.goto('/');
+    // Switch to list density via aria-label
+    const listBtn = page.getByRole('radio', { name: '列表' });
+    if (await listBtn.count()) {
+      await listBtn.click();
+    }
+    // List panel must not use material-card frosted slab
+    const panel = page.locator('.site-card-list-panel');
+    if (await panel.count()) {
+      await expect(panel).not.toHaveClass(/material-card/);
+      const filter = await panel.evaluate(el => getComputedStyle(el).backdropFilter || (getComputedStyle(el) as CSSStyleDeclaration & { webkitBackdropFilter?: string }).webkitBackdropFilter || 'none');
+      expect(filter === 'none' || !filter).toBeTruthy();
+    }
+    // Comfortable cards keep side-by-side icon layout when selected
+    const comfortBtn = page.getByRole('radio', { name: '舒适' });
+    if (await comfortBtn.count()) {
+      await comfortBtn.click();
+      const card = page.locator('.site-card-comfortable').first();
+      if (await card.count()) {
+        await expect(card).toBeVisible();
+        await expect(card).toHaveClass(/flex/);
+      }
+    }
+  });
 });

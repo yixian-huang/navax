@@ -201,18 +201,45 @@ export function AddSiteDialog({ open, onClose, categories, defaultCategoryId, on
 
   const directorySites = directoryQuery.data?.items ?? [];
 
-  const canSubmit = useMemo(() => {
-    if (!isPlausibleUrl(url)) return false;
-    if (!categoryId) return false;
-    // Title optional in UI — we fill from domain on submit if empty
-    return true;
-  }, [url, categoryId]);
+  const urlLines = useMemo(
+    () => url.split(/[\n\r]+/).map(line => line.trim()).filter(Boolean),
+    [url],
+  );
+  const batchUrls = useMemo(
+    () => urlLines.filter(line => isPlausibleUrl(line)).map(line => normalizeUrl(line)),
+    [urlLines],
+  );
+  const isBatch = batchUrls.length > 1;
 
-  const previewTitle = title.trim() || (isPlausibleUrl(url) ? (recognizeLink(normalizeUrl(url))?.title ?? '') : '');
+  const canSubmit = useMemo(() => {
+    if (!categoryId) return false;
+    if (isBatch) return true;
+    return isPlausibleUrl(url);
+  }, [url, categoryId, isBatch]);
+
+  const previewTitle = title.trim() || (isPlausibleUrl(url) && !isBatch ? (recognizeLink(normalizeUrl(url))?.title ?? '') : '');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSubmit) return;
+
+    if (isBatch) {
+      // Multi-line paste: one site per URL, auto metadata only.
+      for (const finalUrl of batchUrls.slice(0, 50)) {
+        const info = recognizeLink(finalUrl);
+        onConfirm({
+          title: info?.title || finalUrl,
+          url: finalUrl,
+          icon: info?.faviconUrl || info?.icon || 'ri-link',
+          description: info?.description || '',
+          categoryId,
+        });
+      }
+      reset();
+      onClose();
+      return;
+    }
+
     const finalUrl = normalizeUrl(url);
     const info = recognizeLink(finalUrl);
     const finalTitle = title.trim() || info?.title || finalUrl;
@@ -272,7 +299,9 @@ export function AddSiteDialog({ open, onClose, categories, defaultCategoryId, on
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className="text-lg font-semibold text-foreground-900">添加站点</h3>
-            <p className="text-[11px] text-foreground-400 mt-0.5">粘贴链接即可，名称与图标会自动填充</p>
+            <p className="text-[11px] text-foreground-400 mt-0.5">
+              粘贴链接即可；也可多行批量添加（每行一个 URL）
+            </p>
           </div>
           <button onClick={handleClose} className="w-8 h-8 flex items-center justify-center rounded-lg text-foreground-400 hover:bg-background-100 transition-colors duration-150">
             <X className="w-5 h-5" />
@@ -305,22 +334,41 @@ export function AddSiteDialog({ open, onClose, categories, defaultCategoryId, on
             {/* Primary: URL */}
             <FormField label="链接">
               <div className="relative">
-                <Link2 className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-foreground-300 pointer-events-none" />
-                <FormInput
-                  ref={urlInputRef}
-                  type="text"
-                  inputMode="url"
-                  autoComplete="url"
-                  value={url}
-                  onChange={e => setUrl(e.target.value)}
-                  placeholder="粘贴或输入 URL，如 github.com"
-                  className="pl-9 pr-9"
-                  autoFocus
-                />
-                {recognizing && (
+                <Link2 className="w-4 h-4 absolute left-2.5 top-3 text-foreground-300 pointer-events-none" />
+                {isBatch ? (
+                  <FormTextarea
+                    value={url}
+                    onChange={e => setUrl(e.target.value)}
+                    rows={Math.min(8, Math.max(3, urlLines.length + 1))}
+                    placeholder={'每行一个 URL，例如：\nhttps://github.com\nhttps://figma.com'}
+                    className="pl-9 font-mono text-xs"
+                    autoFocus
+                  />
+                ) : (
+                  <FormInput
+                    ref={urlInputRef}
+                    type="text"
+                    inputMode="url"
+                    autoComplete="url"
+                    value={url}
+                    onChange={e => setUrl(e.target.value)}
+                    onPaste={e => {
+                      const text = e.clipboardData.getData('text');
+                      if (text && /[\n\r]/.test(text) && text.split(/[\n\r]+/).filter(l => l.trim()).length > 1) {
+                        e.preventDefault();
+                        setUrl(text);
+                        setShowMore(false);
+                      }
+                    }}
+                    placeholder="粘贴或输入 URL，如 github.com（支持多行）"
+                    className="pl-9 pr-9"
+                    autoFocus
+                  />
+                )}
+                {!isBatch && recognizing && (
                   <Loader2 className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 text-primary-500 animate-spin" />
                 )}
-                {!recognizing && recognizedFavicon && (
+                {!isBatch && !recognizing && recognizedFavicon && (
                   <img
                     src={recognizedFavicon}
                     alt=""
@@ -331,10 +379,15 @@ export function AddSiteDialog({ open, onClose, categories, defaultCategoryId, on
                   />
                 )}
               </div>
+              {isBatch && (
+                <p className="text-[11px] text-accent-600 mt-1.5">
+                  将批量添加 {batchUrls.length} 个链接到所选分类（最多 50）
+                </p>
+              )}
             </FormField>
 
-            {/* Live preview chip */}
-            {isPlausibleUrl(url) && previewTitle && (
+            {/* Live preview chip (single URL only) */}
+            {!isBatch && isPlausibleUrl(url) && previewTitle && (
               <div className="flex items-center gap-2.5 rounded-lg border border-background-200/70 bg-background-50 px-3 py-2">
                 <div className="w-8 h-8 rounded-md bg-background-100 flex items-center justify-center flex-shrink-0 overflow-hidden">
                   {(icon || recognizedFavicon) ? (
@@ -370,7 +423,8 @@ export function AddSiteDialog({ open, onClose, categories, defaultCategoryId, on
               </FormSelect>
             </FormField>
 
-            {/* Advanced — collapsed */}
+            {/* Advanced — collapsed (hidden in batch mode) */}
+            {!isBatch && (
             <div className="rounded-lg border border-background-200/60 overflow-hidden">
               <button
                 type="button"
@@ -426,6 +480,7 @@ export function AddSiteDialog({ open, onClose, categories, defaultCategoryId, on
                 </div>
               )}
             </div>
+            )}
 
             <div className="flex justify-end gap-3 pt-1">
               <button
@@ -441,7 +496,7 @@ export function AddSiteDialog({ open, onClose, categories, defaultCategoryId, on
                 className="h-9 px-4 rounded-lg bg-primary-500 text-background-50 dark:text-foreground-950 text-sm font-medium hover:bg-primary-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-150 flex items-center gap-1.5 whitespace-nowrap"
               >
                 <Plus className="w-4 h-4" />
-                添加
+                {isBatch ? `添加 ${Math.min(batchUrls.length, 50)} 个` : '添加'}
               </button>
             </div>
           </form>
