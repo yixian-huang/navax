@@ -1,7 +1,8 @@
 // Right-click menu on public navigation pages: bookmark + set as homepage.
-// Native set-homepage is blocked by browsers; we guide with clear steps.
+// Portaled to document.body so wallpaper ink tokens do not recolor the chrome.
 
 import { useCallback, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/components/base/Toast';
 import {
@@ -25,6 +26,9 @@ export default function BrowserPageMenu() {
   const { toast } = useToast();
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [guide, setGuide] = useState<GuideMode | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => { setMounted(true); }, []);
 
   const closeMenu = useCallback(() => setMenu(null), []);
 
@@ -32,14 +36,15 @@ export default function BrowserPageMenu() {
     const onContextMenu = (event: MouseEvent) => {
       const target = event.target as HTMLElement | null;
       if (!target) return;
-      // Keep native menus for inputs / editable / links / media.
-      if (target.closest('input, textarea, select, [contenteditable="true"], a, button, video, audio, img, canvas')) {
+      // Keep native menus for form fields / media / interactive controls.
+      // Allow on plain anchors that are site cards? No — keep native "open in new tab".
+      if (target.closest('input, textarea, select, [contenteditable="true"], a, button, video, audio, img, canvas, [role="menu"], [role="dialog"]')) {
         return;
       }
       event.preventDefault();
       const pad = 8;
-      const menuW = 220;
-      const menuH = 100;
+      const menuW = 228;
+      const menuH = 104;
       const x = Math.min(event.clientX, window.innerWidth - menuW - pad);
       const y = Math.min(event.clientY, window.innerHeight - menuH - pad);
       setMenu({ x: Math.max(pad, x), y: Math.max(pad, y) });
@@ -92,12 +97,14 @@ export default function BrowserPageMenu() {
   const browser = detectBrowserFamily();
   const steps = homepageSteps(browser);
 
-  return (
+  if (!mounted) return null;
+
+  return createPortal(
     <>
       {menu && (
         <div
           role="menu"
-          className="fixed z-[80] min-w-[200px] rounded-xl border border-background-200/80 bg-background-50 py-1.5 shadow-float"
+          className="browser-chrome-surface fixed z-[80] min-w-[212px] rounded-lg border border-background-200 bg-background-50 py-1 shadow-overlay"
           style={{ left: menu.x, top: menu.y }}
           onClick={e => e.stopPropagation()}
           onContextMenu={e => e.preventDefault()}
@@ -118,28 +125,34 @@ export default function BrowserPageMenu() {
 
       {guide && (
         <div
-          className="fixed inset-0 z-[90] flex items-end sm:items-center justify-center p-4 bg-black/30 backdrop-blur-[2px]"
+          className="fixed inset-0 z-[90] flex items-end sm:items-center justify-center p-4 bg-black/35"
           onClick={() => setGuide(null)}
         >
           <div
-            className="w-full max-w-md rounded-2xl bg-background-50 border border-background-200/70 p-5 shadow-overlay rise-in"
+            className="browser-chrome-surface w-full max-w-md rounded-xl border border-background-200 bg-background-50 p-5 shadow-overlay rise-in"
             onClick={e => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
             aria-labelledby="browser-home-guide-title"
           >
             <div className="flex items-start gap-3 mb-3">
-              <div className="w-10 h-10 rounded-xl bg-primary-100 text-primary-600 flex items-center justify-center flex-shrink-0">
-                <i className={cn(
-                  'text-lg',
-                  guide.kind === 'bookmark' ? 'ri-bookmark-3-line' : 'ri-home-heart-line',
-                )} />
+              <div className="w-10 h-10 rounded-lg bg-primary-100 flex items-center justify-center flex-shrink-0">
+                <i
+                  className={cn(
+                    'text-lg text-primary-600',
+                    guide.kind === 'bookmark' ? 'ri-bookmark-3-line' : 'ri-home-heart-line',
+                  )}
+                  aria-hidden
+                />
               </div>
               <div className="min-w-0 flex-1">
-                <h3 id="browser-home-guide-title" className="font-heading text-sm font-semibold text-foreground-900">
+                <h3
+                  id="browser-home-guide-title"
+                  className="browser-chrome-title text-sm font-semibold tracking-tight"
+                >
                   {guide.kind === 'bookmark' ? '加入收藏夹' : '设为浏览器主页'}
                 </h3>
-                <p className="text-[12px] text-foreground-500 mt-0.5 leading-relaxed">
+                <p className="browser-chrome-muted text-[12px] mt-1 leading-relaxed">
                   {guide.kind === 'bookmark'
                     ? `浏览器出于安全限制不允许网页静默加书签。请按 ${bookmarkShortcutLabel()}，或按下列步骤操作。`
                     : '现代浏览器不允许网页直接修改主页。已复制当前地址，按下列步骤完成设置。'}
@@ -148,30 +161,35 @@ export default function BrowserPageMenu() {
               <button
                 type="button"
                 onClick={() => setGuide(null)}
-                className="w-7 h-7 rounded-lg text-foreground-300 hover:text-foreground-600 hover:bg-background-100 flex items-center justify-center"
+                className="browser-chrome-muted w-7 h-7 rounded-md hover:bg-background-100 flex items-center justify-center"
                 aria-label="关闭"
               >
-                <i className="ri-close-line" />
+                <i className="ri-close-line text-sm" aria-hidden />
               </button>
             </div>
 
             {guide.kind === 'bookmark' ? (
               <ol className="space-y-2 mb-4">
-                <li className="text-[12px] text-foreground-600 leading-relaxed flex gap-2">
-                  <span className="text-foreground-400 font-mono">1.</span>
-                  按键盘 <kbd className="px-1.5 py-0.5 rounded bg-background-100 border border-background-200 text-[11px] font-mono">{bookmarkShortcutLabel()}</kbd>
+                <li className="browser-chrome-body text-[12px] leading-relaxed flex gap-2">
+                  <span className="browser-chrome-muted tabular-nums flex-shrink-0">1.</span>
+                  <span>
+                    按键盘{' '}
+                    <kbd className="inline-flex items-center h-[18px] px-1.5 rounded bg-background-100 border border-background-200 text-[11px] tabular-nums">
+                      {bookmarkShortcutLabel()}
+                    </kbd>
+                  </span>
                 </li>
-                <li className="text-[12px] text-foreground-600 leading-relaxed flex gap-2">
-                  <span className="text-foreground-400 font-mono">2.</span>
-                  在弹出的对话框中确认，并勾选「显示在书签栏」
+                <li className="browser-chrome-body text-[12px] leading-relaxed flex gap-2">
+                  <span className="browser-chrome-muted tabular-nums flex-shrink-0">2.</span>
+                  <span>在弹出的对话框中确认，并勾选「显示在书签栏」</span>
                 </li>
               </ol>
             ) : (
               <ol className="space-y-2 mb-4">
                 {steps.map((step, i) => (
-                  <li key={step} className="text-[12px] text-foreground-600 leading-relaxed flex gap-2">
-                    <span className="text-foreground-400 font-mono">{i + 1}.</span>
-                    {step}
+                  <li key={step} className="browser-chrome-body text-[12px] leading-relaxed flex gap-2">
+                    <span className="browser-chrome-muted tabular-nums flex-shrink-0">{i + 1}.</span>
+                    <span>{step}</span>
                   </li>
                 ))}
               </ol>
@@ -184,14 +202,14 @@ export default function BrowserPageMenu() {
                   const ok = await copyCurrentUrl();
                   toast(ok ? 'success' : 'error', ok ? '地址已复制' : '复制失败，请手动从地址栏复制');
                 }}
-                className="h-8 px-3 rounded-lg bg-primary-500 text-background-50 text-[12px] font-medium hover:bg-primary-600"
+                className="browser-chrome-primary h-8 px-3.5 rounded-md text-[12px] font-medium hover:opacity-90"
               >
                 复制本页地址
               </button>
               <button
                 type="button"
                 onClick={() => setGuide(null)}
-                className="h-8 px-3 rounded-lg text-[12px] text-foreground-500 hover:text-foreground-700 hover:bg-background-100"
+                className="browser-chrome-muted h-8 px-3 rounded-md text-[12px] hover:bg-background-100"
               >
                 关闭
               </button>
@@ -199,7 +217,8 @@ export default function BrowserPageMenu() {
           </div>
         </div>
       )}
-    </>
+    </>,
+    document.body,
   );
 }
 
@@ -219,12 +238,12 @@ function MenuItem({
       type="button"
       role="menuitem"
       onClick={onClick}
-      className="w-full flex items-center gap-2.5 px-3 py-2 text-left text-[13px] text-foreground-700 hover:bg-background-100 transition-colors"
+      className="w-full flex items-center gap-2.5 px-3 py-2 text-left text-[13px] browser-chrome-body hover:bg-background-100 transition-colors"
     >
-      <i className={cn(icon, 'text-base text-foreground-400')} />
+      <i className={cn(icon, 'text-base browser-chrome-muted')} aria-hidden />
       <span className="flex-1 min-w-0">{label}</span>
       {hint && (
-        <span className="text-[10px] font-mono text-foreground-300 flex-shrink-0">{hint}</span>
+        <span className="text-[10px] tabular-nums browser-chrome-muted flex-shrink-0">{hint}</span>
       )}
     </button>
   );

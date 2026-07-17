@@ -96,9 +96,51 @@ export const slateTheme: ThemePackage = {
   --secondary-950: 0.14 0.006 248;
 }
 
-/* 扁平化补充：material-card 不再上浮 */
+/* 扁平化补充：material-card 不再上浮；网格项与列表面板同色同描边 */
+[data-theme="slate"] .material-card {
+  background: oklch(var(--background-50));
+  box-shadow: none;
+  border: 1px solid oklch(var(--background-200) / 0.55);
+}
 [data-theme="slate"] .material-card:hover {
   transform: none;
+  box-shadow: none;
+  border-color: oklch(var(--background-300) / 0.85);
+  background: oklch(var(--background-50));
+}
+
+/* 壁纸上：与列表行同款浅/深 wash，不再用高不透明白霜面板 */
+[data-theme="slate"][data-wallpaper] .material-card {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  box-shadow: none !important;
+}
+[data-theme="slate"][data-wallpaper][data-wallpaper-tone="light"] .material-card {
+  background: oklch(1 0 0 / 0.2) !important;
+  border-color: color-mix(in oklch, var(--wp-ink) 14%, transparent);
+}
+[data-theme="slate"][data-wallpaper][data-wallpaper-tone="dark"] .material-card {
+  background: oklch(0.12 0.02 260 / 0.34) !important;
+  border-color: color-mix(in oklch, var(--wp-ink) 14%, transparent);
+}
+[data-theme="slate"][data-wallpaper][data-wallpaper-tone="light"] .material-card:hover {
+  background: oklch(1 0 0 / 0.3) !important;
+}
+[data-theme="slate"][data-wallpaper][data-wallpaper-tone="dark"] .material-card:hover {
+  background: oklch(0.12 0.02 260 / 0.48) !important;
+}
+/* wash 面板上改用壁纸墨色，与列表行一致 */
+[data-theme="slate"][data-wallpaper] .wallpaper-ink-scope .material-card .site-card-title,
+[data-theme="slate"][data-wallpaper] .wallpaper-ink-scope .material-card .site-card-title * {
+  color: var(--wp-ink) !important;
+  text-shadow: var(--wp-shadow);
+}
+[data-theme="slate"][data-wallpaper] .wallpaper-ink-scope .material-card .site-card-domain,
+[data-theme="slate"][data-wallpaper] .wallpaper-ink-scope .material-card .site-card-domain *,
+[data-theme="slate"][data-wallpaper] .wallpaper-ink-scope .material-card .site-card-desc,
+[data-theme="slate"][data-wallpaper] .wallpaper-ink-scope .material-card .site-card-desc * {
+  color: var(--wp-ink-muted) !important;
+  text-shadow: var(--wp-shadow);
 }
 
 /* 纸纹颗粒 — 极细噪点叠加，赋予"印刷品"质感 */

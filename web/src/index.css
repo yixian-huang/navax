@@ -138,6 +138,35 @@ body {
   transform: translateY(-2px);
 }
 
+/*
+ * Floating chrome (context menu / homepage guide dialog).
+ * Portaled to body; still force theme ink so wallpaper-ink scopes never leak in.
+ */
+.browser-chrome-surface {
+  color: oklch(var(--foreground-800));
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+.browser-chrome-surface .browser-chrome-title {
+  color: oklch(var(--foreground-900));
+  font-family: var(--font-body);
+  font-weight: 600;
+}
+.browser-chrome-surface .browser-chrome-muted {
+  color: oklch(var(--foreground-500));
+}
+.browser-chrome-surface .browser-chrome-body {
+  color: oklch(var(--foreground-700));
+}
+.browser-chrome-surface .browser-chrome-primary {
+  color: oklch(var(--background-50));
+  background: oklch(var(--primary-500));
+}
+.browser-chrome-surface kbd {
+  color: oklch(var(--foreground-600));
+  font-family: var(--font-mono);
+}
+
 /* Wallpaper mode: very light frost — never a solid white slab over the photo. */
 .wallpaper-surface {
   background: oklch(var(--background-50) / 0.28);

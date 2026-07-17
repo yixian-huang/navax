@@ -219,30 +219,27 @@ export default function SiteCard({ site, density, onOpen, onEdit, onDelete, sear
     );
   }
 
-  // Comfortable: title + one secondary line. Prefer description; fall back to domain
-  // so cards without a written desc still feel complete (no empty reserved line).
+  // Comfortable: fixed two-line text block so cards with/without description share
+  // the same content metrics (title 20px + gap 4px + secondary 16px).
   const secondary = desc || domain;
   return (
     <CardWrapper
       {...shared}
-      className={cn(
-        'material-card site-card-comfortable flex gap-3 p-3.5 min-h-[5.25rem]',
-        desc ? 'items-start' : 'items-center',
-      )}
+      className="material-card site-card-comfortable flex items-start gap-3 p-3.5 h-[5.5rem]"
     >
-      <span className="site-card-favicon flex h-10 w-10 flex-shrink-0 items-center justify-center">
+      <span className="site-card-favicon mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center">
         <SiteIcon site={site} size={24} />
       </span>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-start gap-1.5">
-          <h3 className="site-card-title min-w-0 flex-1 text-sm font-semibold text-foreground-900 line-clamp-1 group-hover:text-accent-500 transition-colors duration-200">
+      <div className="min-w-0 flex-1 flex flex-col justify-center gap-1 py-0.5">
+        <div className="flex items-center gap-1.5 min-h-5">
+          <h3 className="site-card-title min-w-0 flex-1 text-sm font-semibold leading-5 text-foreground-900 line-clamp-1 group-hover:text-accent-500 transition-colors duration-200">
             <HighlightText text={site.title} query={q} />
           </h3>
-          <i className="ri-arrow-right-up-line mt-0.5 text-sm text-foreground-300 opacity-0 -translate-x-0.5 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300 flex-shrink-0" />
+          <i className="ri-arrow-right-up-line text-sm text-foreground-300 opacity-0 -translate-x-0.5 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300 flex-shrink-0" />
         </div>
         <p
           className={cn(
-            'text-[11px] line-clamp-1 mt-0.5 leading-snug',
+            'text-[11px] leading-4 line-clamp-1 min-h-4',
             desc
               ? 'site-card-desc text-foreground-600'
               : 'site-card-domain text-foreground-500 font-mono',

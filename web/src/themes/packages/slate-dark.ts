@@ -95,9 +95,43 @@ export const slateDarkTheme: ThemePackage = {
   --secondary-950: 0.92 0.006 248;
 }
 
-/* 扁平化补充：material-card 不再上浮 */
+/* 扁平化补充：网格项与列表面板同色同描边 */
+[data-theme="slate-dark"] .material-card {
+  background: oklch(var(--background-50));
+  box-shadow: none;
+  border: 1px solid oklch(0.95 0.01 255 / 0.10);
+}
 [data-theme="slate-dark"] .material-card:hover {
   transform: none;
+  box-shadow: none;
+  border-color: oklch(0.95 0.01 255 / 0.18);
+  background: oklch(var(--background-50));
+}
+
+[data-theme="slate-dark"][data-wallpaper] .material-card {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  box-shadow: none !important;
+}
+[data-theme="slate-dark"][data-wallpaper][data-wallpaper-tone="light"] .material-card {
+  background: oklch(1 0 0 / 0.2) !important;
+  border-color: color-mix(in oklch, var(--wp-ink) 14%, transparent);
+}
+[data-theme="slate-dark"][data-wallpaper][data-wallpaper-tone="dark"] .material-card {
+  background: oklch(0.12 0.02 260 / 0.34) !important;
+  border-color: color-mix(in oklch, var(--wp-ink) 14%, transparent);
+}
+[data-theme="slate-dark"][data-wallpaper] .wallpaper-ink-scope .material-card .site-card-title,
+[data-theme="slate-dark"][data-wallpaper] .wallpaper-ink-scope .material-card .site-card-title * {
+  color: var(--wp-ink) !important;
+  text-shadow: var(--wp-shadow);
+}
+[data-theme="slate-dark"][data-wallpaper] .wallpaper-ink-scope .material-card .site-card-domain,
+[data-theme="slate-dark"][data-wallpaper] .wallpaper-ink-scope .material-card .site-card-domain *,
+[data-theme="slate-dark"][data-wallpaper] .wallpaper-ink-scope .material-card .site-card-desc,
+[data-theme="slate-dark"][data-wallpaper] .wallpaper-ink-scope .material-card .site-card-desc * {
+  color: var(--wp-ink-muted) !important;
+  text-shadow: var(--wp-shadow);
 }
 
 /* 纸纹颗粒 — 暗底用 screen 混合、低透明度 */
