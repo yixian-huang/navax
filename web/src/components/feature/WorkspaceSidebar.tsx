@@ -1,6 +1,7 @@
 import { type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { X, type LucideIcon } from 'lucide-react';
+import NavaxLogo from '@/components/base/NavaxLogo';
 import { cn } from '@/lib/utils';
 
 export interface SidebarNavItem {
@@ -74,8 +75,12 @@ export default function WorkspaceSidebar({
       )}>
         {/* Logo */}
         <div className={cn('flex items-center px-4 border-b border-background-200/70', v.logoH)}>
-          <Link to={brandHref} className="flex items-center gap-1.5">
-            <span className="text-lg font-bold font-heading text-foreground-950">nav.ax</span>
+          <Link
+            to={brandHref}
+            className="group flex items-center rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-400/50"
+            aria-label="nav.ax"
+          >
+            <NavaxLogo size="sm" wordmarkClassName="text-[15px]" />
           </Link>
           {badge && (
             <span className="ml-2 text-[10px] bg-accent-100 text-accent-700 px-1.5 py-0 rounded font-medium">{badge}</span>

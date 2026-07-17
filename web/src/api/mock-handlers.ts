@@ -146,6 +146,8 @@ function contractPageResponse() {
 // 把已发布页投影为公开契约（PublishedPageContract）：分类内嵌 sites，owner 独立对象。
 // settings 从来源自身的 themeId/layout 构造，不依赖当前编辑作用域。
 function contractPublishedResponse(source: MockPublishedPage | MockPageState, kind: 'system' | 'personal', subdomain: string) {
+  // 与草稿一致：使用 pageBackgrounds，否则上传背景后公开页永远是空背景，看起来像“上传无效”。
+  const background = pageBackgrounds.get(source.id) ?? { type: 'none', value: '', opacity: 1 };
   return {
     id: source.id,
     snapshotId: `snapshot_${source.id}`,
@@ -162,7 +164,7 @@ function contractPublishedResponse(source: MockPublishedPage | MockPageState, ki
         columns: source.layout.columns,
         categoryStyle: source.layout.categoryStyle,
       },
-      appearance: { themeId: source.themeId, background: { type: 'none', value: '', opacity: 1 } },
+      appearance: { themeId: source.themeId, background },
       search: { defaultEngine: 'google', showEngineSelector: true },
       display: { showClock: source.layout.showClock, showDate: source.layout.showDate, showGreeting: true },
       preferences: { locale: 'zh-CN', timezone: 'Asia/Shanghai', openLinksInNewTab: true },
@@ -170,7 +172,7 @@ function contractPublishedResponse(source: MockPublishedPage | MockPageState, ki
     categories: source.categories,
     subdomain: subdomain || null,
     publishedAt: source.publishedAt,
-    etag: `"mock-${source.id}"`,
+    etag: `"mock-${source.id}-${background.type}-${background.value.slice(0, 24)}"`,
   };
 }
 
@@ -309,9 +311,9 @@ handlers.push(url => {
 
 // ---- Public config & asset upload ----
 let mockAssetSeq = 0;
-handlers.push((url, init) => {
+handlers.push(async (url, init) => {
   if (url === `${API_BASE}/public/config`) {
-    return Promise.resolve(jsonResponse({
+    return jsonResponse({
       code: 'OK',
       data: {
         instanceName: 'nav.ax',
@@ -322,24 +324,43 @@ handlers.push((url, init) => {
         limits: { maxCategoriesPerPage: 50, maxSitesPerPage: 1000, maxUploadBytes: 5 * 1024 * 1024 },
       },
       meta: { message: '', detail: '' },
-    }));
+    });
   }
   if (url === `${API_BASE}/assets` && (init?.method || 'GET') === 'POST') {
     mockAssetSeq += 1;
-    // Mock 环境无真实存储，用 data URL 占位，让预览即时可见。
-    const preview = 'data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20width=%22320%22%20height=%22180%22%3E%3Crect%20width=%22100%25%22%20height=%22100%25%22%20fill=%22%234a6b52%22/%3E%3C/svg%3E';
-    return Promise.resolve(jsonResponse({
+    // 开发 mock：把实际上传的文件转成 data URL，主题预览 / 公开页可立刻看到真实图片。
+    let kind = 'background';
+    let preview = 'data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20width=%22320%22%20height=%22180%22%3E%3Crect%20width=%22100%25%22%20height=%22100%25%22%20fill=%22%234a6b52%22/%3E%3C/svg%3E';
+    let mimeType = 'image/svg+xml';
+    let size = 1024;
+    const body = init?.body as unknown;
+    if (typeof FormData !== 'undefined' && body instanceof FormData) {
+      const kindValue = body.get('kind');
+      if (typeof kindValue === 'string' && kindValue) kind = kindValue;
+      const file = body.get('file');
+      if (file instanceof Blob) {
+        size = file.size;
+        mimeType = file.type || 'application/octet-stream';
+        preview = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result || ''));
+          reader.onerror = () => reject(reader.error ?? new Error('read upload failed'));
+          reader.readAsDataURL(file);
+        });
+      }
+    }
+    return jsonResponse({
       code: 'OK',
       data: {
         id: `ast_mock_${mockAssetSeq}`,
-        kind: 'background',
+        kind,
         url: preview,
-        mimeType: 'image/svg+xml',
-        size: 1024,
+        mimeType,
+        size,
         createdAt: new Date().toISOString(),
       },
       meta: { message: '', detail: '' },
-    }, 201));
+    }, 201);
   }
   return null;
 });

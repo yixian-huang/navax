@@ -149,16 +149,34 @@ export default function ThemesPage() {
     setUploading(true);
     try {
       const response = await assetsApi.upload('background', file);
-      await handleSaveBg(response.data.url);
+      const imageUrl = response.data.url;
+      if (!imageUrl) {
+        throw new Error('上传成功但未返回图片地址');
+      }
+      const updated = { ...bgConfigRef.current, image: imageUrl };
+      setBgConfig(updated);
+      bgConfigRef.current = updated;
+      await persistBackground(updated);
+      toast(
+        'success',
+        draftSaveToastMessage(
+          page?.publication,
+          page?.publication?.published
+            ? '背景已写入草稿 · 请到「发布」页点「发布更新」后访客才能看到'
+            : '背景已写入草稿 · 发布后生效',
+        ),
+      );
     } catch (cause) {
       const message = cause instanceof ApiError && cause.status === 415
         ? '仅支持 PNG、JPEG、GIF 或 WebP 图片'
-        : cause instanceof Error ? cause.message : '背景图上传失败';
+        : cause instanceof ApiError && cause.status === 503
+          ? '存储服务暂不可用，请稍后重试或检查对象存储配置'
+          : cause instanceof Error ? cause.message : '背景图上传失败';
       toast('error', message);
     } finally {
       setUploading(false);
     }
-  }, [maxUploadBytes, handleSaveBg, toast]);
+  }, [maxUploadBytes, persistBackground, toast, page?.publication]);
 
   const handleFilePicked = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -260,7 +278,8 @@ export default function ThemesPage() {
           <h1 className="text-2xl font-bold font-heading text-foreground-950">主题设置</h1>
         </div>
         <p className="text-sm text-foreground-400 mt-1">
-          选择当前导航页的主题与背景；保存后写入草稿，发布后访客才可见 · 共 {themes.length} 套主题
+          选择当前导航页的主题与背景。上传与改动先写入草稿；公开首页要看到效果，请到「发布」页点「发布更新」。
+          管理员请确认顶部为「管理主站」（system），不是「我的导航」。共 {themes.length} 套主题
         </p>
       </div>
 

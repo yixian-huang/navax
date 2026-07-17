@@ -7,6 +7,8 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { themeRegistry } from '@/themes/registry';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
+import { useWallpaperTone } from '@/hooks/useWallpaperTone';
+import NavaxLogo from '@/components/base/NavaxLogo';
 import { cn } from '@/lib/utils';
 
 import '@/themes/packages';
@@ -35,6 +37,8 @@ export default function PublicShell({
 }: PublicShellProps) {
   const [scrolled, setScrolled] = useState(false);
   const hasBackground = Boolean(backgroundUrl);
+  // Sample wallpaper + opacity → light|dark ink (low opacity ⇒ base shows ⇒ dark ink).
+  const wallpaperTone = useWallpaperTone(backgroundUrl, backgroundOpacity);
 
   // 公开页主题来自服务端发布快照，不在浏览器持久化服务端状态。
   useEffect(() => {
@@ -61,6 +65,17 @@ export default function PublicShell({
 
   // Keep the photo vivid; only a soft edge vignette (not a flat white wash).
   const imageAlpha = Math.min(1, Math.max(0.25, backgroundOpacity));
+  const tone = wallpaperTone ?? 'light';
+  // Dark photos: slightly lighter edge veil; light photos: soft dark rim.
+  const vignette = tone === 'dark'
+    ? [
+        'radial-gradient(ellipse 90% 75% at 50% 35%, transparent 40%, rgba(0,0,0,0.28) 100%)',
+        'linear-gradient(to bottom, rgba(0,0,0,0.22) 0%, transparent 22%, transparent 70%, rgba(0,0,0,0.28) 100%)',
+      ].join(', ')
+    : [
+        'radial-gradient(ellipse 90% 75% at 50% 35%, transparent 35%, rgba(15, 23, 42, 0.18) 100%)',
+        'linear-gradient(to bottom, rgba(255,255,255,0.12) 0%, transparent 18%, transparent 72%, rgba(15,23,42,0.14) 100%)',
+      ].join(', ');
 
   return (
     <div
@@ -69,28 +84,23 @@ export default function PublicShell({
         hasBackground ? 'bg-transparent' : 'bg-background-100',
       )}
       data-wallpaper={hasBackground ? 'true' : undefined}
+      data-wallpaper-tone={hasBackground ? tone : undefined}
     >
       {hasBackground && (
         <div className="fixed inset-0 z-0 pointer-events-none" aria-hidden>
           <img
             src={backgroundUrl}
             alt=""
+            // CORS-friendly load so luminance sampling can read pixels when allowed.
+            crossOrigin="anonymous"
             // External preset hosts often reject requests that include a site Referer.
             referrerPolicy="no-referrer"
             decoding="async"
             className="absolute inset-0 w-full h-full object-cover"
             style={{ opacity: imageAlpha }}
           />
-          {/* Soft vignette only — center stays photographic; edges ease chrome contrast */}
-          <div
-            className="absolute inset-0"
-            style={{
-              background: [
-                'radial-gradient(ellipse 90% 75% at 50% 35%, transparent 35%, rgba(15, 23, 42, 0.22) 100%)',
-                'linear-gradient(to bottom, rgba(255,255,255,0.10) 0%, transparent 18%, transparent 72%, rgba(15,23,42,0.16) 100%)',
-              ].join(', '),
-            }}
-          />
+          {/* Soft vignette tuned by wallpaper tone for edge chrome */}
+          <div className="absolute inset-0" style={{ background: vignette }} />
         </div>
       )}
 
@@ -115,15 +125,14 @@ export default function PublicShell({
         <nav className={cn(
           'mx-auto max-w-4xl px-6 md:px-8 h-16 flex items-center justify-between',
           // Readable logo/links without a permanent glass slab over the photo.
-          hasBackground && !scrolled && 'wallpaper-type',
+          hasBackground && !scrolled && 'wallpaper-type wallpaper-ink-scope',
         )}>
-          <Link to="/" className="flex items-center gap-2.5 group">
-            <span className={cn(
-              'text-base font-heading font-semibold tracking-tight',
-              hasBackground ? 'text-foreground-900' : 'text-foreground-800',
-            )}>
-              nav.ax
-            </span>
+          <Link
+            to="/"
+            className="group flex items-center rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-400/50"
+            aria-label="nav.ax 首页"
+          >
+            <NavaxLogo size="md" />
           </Link>
 
           <div className="flex items-center gap-1.5">
@@ -132,7 +141,7 @@ export default function PublicShell({
               className={cn(
                 'h-9 px-3 flex items-center text-xs transition-colors duration-200 whitespace-nowrap',
                 hasBackground
-                  ? 'text-foreground-700 hover:text-primary-500'
+                  ? 'wallpaper-ink-muted hover:opacity-90'
                   : 'text-foreground-500 hover:text-primary-500',
               )}
             >
@@ -143,7 +152,7 @@ export default function PublicShell({
               className={cn(
                 'h-9 px-3 flex items-center text-xs transition-colors duration-200 whitespace-nowrap',
                 hasBackground
-                  ? 'text-foreground-800 hover:text-foreground-950'
+                  ? 'wallpaper-ink hover:opacity-90'
                   : 'text-foreground-600 hover:text-foreground-800',
               )}
             >
@@ -156,7 +165,9 @@ export default function PublicShell({
       {/* Spacer to compensate for fixed navbar */}
       <div className="h-16 flex-shrink-0 relative z-10" />
 
-      <main className="flex-1 relative z-10">{children}</main>
+      <main className={cn('flex-1 relative z-10', hasBackground && 'wallpaper-ink-scope')}>
+        {children}
+      </main>
 
       <footer className="mt-auto relative z-10">
         <div className="mx-auto max-w-4xl px-6 md:px-8 py-8">
@@ -165,14 +176,14 @@ export default function PublicShell({
             Quiet type only — legal chrome should not compete with the photo.
           */}
           {hasBackground ? (
-            <div className="flex items-center justify-between gap-4 flex-wrap border-t border-background-50/20 pt-6">
-              <span className="text-[11px] text-foreground-600/90 tracking-wide">
+            <div className="flex items-center justify-between gap-4 flex-wrap border-t border-[color:var(--wp-edge)] pt-6">
+              <span className="text-[11px] tracking-wide wallpaper-ink-muted">
                 nav.ax
               </span>
               <nav className="flex items-center gap-3">
-                <Link to="/privacy" className="text-[11px] text-foreground-600/80 hover:text-primary-500 transition-colors duration-200">隐私</Link>
-                <Link to="/terms" className="text-[11px] text-foreground-600/80 hover:text-primary-500 transition-colors duration-200">条款</Link>
-                <Link to="/cookies" className="text-[11px] text-foreground-600/80 hover:text-primary-500 transition-colors duration-200">Cookie</Link>
+                <Link to="/privacy" className="text-[11px] wallpaper-ink-soft hover:opacity-100 opacity-90 transition-opacity duration-200">隐私</Link>
+                <Link to="/terms" className="text-[11px] wallpaper-ink-soft hover:opacity-100 opacity-90 transition-opacity duration-200">条款</Link>
+                <Link to="/cookies" className="text-[11px] wallpaper-ink-soft hover:opacity-100 opacity-90 transition-opacity duration-200">Cookie</Link>
               </nav>
             </div>
           ) : (

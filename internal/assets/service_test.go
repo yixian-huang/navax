@@ -45,6 +45,9 @@ func TestLocalAssetUploadAndOpen(t *testing.T) {
 	if asset.MIMEType != "image/png" || asset.Size != int64(len(payload)) || asset.SHA256 != hex.EncodeToString(digest[:]) {
 		t.Fatalf("asset metadata = %+v", asset)
 	}
+	if asset.Driver != "local" {
+		t.Fatalf("driver = %q, want local", asset.Driver)
+	}
 	if !objectKeyPattern.MatchString(asset.ObjectKey) || asset.URL != publicURLPrefix+asset.ObjectKey {
 		t.Fatalf("asset object key/url = %q %q", asset.ObjectKey, asset.URL)
 	}
@@ -69,6 +72,64 @@ func TestLocalAssetUploadAndOpen(t *testing.T) {
 	}
 	if _, _, err := service.Open(ctx, "../navax.db"); !errors.Is(err, ErrInvalidObject) {
 		t.Fatalf("path traversal error = %v", err)
+	}
+}
+
+// Without any object-storage config (or with a broken resolver), uploads must
+// still succeed on the local data directory.
+func TestUploadFallsBackToLocalWhenStorageUnavailable(t *testing.T) {
+	ctx := context.Background()
+	db, err := database.OpenAndMigrate(ctx, database.Config{Path: ":memory:", MaxOpenConns: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	insertAssetOwner(t, db, "usr_asset_fallback")
+	root := filepath.Join(t.TempDir(), "assets")
+	service, err := NewService(db, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Resolver returns nil config (no S3) → local.
+	service.SetStorageResolver(func(context.Context) (*S3Config, error) {
+		return nil, nil
+	})
+	payload := testPNGAt(t, 128, 96)
+	asset, err := service.Upload(ctx, "usr_asset_fallback", "background", "bg.png", "image/png", bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("upload without S3: %v", err)
+	}
+	if asset.Driver != "local" || !strings.HasPrefix(asset.URL, publicURLPrefix) {
+		t.Fatalf("want local asset, got %+v", asset)
+	}
+	if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(asset.ObjectKey))); err != nil {
+		t.Fatalf("local file missing: %v", err)
+	}
+
+	// Resolver errors → still local, not a hard failure.
+	service.SetStorageResolver(func(context.Context) (*S3Config, error) {
+		return nil, errors.New("storage provider unreachable")
+	})
+	asset2, err := service.Upload(ctx, "usr_asset_fallback", "site-icon", "icon.png", "image/png", bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("upload with broken resolver: %v", err)
+	}
+	if asset2.Driver != "local" {
+		t.Fatalf("driver = %q after resolver error, want local", asset2.Driver)
+	}
+
+	// Incomplete S3 config (nil after resolve returns empty) already covered;
+	// invalid client construction also falls back.
+	service.SetStorageResolver(func(context.Context) (*S3Config, error) {
+		return &S3Config{Endpoint: "http://127.0.0.1:1", Bucket: "b", AccessKey: "a", SecretKey: "s", Region: "us-east-1", PathStyle: true}, nil
+	})
+	asset3, err := service.Upload(ctx, "usr_asset_fallback", "avatar", "a.png", "image/png", bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("upload with unreachable S3 endpoint: %v", err)
+	}
+	if asset3.Driver != "local" {
+		t.Fatalf("driver = %q after S3 put failure, want local", asset3.Driver)
 	}
 }
 
@@ -122,12 +183,19 @@ func TestAssetValidationAndLimit(t *testing.T) {
 	})
 	t.Run("accepts image/jpg alias for jpeg payload", func(t *testing.T) {
 		jpegPayload := testJPEG(t)
-		asset, err := service.Upload(ctx, "usr_asset_check", "background", "shot.JPEG", "image/jpg", bytes.NewReader(jpegPayload))
+		asset, err := service.Upload(ctx, "usr_asset_check", "avatar", "shot.JPEG", "image/jpg", bytes.NewReader(jpegPayload))
 		if err != nil {
 			t.Fatalf("Upload() error = %v", err)
 		}
 		if asset.MIMEType != "image/jpeg" || !strings.HasSuffix(asset.ObjectKey, ".jpg") {
 			t.Fatalf("expected jpeg storage, got %+v", asset)
+		}
+	})
+	t.Run("rejects tiny background wallpaper", func(t *testing.T) {
+		tiny := testPNGAt(t, 16, 16)
+		_, err := service.Upload(ctx, "usr_asset_check", "background", "tiny.png", "image/png", bytes.NewReader(tiny))
+		if !errors.Is(err, ErrImageTooSmall) {
+			t.Fatalf("Upload() error = %v, want ErrImageTooSmall", err)
 		}
 	})
 	matches, err := filepath.Glob(filepath.Join(service.root, ".upload-*"))
@@ -160,9 +228,14 @@ func insertAssetOwner(t *testing.T, db *sql.DB, id string) {
 
 func testPNG(t *testing.T) []byte {
 	t.Helper()
-	canvas := image.NewRGBA(image.Rect(0, 0, 16, 16))
-	for y := 0; y < 16; y++ {
-		for x := 0; x < 16; x++ {
+	return testPNGAt(t, 16, 16)
+}
+
+func testPNGAt(t *testing.T, w, h int) []byte {
+	t.Helper()
+	canvas := image.NewRGBA(image.Rect(0, 0, w, h))
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
 			canvas.Set(x, y, color.RGBA{R: uint8(x * 8), G: uint8(y * 8), B: 120, A: 255})
 		}
 	}

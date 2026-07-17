@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import PublicShell from '@/components/feature/PublicShell';
+import NavaxLogo from '@/components/base/NavaxLogo';
 import { Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react';
 import { useToast } from '@/components/base/Toast';
 import { authApi } from '@/api/auth';
@@ -51,8 +52,8 @@ export default function LoginPage() {
       <div className="min-h-[80vh] flex items-center justify-center px-4">
         <div className="w-full max-w-sm">
           <div className="text-center mb-8">
-            <Link to="/" className="inline-block">
-              <span className="text-2xl font-bold font-heading text-foreground-950">nav.ax</span>
+            <Link to="/" className="group inline-flex justify-center" aria-label="nav.ax 首页">
+              <NavaxLogo size="lg" />
             </Link>
             <h1 className="mt-4 text-xl font-semibold text-foreground-900">登录你的账号</h1>
             <p className="mt-1 text-sm text-foreground-400">继续使用 nav.ax 管理你的导航主页</p>

@@ -33,15 +33,62 @@ export function EmptyState({
   title,
   description,
   action,
+  /** quiet: lighter empty used on public nav grids / wallpaper mode */
+  variant = 'default',
+  className,
 }: {
   icon?: React.ComponentType<{ className?: string }>;
   iconClass?: string;
   title: string;
   description?: string;
   action?: React.ReactNode;
+  variant?: 'default' | 'quiet';
+  className?: string;
 }) {
+  if (variant === 'quiet') {
+    return (
+      <div
+        className={cn(
+          'flex flex-col items-center justify-center text-center py-10 sm:py-12 px-4',
+          className,
+        )}
+      >
+        <div
+          className={cn(
+            'empty-quiet-panel w-full max-w-md rounded-2xl border border-dashed px-6 py-10 sm:py-12',
+            'border-background-200/80 bg-background-50/50',
+          )}
+        >
+          <div
+            className={cn(
+              'empty-quiet-icon mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-xl',
+              'bg-background-100/80 text-foreground-400',
+            )}
+          >
+            {Icon ? (
+              <Icon className="h-5 w-5" />
+            ) : iconClass ? (
+              <i className={cn(iconClass, 'text-lg')} />
+            ) : (
+              <Inbox className="h-5 w-5" />
+            )}
+          </div>
+          <h3 className="empty-quiet-title text-sm font-medium tracking-tight text-foreground-600">
+            {title}
+          </h3>
+          {description ? (
+            <p className="empty-quiet-desc mx-auto mt-1.5 max-w-xs text-xs leading-relaxed text-foreground-400">
+              {description}
+            </p>
+          ) : null}
+          {action ? <div className="mt-4 flex justify-center">{action}</div> : null}
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+    <div className={cn('flex flex-col items-center justify-center py-16 px-4 text-center', className)}>
       <div className="w-16 h-16 rounded-full bg-background-100 flex items-center justify-center mb-4">
         {Icon ? (
           <Icon className="w-8 h-8 text-foreground-300" />

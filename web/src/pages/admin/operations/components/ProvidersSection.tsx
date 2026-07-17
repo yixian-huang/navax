@@ -11,7 +11,7 @@ const providerKinds: ProviderKind[] = ['smtp', 'storage', 'dns'];
 
 const providerMeta = {
   smtp: { label: 'SMTP 邮件', description: '邀请邮件、密码找回等系统通知', icon: Mail, secret: 'password', secretLabel: 'SMTP 密码' },
-  storage: { label: '对象存储', description: '图标 / 图片上传（本地磁盘或 S3 兼容存储）', icon: Server, secret: 'secretKey', secretLabel: 'Secret Key' },
+  storage: { label: '图片存储', description: '默认本地磁盘；可选切换到 S3 兼容对象存储', icon: Server, secret: 'secretKey', secretLabel: 'Secret Key' },
   dns: { label: 'DNS 服务', description: '子域名自动化扩展预留（暂未接入）', icon: Network, secret: 'token', secretLabel: 'API Token' },
 } as const;
 
@@ -143,7 +143,7 @@ function ProviderCard({ provider }: { provider: ProviderConfig }) {
           </>
         ) : provider.kind === 'storage' ? (
           <>
-            <FormField label="存储驱动"><FormSelect value={String(settings.driver)} onChange={event => update('driver', event.target.value)}><option value="local">本地存储</option><option value="s3">S3 兼容</option></FormSelect></FormField>
+            <FormField label="存储驱动"><FormSelect value={String(settings.driver)} onChange={event => update('driver', event.target.value)}><option value="local">本地存储（默认）</option><option value="s3">S3 兼容</option></FormSelect></FormField>
             {settings.driver === 's3' ? (
               <>
                 <FormField label="Endpoint"><FormInput value={String(settings.endpoint)} onChange={event => update('endpoint', event.target.value)} /></FormField>
@@ -166,11 +166,19 @@ function ProviderCard({ provider }: { provider: ProviderConfig }) {
         )}
       </div>
 
+      {provider.kind === 'storage' && settings.driver !== 's3' ? (
+        <div className="rounded-lg bg-primary-50 border border-primary-200/70 p-3 flex items-start gap-2">
+          <Info className="w-3.5 h-3.5 text-primary-600 mt-0.5 shrink-0" />
+          <p className="text-xs text-primary-800 leading-relaxed">
+            未配置 S3 时默认使用<strong>本地存储</strong>：图片保存在服务器数据目录的 <code>assets/</code> 下，通过 <code>/api/v1/assets/…</code> 提供访问。无需填写 Endpoint / 密钥即可上传背景图、头像与站点图标。
+          </p>
+        </div>
+      ) : null}
       {provider.kind === 'storage' && settings.driver === 's3' ? (
         <div className="rounded-lg bg-primary-50 border border-primary-200/70 p-3 flex items-start gap-2">
           <Info className="w-3.5 h-3.5 text-primary-600 mt-0.5 shrink-0" />
           <p className="text-xs text-primary-800 leading-relaxed">
-            启用后新上传的图片会写入 S3 兼容存储。若填写 publicBaseUrl，返回的资源 URL 将使用该公共前缀；否则仍通过本站 <code>/api/v1/assets/…</code> 代理读取。
+            启用并完整配置后，新上传写入 S3 兼容存储。若 S3 不可用或配置不完整，系统会自动回退到本地 <code>assets/</code>，不中断上传。填写 publicBaseUrl 时资源 URL 使用该公共前缀，否则经本站 <code>/api/v1/assets/…</code> 代理读取。
           </p>
         </div>
       ) : null}
@@ -183,14 +191,17 @@ function ProviderCard({ provider }: { provider: ProviderConfig }) {
         </div>
       ) : null}
 
-      <div className="rounded-lg bg-background-50 border border-background-200/60 p-3">
-        <div className="flex items-center gap-2 mb-2">
-          <KeyRound className="w-3.5 h-3.5 text-foreground-400" />
-          <span className="text-xs font-medium text-foreground-600">{meta.secretLabel}</span>
-          {provider.hasSecret ? <span className="text-[10px] text-accent-700 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" />已有凭据</span> : null}
+      {/* Secrets only apply to SMTP / S3 / DNS — not local disk storage. */}
+      {!(provider.kind === 'storage' && settings.driver !== 's3') ? (
+        <div className="rounded-lg bg-background-50 border border-background-200/60 p-3">
+          <div className="flex items-center gap-2 mb-2">
+            <KeyRound className="w-3.5 h-3.5 text-foreground-400" />
+            <span className="text-xs font-medium text-foreground-600">{meta.secretLabel}</span>
+            {provider.hasSecret ? <span className="text-[10px] text-accent-700 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" />已有凭据</span> : null}
+          </div>
+          <FormInput type="password" autoComplete="new-password" value={secret} onChange={event => setSecret(event.target.value)} placeholder={provider.hasSecret ? '留空以保留现有凭据' : '输入后仅写入，不会回显'} />
         </div>
-        <FormInput type="password" autoComplete="new-password" value={secret} onChange={event => setSecret(event.target.value)} placeholder={provider.hasSecret ? '留空以保留现有凭据' : '输入后仅写入，不会回显'} />
-      </div>
+      ) : null}
 
       {provider.kind === 'smtp' ? <FormField label="测试收件人（可选）"><FormInput type="email" value={recipient} onChange={event => setRecipient(event.target.value)} placeholder="admin@example.com" /></FormField> : null}
 

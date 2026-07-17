@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import SearchBar from '@/components/base/SearchBar';
 import SiteGrid from '@/components/base/SiteGrid';
 import DensitySwitcher from '@/components/base/DensitySwitcher';
+import { useCurrentUser } from '@/hooks/useQueries';
 import { cn } from '@/lib/utils';
 import IconRenderer from '@/components/base/IconRenderer';
 import type { Density, Site, Category } from '@/api/types';
@@ -33,6 +34,9 @@ export default function LayoutSidebar({
   searchSuggestions,
   wallpaperMode = false,
 }: LayoutProps) {
+  const { data: authSession } = useCurrentUser();
+  const canManageLinks = Boolean(authSession?.authenticated && authSession.user);
+
   return (
     <div className={cn(
       'mx-auto max-w-6xl px-6 md:px-8 pb-24',
@@ -185,7 +189,7 @@ export default function LayoutSidebar({
               density={density}
               query={query}
               onSiteOpen={onSiteOpen}
-              showAddLink={!query}
+              showAddLink={canManageLinks && !query}
               comfortableCols="grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4"
               compactCols="grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-3"
             />

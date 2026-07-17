@@ -50,5 +50,36 @@ func sameOrigin(left, right *url.URL) bool {
 	if left == nil || right == nil {
 		return false
 	}
-	return strings.EqualFold(left.Scheme, right.Scheme) && strings.EqualFold(left.Host, right.Host)
+	if !strings.EqualFold(left.Scheme, right.Scheme) {
+		return false
+	}
+	// Treat localhost and 127.0.0.1 as equivalent so local Vite (either form)
+	// can talk to a backend that was started with the other host string.
+	return normalizeLocalHost(left.Host) == normalizeLocalHost(right.Host)
+}
+
+func normalizeLocalHost(host string) string {
+	host = strings.ToLower(strings.TrimSpace(host))
+	// host may be "localhost:3000" or "127.0.0.1:3000"
+	if h, p, err := splitHostPortLoose(host); err == nil {
+		if h == "127.0.0.1" {
+			h = "localhost"
+		}
+		if p == "" {
+			return h
+		}
+		return h + ":" + p
+	}
+	if host == "127.0.0.1" {
+		return "localhost"
+	}
+	return host
+}
+
+func splitHostPortLoose(host string) (string, string, error) {
+	// net.SplitHostPort requires brackets for IPv6; we only care about local dev hosts.
+	if i := strings.LastIndex(host, ":"); i > 0 && !strings.Contains(host, "]") {
+		return host[:i], host[i+1:], nil
+	}
+	return host, "", nil
 }

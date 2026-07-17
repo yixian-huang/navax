@@ -32,7 +32,7 @@ internal/httpapi/      路由、DTO、响应、认证/权限中间件
 internal/auth/         用户、邀请、Session、密码
 internal/navigation/   页面、分类、站点、排序、偏好，以及发布快照/公开投影/ETag
 internal/catalog/      公开配置、主题列表、推荐目录、发现页
-internal/assets/       本地图片上传与只读分发（S3 配置为预留，v1 未接入分发）
+internal/assets/       图片上传：默认写入 `NAVAX_DATA_DIR/assets` 本地磁盘；管理员完整配置并启用 S3 后新上传可走对象存储，配置不完整或 S3 不可用时自动回退本地
 internal/analytics/    匿名事件、聚合和保留策略
 internal/admin/        运营管理和审计
 internal/integrations/ SMTP、对象存储与 DNS 的配置/测试适配器（DNS 与 S3 写入为扩展预留）

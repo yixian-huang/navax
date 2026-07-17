@@ -188,24 +188,36 @@ func (s *Service) mergedSecrets(ctx context.Context, kind Kind, incoming map[str
 }
 
 // ActiveS3Config returns S3 credentials when storage is enabled with driver s3.
-// A nil config means callers should use local disk storage.
+// ok=false means callers must use local disk under NAVAX_DATA_DIR/assets.
+// Incomplete or non-S3 configuration never errors — uploads must not be blocked
+// when object storage is unset or only partially configured.
 func (s *Service) ActiveS3Config(ctx context.Context) (endpoint, region, bucket, prefix, accessKey, secretKey, publicBaseURL string, pathStyle bool, ok bool, err error) {
 	provider, err := s.Get(ctx, Storage)
 	if err != nil {
+		// Missing provider row → local. Unexpected DB errors still surface.
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", "", "", "", "", "", "", false, false, nil
+		}
 		return "", "", "", "", "", "", "", false, false, err
 	}
 	if !provider.Enabled || !provider.Configured {
 		return "", "", "", "", "", "", "", false, false, nil
 	}
 	if stringSetting(provider.Settings, "driver") != "s3" {
+		// local (or empty) driver → on-disk storage
 		return "", "", "", "", "", "", "", false, false, nil
 	}
 	secrets, err := s.mergedSecrets(ctx, Storage, nil)
 	if err != nil {
-		return "", "", "", "", "", "", "", false, false, err
+		// Decrypt/master-key issues must not brick every image upload.
+		return "", "", "", "", "", "", "", false, false, nil
 	}
-	if secrets["secretKey"] == "" {
-		return "", "", "", "", "", "", "", false, false, fmt.Errorf("%w: secretKey is required", ErrInvalidSettings)
+	if secrets["secretKey"] == "" ||
+		stringSetting(provider.Settings, "endpoint") == "" ||
+		stringSetting(provider.Settings, "bucket") == "" ||
+		stringSetting(provider.Settings, "accessKey") == "" {
+		// Incomplete S3 settings → fall back to local.
+		return "", "", "", "", "", "", "", false, false, nil
 	}
 	pathStyle = boolSetting(provider.Settings, "pathStyle")
 	return stringSetting(provider.Settings, "endpoint"),

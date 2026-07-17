@@ -118,6 +118,8 @@ func (h *AssetHandler) writeError(w http.ResponseWriter, r *http.Request, err er
 		WriteError(w, r, http.StatusRequestEntityTooLarge, "PAYLOAD_TOO_LARGE", "图片超过系统上传限制", nil)
 	case errors.Is(err, assets.ErrUnsupported), errors.Is(err, assets.ErrInvalidImage):
 		WriteError(w, r, http.StatusUnsupportedMediaType, "UNSUPPORTED_MEDIA_TYPE", "仅支持有效的 PNG、JPEG、GIF 或 WebP 图片", nil)
+	case errors.Is(err, assets.ErrImageTooSmall):
+		WriteError(w, r, http.StatusUnprocessableEntity, "VALIDATION_FAILED", "背景图过小（宽高至少 64px），请上传清晰的壁纸图", nil)
 	case errors.Is(err, assets.ErrInvalidKind):
 		WriteError(w, r, http.StatusUnprocessableEntity, "VALIDATION_FAILED", "kind 必须是 avatar、background 或 site-icon", nil)
 	case errors.Is(err, assets.ErrInvalidOwner):

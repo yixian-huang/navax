@@ -41,18 +41,31 @@ export default function SiteGrid({
   className,
 }: SiteGridProps) {
   if (sites.length === 0) {
+    const isSearch = Boolean(query?.trim());
     return (
       <EmptyState
-        iconClass="ri-inbox-line"
-        title={emptyTitle || (query ? '没有匹配的站点' : '该分类下暂无站点')}
-        description={emptyDescription || (query ? '换个关键词试试' : '去站点管理添加一些收藏吧')}
+        variant="quiet"
+        iconClass={isSearch ? 'ri-search-line' : 'ri-folder-open-line'}
+        title={emptyTitle || (isSearch ? '没有找到相关站点' : '这个分类还是空的')}
+        description={
+          emptyDescription
+          || (isSearch
+            ? '换个关键词，或清空搜索看看全部分类'
+            : showAddLink
+              ? '切换上方分类浏览，或添加一些常用链接'
+              : '切换上方分类看看，这里还没有收录站点')
+        }
         action={
-          !query && showAddLink ? (
+          !isSearch && showAddLink ? (
             <Link
               to={addLinkTo}
-              className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary-500 text-background-50 text-sm font-medium hover:bg-primary-600 transition-colors duration-150 whitespace-nowrap"
+              className={cn(
+                'empty-quiet-action inline-flex items-center gap-1.5 h-8 px-3.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors duration-150',
+                'border border-background-200/80 bg-background-50/80 text-foreground-600',
+                'hover:border-primary-300 hover:text-primary-600 hover:bg-primary-50/60',
+              )}
             >
-              <i className="ri-add-line text-base" />
+              <i className="ri-add-line text-sm" />
               添加站点
             </Link>
           ) : undefined

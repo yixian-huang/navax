@@ -157,3 +157,46 @@ func TestProviderSecretRequiresMasterKey(t *testing.T) {
 		t.Fatalf("Update() error = %v", err)
 	}
 }
+
+func TestActiveS3ConfigUsesLocalWithoutS3(t *testing.T) {
+	ctx := context.Background()
+	db, err := database.OpenAndMigrate(ctx, database.Config{Path: ":memory:", MaxOpenConns: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	service, err := NewService(db, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Unconfigured storage → local (ok=false, no error).
+	_, _, _, _, _, _, _, _, ok, err := service.ActiveS3Config(ctx)
+	if err != nil || ok {
+		t.Fatalf("unconfigured: ok=%v err=%v", ok, err)
+	}
+
+	// Explicit local driver → local.
+	if _, err := service.Update(ctx, Storage, Update{Enabled: true, Settings: map[string]any{"driver": "local"}}); err != nil {
+		t.Fatal(err)
+	}
+	_, _, _, _, _, _, _, _, ok, err = service.ActiveS3Config(ctx)
+	if err != nil || ok {
+		t.Fatalf("local driver: ok=%v err=%v", ok, err)
+	}
+
+	// Incomplete S3 (enabled, no secretKey) must not error — fall back to local.
+	if _, err := service.Update(ctx, Storage, Update{Enabled: true, Settings: map[string]any{
+		"driver": "s3", "endpoint": "https://s3.example.com", "region": "us-east-1",
+		"bucket": "navax", "accessKey": "AKIAEXAMPLE",
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	_, _, _, _, _, _, _, _, ok, err = service.ActiveS3Config(ctx)
+	if err != nil {
+		t.Fatalf("incomplete s3 returned error (must fall back silently): %v", err)
+	}
+	if ok {
+		t.Fatal("incomplete s3 should not report ok=true")
+	}
+}

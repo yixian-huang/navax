@@ -189,7 +189,8 @@ export default function SearchBar({
         <div
           className={cn(
             // Do NOT use overflow-hidden — it clips absolute engine/history menus.
-            'flex items-center bg-background-50 transition-all duration-300',
+            // search-bar-surface: solid by default; frosted under [data-wallpaper] (see index.css).
+            'search-bar-surface flex items-center bg-background-50 transition-all duration-300',
             size === 'sm' ? 'rounded-xl' : 'rounded-2xl',
           )}
           style={{

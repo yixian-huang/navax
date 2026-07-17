@@ -44,6 +44,13 @@ var (
 const (
 	publicURLPrefix = "/api/v1/assets/"
 	maxImagePixels  = uint64(40_000_000)
+	// Background wallpapers below this size look solid/empty when stretched full-bleed.
+	minBackgroundEdge = 64
+)
+
+var (
+	// ErrImageTooSmall is returned when a background image is too small to use as wallpaper.
+	ErrImageTooSmall = errors.New("image too small for background")
 )
 
 var objectKeyPattern = regexp.MustCompile(`^(avatar|background|site-icon)/[a-f0-9]{32}\.(png|jpg|gif|webp)$`)
@@ -152,7 +159,7 @@ func (s *Service) Upload(ctx context.Context, ownerID, kind, filename, declaredM
 	if err := temporary.Sync(); err != nil {
 		return Asset{}, fmt.Errorf("sync upload staging file: %w", err)
 	}
-	detectedMIME, extension, err := inspectImage(temporary, filename, declaredMIME)
+	detectedMIME, extension, err := inspectImage(temporary, filename, declaredMIME, kind)
 	if err != nil {
 		return Asset{}, err
 	}
@@ -165,45 +172,49 @@ func (s *Service) Upload(ctx context.Context, ownerID, kind, filename, declaredM
 		return Asset{}, err
 	}
 
+	// Default: local disk under the service root (NAVAX_DATA_DIR/assets).
+	// S3 is optional. Unconfigured, incomplete, or failing object storage must
+	// never block uploads — fall back to local disk in those cases.
 	driver := "local"
 	publicURL := publicURLPrefix + objectKey
-	var s3cfg *S3Config
+	usedObjectStorage := false
 	if s.resolve != nil {
-		s3cfg, err = s.resolve(ctx)
-		if err != nil {
-			slog.Error("resolve object storage", "error", err)
-			return Asset{}, fmt.Errorf("%w: %v", ErrStorage, err)
+		s3cfg, resolveErr := s.resolve(ctx)
+		if resolveErr != nil {
+			slog.Warn("object storage unavailable; using local disk", "error", resolveErr)
+		} else if s3cfg != nil {
+			if _, seekErr := temporary.Seek(0, io.SeekStart); seekErr != nil {
+				return Asset{}, seekErr
+			}
+			store, storeErr := newS3Store(*s3cfg)
+			if storeErr != nil {
+				slog.Warn("init object storage client failed; using local disk", "error", storeErr)
+			} else if putErr := store.Put(ctx, objectKey, detectedMIME, temporary, written); putErr != nil {
+				slog.Warn("object storage put failed; using local disk", "error", putErr, "object_key", objectKey)
+			} else {
+				driver = "s3"
+				publicURL = store.PublicURL(objectKey)
+				usedObjectStorage = true
+				_ = temporary.Close()
+				_ = os.Remove(temporaryPath)
+				temporaryPath = ""
+			}
 		}
 	}
-	if s3cfg != nil {
-		store, err := newS3Store(*s3cfg)
-		if err != nil {
-			slog.Error("init object storage client", "error", err)
-			return Asset{}, fmt.Errorf("%w: %v", ErrStorage, err)
+	if !usedObjectStorage {
+		finalPath, pathErr := s.pathForKey(objectKey)
+		if pathErr != nil {
+			return Asset{}, pathErr
 		}
-		if err := store.Put(ctx, objectKey, detectedMIME, temporary, written); err != nil {
-			slog.Error("object storage put", "error", err, "object_key", objectKey, "bytes", written)
-			return Asset{}, fmt.Errorf("%w: %v", ErrStorage, err)
+		if closeErr := temporary.Close(); closeErr != nil {
+			return Asset{}, fmt.Errorf("close upload staging file: %w", closeErr)
 		}
-		driver = "s3"
-		publicURL = store.PublicURL(objectKey)
-		_ = temporary.Close()
-		_ = os.Remove(temporaryPath)
-		temporaryPath = ""
-	} else {
-		finalPath, err := s.pathForKey(objectKey)
-		if err != nil {
-			return Asset{}, err
-		}
-		if err := temporary.Close(); err != nil {
-			return Asset{}, fmt.Errorf("close upload staging file: %w", err)
-		}
-		if err := os.Rename(temporaryPath, finalPath); err != nil {
-			return Asset{}, fmt.Errorf("commit asset file: %w", err)
+		if renameErr := os.Rename(temporaryPath, finalPath); renameErr != nil {
+			return Asset{}, fmt.Errorf("commit asset file: %w", renameErr)
 		}
 		temporaryPath = finalPath
-		if err := os.Chmod(finalPath, 0o600); err != nil {
-			return Asset{}, fmt.Errorf("secure asset file: %w", err)
+		if chmodErr := os.Chmod(finalPath, 0o600); chmodErr != nil {
+			return Asset{}, fmt.Errorf("secure asset file: %w", chmodErr)
 		}
 	}
 
@@ -375,7 +386,7 @@ func (b *bytesReadSeekCloser) Close() error { return nil }
 // filename extension are treated as soft hints only: browsers often send
 // image/jpg, empty type, or mismatched extensions for otherwise valid files.
 // Storage extension always follows the verified content type.
-func inspectImage(file *os.File, filename, declaredMIME string) (string, string, error) {
+func inspectImage(file *os.File, filename, declaredMIME, kind string) (string, string, error) {
 	if _, err := file.Seek(0, io.SeekStart); err != nil {
 		return "", "", err
 	}
@@ -405,6 +416,9 @@ func inspectImage(file *os.File, filename, declaredMIME string) (string, string,
 	}
 	if uint64(config.Width)*uint64(config.Height) > maxImagePixels {
 		return "", "", ErrInvalidImage
+	}
+	if kind == "background" && (config.Width < minBackgroundEdge || config.Height < minBackgroundEdge) {
+		return "", "", ErrImageTooSmall
 	}
 	detected, ok := formatToMIME[format]
 	if !ok {

@@ -166,13 +166,98 @@ body {
 }
 
 /*
- * Free-floating type over photos: thin dual-edge shadow only.
- * Avoids the soft white “halo / frosted blob” look of heavy glow.
+ * Search bar on wallpaper: slightly translucent frost (still more solid than cards).
+ * Dropdowns stay fully opaque for menu readability.
  */
+[data-wallpaper] .search-bar-surface {
+  background: oklch(var(--background-50) / 0.78);
+  -webkit-backdrop-filter: blur(18px) saturate(1.12);
+  backdrop-filter: blur(18px) saturate(1.12);
+  border: 1px solid oklch(var(--background-200) / 0.4);
+}
+[data-wallpaper][data-wallpaper-tone="dark"] .search-bar-surface {
+  background: oklch(var(--background-50) / 0.72);
+  border-color: oklch(1 0 0 / 0.14);
+}
+
+/*
+ * Wallpaper text contrast — computed from image luminance in PublicShell
+ * (data-wallpaper-tone="light" | "dark").
+ * light = bright photo → dark ink; dark = dim photo → light ink.
+ */
+[data-wallpaper] {
+  --wp-ink: oklch(0.2 0.02 260);
+  --wp-ink-muted: oklch(0.32 0.02 260);
+  --wp-ink-soft: oklch(0.42 0.015 260);
+  --wp-edge: oklch(0.2 0.02 260 / 0.18);
+  --wp-shadow:
+    0 0.5px 0 oklch(1 0 0 / 0.55),
+    0 1px 2px oklch(0 0 0 / 0.18);
+}
+[data-wallpaper][data-wallpaper-tone="dark"] {
+  --wp-ink: oklch(0.98 0.01 95);
+  --wp-ink-muted: oklch(0.9 0.01 95);
+  --wp-ink-soft: oklch(0.78 0.01 95);
+  --wp-edge: oklch(1 0 0 / 0.2);
+  --wp-shadow:
+    0 1px 2px oklch(0 0 0 / 0.55),
+    0 0 12px oklch(0 0 0 / 0.25);
+}
+
+.wallpaper-ink { color: var(--wp-ink); text-shadow: var(--wp-shadow); }
+.wallpaper-ink-muted { color: var(--wp-ink-muted); text-shadow: var(--wp-shadow); }
+.wallpaper-ink-soft { color: var(--wp-ink-soft); text-shadow: var(--wp-shadow); }
+
+/* Free-floating type over photos (greeting, density, tabs, chrome). */
 [data-wallpaper] .wallpaper-type {
-  text-shadow:
-    0 0.5px 0 oklch(var(--background-50) / 0.7),
-    0 1px 2px oklch(var(--foreground-950) / 0.22);
+  color: var(--wp-ink);
+  text-shadow: var(--wp-shadow);
+}
+
+/* Scope free-floating copy; skip solid surfaces (cards / search bar). */
+[data-wallpaper] .wallpaper-ink-scope :is(h1, h2, h3, .font-heading) {
+  color: var(--wp-ink);
+  text-shadow: var(--wp-shadow);
+}
+[data-wallpaper] .wallpaper-ink-scope :is(p, span, button, a, label, time) {
+  color: var(--wp-ink-muted);
+  text-shadow: var(--wp-shadow);
+}
+[data-wallpaper] .wallpaper-ink-scope button[data-active="true"],
+[data-wallpaper] .wallpaper-ink-scope button[aria-selected="true"],
+[data-wallpaper] .wallpaper-ink-scope button[aria-checked="true"] {
+  color: var(--wp-ink);
+}
+[data-wallpaper] .wallpaper-ink-scope .material-card,
+[data-wallpaper] .wallpaper-ink-scope .material-card * {
+  color: unset;
+  text-shadow: none;
+}
+/* Keep solid search bar / primary controls themed normally */
+[data-wallpaper] .wallpaper-ink-scope form,
+[data-wallpaper] .wallpaper-ink-scope form * {
+  text-shadow: none;
+}
+[data-wallpaper] .wallpaper-ink-scope form input,
+[data-wallpaper] .wallpaper-ink-scope form button {
+  color: unset;
+}
+
+/* Logo wordmark follows wallpaper ink; accent dot stays accent-ish */
+[data-wallpaper][data-wallpaper-tone="light"] .navax-wordmark-nav {
+  color: var(--wp-ink);
+}
+[data-wallpaper][data-wallpaper-tone="light"] .navax-wordmark-ax {
+  color: var(--wp-ink-muted);
+}
+[data-wallpaper][data-wallpaper-tone="dark"] .navax-wordmark-nav {
+  color: var(--wp-ink);
+}
+[data-wallpaper][data-wallpaper-tone="dark"] .navax-wordmark-ax {
+  color: var(--wp-ink-muted);
+}
+[data-wallpaper][data-wallpaper-tone="dark"] .navax-wordmark-dot {
+  color: oklch(var(--accent-300));
 }
 
 [data-wallpaper] .site-card-list:hover {
@@ -180,6 +265,32 @@ body {
 }
 [data-wallpaper] .site-card-list-domain {
   color: oklch(var(--foreground-700));
+}
+
+/* Quiet empty state on public home / wallpaper */
+[data-wallpaper] .empty-quiet-panel {
+  border-color: oklch(var(--background-50) / 0.35);
+  background: oklch(var(--background-50) / 0.2);
+  -webkit-backdrop-filter: blur(12px) saturate(1.05);
+  backdrop-filter: blur(12px) saturate(1.05);
+}
+[data-wallpaper] .empty-quiet-icon {
+  background: oklch(var(--background-50) / 0.28);
+  color: oklch(var(--foreground-700));
+}
+[data-wallpaper] .empty-quiet-title {
+  color: oklch(var(--foreground-900));
+}
+[data-wallpaper] .empty-quiet-desc {
+  color: oklch(var(--foreground-700) / 0.9);
+}
+[data-wallpaper] .empty-quiet-action {
+  border-color: oklch(var(--background-50) / 0.4);
+  background: oklch(var(--background-50) / 0.28);
+  color: oklch(var(--foreground-800));
+}
+[data-wallpaper] .empty-quiet-action:hover {
+  background: oklch(var(--background-50) / 0.42);
 }
 
 /* ---- Fade / rise entrance ---- */

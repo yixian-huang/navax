@@ -82,5 +82,13 @@ export default defineConfig({
   server: {
     port: 3000,
     host: "0.0.0.0",
+    // When VITE_ENABLE_API_MOCKS is not set, browser calls /api → local Go backend.
+    // Mock mode intercepts fetch before the network, so this proxy is a no-op then.
+    proxy: {
+      "/api": {
+        target: "http://127.0.0.1:8080",
+        changeOrigin: true,
+      },
+    },
   },
 });

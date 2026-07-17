@@ -3,6 +3,7 @@ import SearchBar from '@/components/base/SearchBar';
 import SiteGrid, { SiteCountLabel } from '@/components/base/SiteGrid';
 import CategoryTabs from '@/components/base/CategoryTabs';
 import DensitySwitcher from '@/components/base/DensitySwitcher';
+import { useCurrentUser } from '@/hooks/useQueries';
 import { cn } from '@/lib/utils';
 import type { Density, Site } from '@/api/types';
 import type { SearchEngine } from '@/components/base/SearchBar';
@@ -62,6 +63,9 @@ export function SitesSection({
   delay: number;
   wallpaperMode?: boolean;
 }) {
+  const { data: authSession } = useCurrentUser();
+  const canManageLinks = Boolean(authSession?.authenticated && authSession.user);
+
   // No section-level slab for categories / density / site grid — wallpaper shows
   // through; individual site cards use low-opacity frost via [data-wallpaper].
   return (
@@ -88,7 +92,7 @@ export function SitesSection({
       </div>
 
       {categories.length > 1 && (
-        <div className={cn(wallpaperMode ? 'mb-4 wallpaper-type' : 'mb-8')}>
+        <div className={cn(wallpaperMode ? 'mb-4 wallpaper-type wallpaper-ink-scope' : 'mb-8')}>
           <CategoryTabs
             categories={categories}
             activeId={activeCategory}
@@ -102,7 +106,7 @@ export function SitesSection({
         density={density}
         query={query}
         onSiteOpen={onSiteOpen}
-        showAddLink={!query}
+        showAddLink={canManageLinks && !query}
       />
     </div>
   );
