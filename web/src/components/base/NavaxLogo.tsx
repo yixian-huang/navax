@@ -1,12 +1,12 @@
 // ============================================================
 // nav.ax brand mark + wordmark
-// Compass-node monogram: navigation paths meeting an axis point.
-// Colors track theme tokens (primary / accent / background).
+// Site-grid monogram from design export (logo-export / public marks).
 // ============================================================
 
 import { cn } from '@/lib/utils';
 
 type LogoSize = 'sm' | 'md' | 'lg';
+type MarkVariant = 'auto' | 'light' | 'dark';
 
 interface NavaxLogoProps {
   /** sm = sidebar compact · md = shell header · lg = auth hero */
@@ -16,6 +16,12 @@ interface NavaxLogoProps {
   className?: string;
   /** Extra classes on the wordmark span. */
   wordmarkClassName?: string;
+  /**
+   * Mark surface variant:
+   * - auto (default): light UI uses mark-light; dark themes / dark wallpaper use mark-dark
+   * - light / dark: force the design mark for that surface
+   */
+  markVariant?: MarkVariant;
 }
 
 const sizeMap = {
@@ -24,74 +30,48 @@ const sizeMap = {
   lg: { mark: 36, gap: 'gap-2.5', text: 'text-2xl', tracking: 'tracking-tight' },
 } as const;
 
-/** Geometric mark: orbit + route nodes → destination (axis). */
-function NavaxMark({ size, className }: { size: number; className?: string }) {
-  const id = `navax-mark-${size}`;
+/**
+ * 2×2 site grid mark (design export).
+ * light = ink squares on transparent (for light UI)
+ * dark = paper squares on transparent (for dark UI)
+ */
+function NavaxMark({
+  size,
+  className,
+  variant = 'auto',
+}: {
+  size: number;
+  className?: string;
+  variant?: MarkVariant;
+}) {
   return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 32 32"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      className={cn('flex-shrink-0', className)}
+    <span
+      className={cn(
+        'navax-mark relative inline-block flex-shrink-0',
+        variant === 'light' && 'navax-mark--force-light',
+        variant === 'dark' && 'navax-mark--force-dark',
+        className,
+      )}
+      style={{ width: size, height: size }}
       aria-hidden
     >
-      <defs>
-        <linearGradient id={`${id}-plate`} x1="4" y1="2" x2="28" y2="30" gradientUnits="userSpaceOnUse">
-          <stop stopColor="oklch(var(--primary-500))" />
-          <stop offset="1" stopColor="oklch(var(--primary-700))" />
-        </linearGradient>
-        <linearGradient id={`${id}-sheen`} x1="8" y1="4" x2="24" y2="20" gradientUnits="userSpaceOnUse">
-          <stop stopColor="oklch(var(--background-50))" stopOpacity="0.28" />
-          <stop offset="1" stopColor="oklch(var(--background-50))" stopOpacity="0" />
-        </linearGradient>
-        <filter id={`${id}-glow`} x="-40%" y="-40%" width="180%" height="180%">
-          <feGaussianBlur stdDeviation="1.1" result="b" />
-          <feMerge>
-            <feMergeNode in="b" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
-        </filter>
-      </defs>
-
-      {/* Soft plate */}
-      <rect x="1" y="1" width="30" height="30" rx="9" fill={`url(#${id}-plate)`} />
-      <rect x="1" y="1" width="30" height="30" rx="9" fill={`url(#${id}-sheen)`} />
-
-      {/* Orbit ring — the “axis” field */}
-      <circle
-        cx="16"
-        cy="16"
-        r="8.5"
-        stroke="oklch(var(--background-50))"
-        strokeOpacity="0.35"
-        strokeWidth="1.25"
+      <img
+        src="/mark-light.svg"
+        alt=""
+        width={size}
+        height={size}
+        draggable={false}
+        className="navax-mark-light block h-full w-full select-none"
       />
-
-      {/* Route: lower-left → hub → upper-right (navigation path) */}
-      <path
-        d="M9.5 21.5 L14.2 16.8 M17.8 13.2 L22.5 8.5"
-        stroke="oklch(var(--background-50))"
-        strokeOpacity="0.92"
-        strokeWidth="1.75"
-        strokeLinecap="round"
+      <img
+        src="/mark-dark.svg"
+        alt=""
+        width={size}
+        height={size}
+        draggable={false}
+        className="navax-mark-dark absolute inset-0 hidden h-full w-full select-none"
       />
-
-      {/* Waypoint nodes */}
-      <circle cx="9.5" cy="21.5" r="1.55" fill="oklch(var(--background-50))" fillOpacity="0.75" />
-      <circle cx="16" cy="16" r="2.15" fill="oklch(var(--background-50))" />
-
-      {/* Destination / axis point — brand accent */}
-      <circle
-        cx="22.5"
-        cy="8.5"
-        r="2.35"
-        fill="oklch(var(--accent-400))"
-        filter={`url(#${id}-glow)`}
-      />
-      <circle cx="22.5" cy="8.5" r="1" fill="oklch(var(--background-50))" fillOpacity="0.9" />
-    </svg>
+    </span>
   );
 }
 
@@ -104,6 +84,7 @@ export default function NavaxLogo({
   markOnly = false,
   className,
   wordmarkClassName,
+  markVariant = 'auto',
 }: NavaxLogoProps) {
   const s = sizeMap[size];
 
@@ -117,6 +98,7 @@ export default function NavaxLogo({
     >
       <NavaxMark
         size={s.mark}
+        variant={markVariant}
         className="transition-transform duration-300 ease-out group-hover:scale-[1.04] group-hover:rotate-[-2deg]"
       />
       {!markOnly ? (

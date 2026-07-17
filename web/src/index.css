@@ -260,6 +260,40 @@ body {
   color: oklch(var(--accent-300));
 }
 
+/* Brand mark: site-grid SVG (mark-light on light surfaces, mark-dark on dark). */
+.navax-mark-dark {
+  display: none;
+}
+/* Known dark themes */
+[data-theme="slate-dark"] .navax-mark:not(.navax-mark--force-light) .navax-mark-light,
+[data-theme="noir"] .navax-mark:not(.navax-mark--force-light) .navax-mark-light {
+  display: none;
+}
+[data-theme="slate-dark"] .navax-mark:not(.navax-mark--force-light) .navax-mark-dark,
+[data-theme="noir"] .navax-mark:not(.navax-mark--force-light) .navax-mark-dark {
+  display: block;
+}
+/* Dark wallpaper → light mark for contrast */
+[data-wallpaper][data-wallpaper-tone="dark"] .navax-mark:not(.navax-mark--force-light) .navax-mark-light {
+  display: none;
+}
+[data-wallpaper][data-wallpaper-tone="dark"] .navax-mark:not(.navax-mark--force-light) .navax-mark-dark {
+  display: block;
+}
+/* Force variants (prop markVariant) */
+.navax-mark--force-light .navax-mark-light {
+  display: block !important;
+}
+.navax-mark--force-light .navax-mark-dark {
+  display: none !important;
+}
+.navax-mark--force-dark .navax-mark-light {
+  display: none !important;
+}
+.navax-mark--force-dark .navax-mark-dark {
+  display: block !important;
+}
+
 [data-wallpaper] .site-card-list:hover {
   background: oklch(var(--background-50) / 0.28);
 }
