@@ -60,6 +60,10 @@ nav.ax is a personalized navigation-site service: a single Go 1.25 process serve
 - `tests/contract/` (Go): compiles and boots the binary once, drives a bootstrap→auth→edit→publish→public-read→admin flow, and validates each request+response against `api/openapi.yaml` via `libopenapi-validator`. Steps share state and run in order. `-short` skips it. This is where "does the implementation match the spec" is enforced — extend it, and the spec, together.
 - `tests/e2e/` (Playwright, separate npm project — not part of the `web/` build): a Go-less Node project. `global.setup.ts` seeds accounts and the published system page via the API and saves per-role storage states; specs (`guest`/`user`/`admin`) exercise the UI against the real binary launched by `server.mjs` in a fresh temp data dir. Test files may not import each other — shared constants live in `specs/accounts.ts`.
 
+## Workflow
+
+`main` is protected: direct pushes are rejected, admins included. All changes go through a PR whose `verify`, `e2e`, and `container` checks pass, with the branch up to date with `main`. Work on a branch, push it, then `gh pr create` and `gh pr merge --auto --rebase` — the PR merges automatically once CI is green (the head branch is auto-deleted). Run `make check` and `go test -race ./...` locally before pushing; never force-push `main`.
+
 ## Conventions
 
 - Conventional Commit subjects, e.g. `feat: add signed instance backups`.

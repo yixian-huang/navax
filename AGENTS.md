@@ -29,6 +29,8 @@ Place Go tests beside source as `*_test.go`; prefer table-driven unit tests and 
 
 Use focused Conventional Commit subjects, for example `feat: add signed instance backups` or `fix: reject private link-check targets`. Pull requests must describe user-visible behavior, linked issues, migrations or configuration changes, and verification performed. Include screenshots for UI changes and update `api/openapi.yaml` when an endpoint contract changes.
 
+`main` is protected: direct pushes are rejected for everyone, admins included. Push your work to a branch, open a PR (`gh pr create`), and enable auto-merge (`gh pr merge --auto --rebase`); it merges once the `verify`, `e2e`, and `container` checks pass with the branch up to date. Run the merge gates locally before pushing.
+
 ## Security & Agent Instructions
 
 Keep secrets out of source and browser storage; sessions use HttpOnly cookies. Validate authorization server-side and preserve SSRF, upload, origin, and rate-limit protections. All user-facing agent responses must be written in Chinese.
