@@ -118,12 +118,13 @@ type Store interface {
 }
 
 type Service struct {
-	store      Store
-	setupToken string
-	sessionTTL time.Duration
-	resetTTL   time.Duration
-	now        func() time.Time
-	throttle   *loginThrottle
+	store        Store
+	setupToken   string
+	sessionTTL   time.Duration
+	resetTTL     time.Duration
+	now          func() time.Time
+	throttle     *loginThrottle
+	oauthResolve OAuthConfigResolver
 }
 
 func NewService(store Store, setupToken string, sessionTTL time.Duration) *Service {

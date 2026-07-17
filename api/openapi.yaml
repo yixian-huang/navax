@@ -2568,6 +2568,7 @@ components:
             - $ref: '#/components/schemas/SmtpSettings'
             - $ref: '#/components/schemas/StorageSettings'
             - $ref: '#/components/schemas/DnsSettings'
+            - $ref: '#/components/schemas/OAuthAppSettings'
         secrets:
           type: object
           additionalProperties: { type: string, writeOnly: true }
@@ -2602,6 +2603,11 @@ components:
         zoneId: { type: string, maxLength: 255 }
         apiEndpoint: { type: string, format: uri, maxLength: 2048 }
         ttl: { type: integer, minimum: 60, maximum: 86400 }
+    OAuthAppSettings:
+      type: object
+      required: [clientId]
+      properties:
+        clientId: { type: string, maxLength: 255, description: OAuth 应用 Client ID；clientSecret 走 secrets.clientSecret }
     ProviderTestResult:
       type: object
       required: [success, durationMs, message]

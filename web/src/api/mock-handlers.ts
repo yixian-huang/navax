@@ -255,6 +255,38 @@ handlers.push((url, init) => {
       meta: { message: '注册成功', detail: '' },
     }));
   }
+  if (url === `${API_BASE}/auth/email-code`) {
+    return Promise.resolve(jsonResponse({
+      code: 'OK',
+      data: { message: '若邮箱可用，验证码已发送，请在 10 分钟内完成验证。' },
+      meta: { message: '', detail: '' },
+    }));
+  }
+  if (url === `${API_BASE}/auth/login/email-code`) {
+    signedInMockUser = mockAuthUser;
+    mockSessionClosed = false;
+    return Promise.resolve(jsonResponse({
+      code: 'OK',
+      data: { authenticated: true, user: mockAuthUser.user, expiresAt: new Date(Date.now() + 86400000).toISOString() },
+      meta: { message: '登录成功', detail: '' },
+    }));
+  }
+  if (url === `${API_BASE}/auth/register/email-code`) {
+    signedInMockUser = mockAuthUser;
+    mockSessionClosed = false;
+    return Promise.resolve(jsonResponse({
+      code: 'OK',
+      data: { authenticated: true, user: mockAuthUser.user, expiresAt: new Date(Date.now() + 86400000).toISOString() },
+      meta: { message: '注册成功', detail: '' },
+    }, 201));
+  }
+  if (url === `${API_BASE}/auth/oauth/providers`) {
+    return Promise.resolve(jsonResponse({
+      code: 'OK',
+      data: { providers: [] as string[] },
+      meta: { message: '', detail: '' },
+    }));
+  }
   if (url === `${API_BASE}/auth/profile`) {
     return Promise.resolve(jsonResponse({ code: 'OK', data: { ...mockAuthUser.user, bio: '前端开发者，开源爱好者。喜欢收集好用的工具和资源。' }, meta: { message: '', detail: '' } }));
   }

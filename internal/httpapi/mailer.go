@@ -81,3 +81,25 @@ func passwordResetMessage(instanceName, to, resetURL string, expiresAt time.Time
 	}.render()
 	return integrations.Message{To: to, Subject: fmt.Sprintf("重置你的 %s 密码", instanceName), TextBody: text, HTMLBody: html}
 }
+
+func emailCodeMessage(instanceName, to, code, purpose string) integrations.Message {
+	instanceName = fallbackInstanceName(instanceName)
+	action := "登录"
+	if purpose == "register" {
+		action = "注册"
+	}
+	text := fmt.Sprintf("你好，\n\n你正在 %s 进行%s。验证码为：%s\n\n10 分钟内有效。如非本人操作请忽略。",
+		instanceName, action, code)
+	// Reuse template without action button: put code in intro.
+	html := emailContent{
+		InstanceName: instanceName,
+		Intro:        fmt.Sprintf("你的%s验证码是：", action),
+		ActionLabel:  code,
+		ActionURL:    "#",
+		Note:         "验证码 10 分钟内有效。如非本人操作请忽略本邮件。",
+	}.render()
+	return integrations.Message{
+		To: to, Subject: fmt.Sprintf("%s 验证码：%s", instanceName, code),
+		TextBody: text, HTMLBody: html,
+	}
+}

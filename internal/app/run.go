@@ -90,6 +90,30 @@ func Run(ctx context.Context, cfg config.Config, build BuildInfo) error {
 	if err != nil {
 		return fmt.Errorf("initialize provider configuration: %w", err)
 	}
+	authService.SetOAuthResolver(func(ctx context.Context, provider auth.OAuthProvider) (auth.OAuthConfig, bool, error) {
+		kind := integrations.OAuthGoogle
+		if provider == auth.OAuthGitHub {
+			kind = integrations.OAuthGitHub
+		}
+		item, err := providerService.Get(ctx, kind)
+		if err != nil || !item.Enabled {
+			return auth.OAuthConfig{}, false, nil
+		}
+		clientID, _ := item.Settings["clientId"].(string)
+		if strings.TrimSpace(clientID) == "" {
+			return auth.OAuthConfig{}, false, nil
+		}
+		secrets, secErr := providerService.DecryptSecrets(ctx, kind)
+		if secErr != nil {
+			return auth.OAuthConfig{}, false, secErr
+		}
+		secret := strings.TrimSpace(secrets["clientSecret"])
+		if secret == "" {
+			return auth.OAuthConfig{}, false, nil
+		}
+		redirect := strings.TrimRight(cfg.PublicBaseURL, "/") + "/api/v1/auth/oauth/" + string(provider) + "/callback"
+		return auth.OAuthConfig{ClientID: clientID, ClientSecret: secret, RedirectURI: redirect}, true, nil
+	})
 	authHandler := httpapi.NewAuthHandler(authService, httpapi.AuthHandlerOptions{
 		SecureCookies: cfg.SecureCookies,
 		InstanceName:  cfg.InstanceName,

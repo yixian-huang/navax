@@ -13,6 +13,9 @@ interface LayoutProps {
   showGreeting: boolean;
   showDate: boolean;
   showClock: boolean;
+  showSeconds?: boolean;
+  /** Custom tagline under greeting; empty uses default marketing line. */
+  subtitle?: string;
   query: string;
   onQueryChange: (v: string) => void;
   engine: SearchEngine;
@@ -34,6 +37,8 @@ interface LayoutProps {
 export default function LayoutFull({
   greeting, displayName, dateStr, weekDay, timeStr, secondsStr,
   showGreeting, showDate, showClock,
+  showSeconds = true,
+  subtitle = '',
   query, onQueryChange, engine, onEngineChange, onSearch, showEngineSelector,
   categories, activeCategory, onCategoryChange,
   activeSites, density, onDensityChange, totalSites, onSiteOpen,
@@ -75,10 +80,15 @@ export default function LayoutFull({
                   <span className="italic font-medium text-primary-500">{displayName}</span>
                 </h1>
               )}
-              {/* Wallpaper: drop the marketing tagline — less noise, clearer photo. */}
+              {/* Wallpaper: only show custom subtitle; default marketing line stays non-wallpaper. */}
               {!wallpaperMode && (
                 <p className="mt-4 text-sm text-foreground-400 max-w-md leading-relaxed">
-                  愿你今天专注而从容 —— 这里是你的私人导航台。
+                  {subtitle || '愿你今天专注而从容 —— 这里是你的私人导航台。'}
+                </p>
+              )}
+              {wallpaperMode && subtitle && (
+                <p className="mt-3 text-sm text-foreground-400 max-w-md leading-relaxed wallpaper-type">
+                  {subtitle}
                 </p>
               )}
             </div>
@@ -93,9 +103,11 @@ export default function LayoutFull({
                 {/* Wallpaper: no seconds / site-count chrome */}
                 {!wallpaperMode && (
                   <>
-                    <span className="text-[11px] text-foreground-300 tracking-wide mt-1 font-mono tabular-nums">
-                      {secondsStr} SEC
-                    </span>
+                    {showSeconds && (
+                      <span className="text-[11px] text-foreground-300 tracking-wide mt-1 font-mono tabular-nums">
+                        {secondsStr} SEC
+                      </span>
+                    )}
                     <span className="text-[10px] text-foreground-300 tracking-wide mt-3 font-mono tabular-nums">
                       {totalSites} 个站点 · {categories.length} 个分类
                     </span>

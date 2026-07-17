@@ -29,9 +29,11 @@ var (
 type Kind string
 
 const (
-	SMTP    Kind = "smtp"
-	Storage Kind = "storage"
-	DNS     Kind = "dns"
+	SMTP        Kind = "smtp"
+	Storage     Kind = "storage"
+	DNS         Kind = "dns"
+	OAuthGoogle Kind = "oauth_google"
+	OAuthGitHub Kind = "oauth_github"
 )
 
 type Provider struct {
@@ -156,6 +158,11 @@ func (s *Service) Update(ctx context.Context, kind Kind, update Update) (Provide
 	return s.Get(ctx, kind)
 }
 
+// DecryptSecrets returns stored secrets for a provider (empty map if none).
+func (s *Service) DecryptSecrets(ctx context.Context, kind Kind) (map[string]string, error) {
+	return s.mergedSecrets(ctx, kind, nil)
+}
+
 func (s *Service) mergedSecrets(ctx context.Context, kind Kind, incoming map[string]string) (map[string]string, error) {
 	allowed := allowedSecrets(kind)
 	merged := make(map[string]string)
@@ -233,6 +240,26 @@ func (s *Service) ActiveS3Config(ctx context.Context) (endpoint, region, bucket,
 }
 
 func (s *Service) Test(ctx context.Context, kind Kind) (TestResult, error) {
+	if kind == OAuthGoogle || kind == OAuthGitHub {
+		provider, err := s.Get(ctx, kind)
+		if err != nil {
+			return TestResult{}, err
+		}
+		if !provider.Enabled {
+			return TestResult{Success: false, Message: "提供方未启用"}, nil
+		}
+		if strings.TrimSpace(stringSetting(provider.Settings, "clientId")) == "" {
+			return TestResult{Success: false, Message: "缺少 clientId"}, nil
+		}
+		secrets, err := s.mergedSecrets(ctx, kind, nil)
+		if err != nil {
+			return TestResult{}, err
+		}
+		if strings.TrimSpace(secrets["clientSecret"]) == "" {
+			return TestResult{Success: false, Message: "缺少 clientSecret"}, nil
+		}
+		return TestResult{Success: true, Message: "OAuth 客户端配置完整（未向第三方发起探测）"}, nil
+	}
 	started := time.Now()
 	provider, err := s.Get(ctx, kind)
 	if err != nil {
@@ -284,7 +311,7 @@ func (s *Service) Test(ctx context.Context, kind Kind) (TestResult, error) {
 }
 
 func (kind Kind) Valid() bool {
-	return kind == SMTP || kind == Storage || kind == DNS
+	return kind == SMTP || kind == Storage || kind == DNS || kind == OAuthGoogle || kind == OAuthGitHub
 }
 
 func allowedSecrets(kind Kind) map[string]bool {
@@ -295,6 +322,8 @@ func allowedSecrets(kind Kind) map[string]bool {
 		return map[string]bool{"secretKey": true}
 	case DNS:
 		return map[string]bool{"token": true}
+	case OAuthGoogle, OAuthGitHub:
+		return map[string]bool{"clientSecret": true}
 	default:
 		return map[string]bool{}
 	}
@@ -357,6 +386,10 @@ func validateSettings(kind Kind, settings map[string]any) error {
 			if err := validateHTTPURL(endpoint); err != nil {
 				return err
 			}
+		}
+	case OAuthGoogle, OAuthGitHub:
+		if err := requireString("clientId"); err != nil {
+			return err
 		}
 	default:
 		return ErrInvalidProvider

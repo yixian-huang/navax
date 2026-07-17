@@ -143,6 +143,10 @@ export interface PageSettings {
     showClock: boolean;
     showDate: boolean;
     showGreeting: boolean;
+    subtitle?: string;
+    clockFormat?: '24h' | '12h';
+    dateFormat?: 'long' | 'short' | 'compact';
+    showSeconds?: boolean;
   };
   preferences: {
     locale: string;
@@ -423,7 +427,7 @@ export interface SystemSettings {
   };
 }
 
-export type ProviderKind = 'smtp' | 'storage' | 'dns';
+export type ProviderKind = 'smtp' | 'storage' | 'dns' | 'oauth_google' | 'oauth_github';
 
 export interface ProviderSummary {
   kind: ProviderKind;
@@ -464,7 +468,11 @@ export interface DnsSettings {
   ttl: number;
 }
 
-export type ProviderSettings = SmtpSettings | StorageSettings | DnsSettings;
+export interface OAuthAppSettings {
+  clientId: string;
+}
+
+export type ProviderSettings = SmtpSettings | StorageSettings | DnsSettings | OAuthAppSettings;
 
 export interface ProviderConfigUpdate {
   enabled: boolean;

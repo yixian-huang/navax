@@ -19,8 +19,8 @@ import { isExternalHomeUrl, resolveWorkspaceHomeUrl } from '@/lib/workspaceHomeU
 
 const navItems: SidebarNavItem[] = [
   { path: '/app', icon: LayoutDashboard, label: '概览' },
-  { path: '/app/links', icon: Link2, label: '导航编辑' },
   { path: '/app/analytics', icon: BarChart3, label: '访问统计' },
+  { path: '/app/links', icon: Link2, label: '导航编辑' },
   { path: '/app/widgets', icon: Puzzle, label: '首页信息' },
   { path: '/app/themes', icon: Palette, label: '主题设置' },
   { path: '/app/publish', icon: Globe, label: '发布 & 域名' },

@@ -88,6 +88,14 @@ type DisplaySettings struct {
 	ShowClock    bool `json:"showClock"`
 	ShowDate     bool `json:"showDate"`
 	ShowGreeting bool `json:"showGreeting"`
+	// Subtitle is optional tagline under the greeting (empty = default marketing line).
+	Subtitle string `json:"subtitle,omitempty"`
+	// ClockFormat: "24h" (default) or "12h".
+	ClockFormat string `json:"clockFormat,omitempty"`
+	// DateFormat: "long" (default), "short", or "compact".
+	DateFormat string `json:"dateFormat,omitempty"`
+	// ShowSeconds toggles the secondary seconds chrome under the clock.
+	ShowSeconds *bool `json:"showSeconds,omitempty"`
 }
 
 type PreferenceSettings struct {

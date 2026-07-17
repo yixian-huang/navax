@@ -9,7 +9,7 @@ import SubdomainsSection from './components/SubdomainsSection';
 type OperationsTab = 'providers' | 'update' | 'backups' | 'subdomains';
 
 const tabs: { id: OperationsTab; label: string; description: string; icon: typeof CloudCog }[] = [
-  { id: 'providers', label: '服务配置', description: 'SMTP、存储与 DNS', icon: CloudCog },
+  { id: 'providers', label: '服务配置', description: 'SMTP、存储、DNS 与 OAuth', icon: CloudCog },
   { id: 'update', label: '系统更新', description: '版本与自动更新策略', icon: RefreshCw },
   { id: 'backups', label: '备份恢复', description: '创建、下载与恢复', icon: Archive },
   { id: 'subdomains', label: '短域名审核', description: '1–3 位稀缺子域名与状态管理', icon: Globe2 },

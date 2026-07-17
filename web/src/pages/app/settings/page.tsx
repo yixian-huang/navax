@@ -11,6 +11,15 @@ import {
 } from '@/hooks/useQueries';
 import { useToast } from '@/components/base/Toast';
 import { ErrorState, LoadingSkeleton } from '@/components/base/SharedUI';
+import { cn } from '@/lib/utils';
+
+type Section = 'profile' | 'security' | 'sessions';
+
+const sections: { id: Section; label: string; icon: typeof User }[] = [
+  { id: 'profile', label: '个人资料', icon: User },
+  { id: 'security', label: '密码安全', icon: KeyRound },
+  { id: 'sessions', label: '登录设备', icon: MonitorSmartphone },
+];
 
 export default function SettingsPage() {
   const navigate = useNavigate();
@@ -22,6 +31,7 @@ export default function SettingsPage() {
   const revokeSession = useRevokeSession();
   const logout = useLogout();
 
+  const [section, setSection] = useState<Section>('profile');
   const [username, setUsername] = useState('');
   const [bio, setBio] = useState('');
   const [currentPassword, setCurrentPassword] = useState('');
@@ -67,6 +77,7 @@ export default function SettingsPage() {
   }
 
   const user = profileQuery.data;
+  const sessions = sessionsQuery.data ?? [];
 
   return (
     <div>
@@ -75,133 +86,170 @@ export default function SettingsPage() {
         <p className="text-sm text-foreground-400 mt-1">管理资料、密码和已登录设备</p>
       </div>
 
-      <div className="max-w-2xl space-y-6">
-        <section className="bg-white rounded-xl border border-background-200/70 p-5">
-          <h2 className="text-sm font-semibold text-foreground-700 mb-4 flex items-center gap-2">
-            <User className="w-4 h-4" />
-            个人资料
-          </h2>
-          <form onSubmit={handleSaveProfile} className="space-y-4">
-            <div className="flex items-center gap-4 mb-4">
-              <img src={user.avatarUrl} alt={user.username} className="w-16 h-16 rounded-full object-cover object-top bg-background-100" />
-              <div>
-                <div className="text-sm font-medium text-foreground-900">{user.email}</div>
-                <div className="text-xs text-foreground-400">注册于 {new Date(user.createdAt).toLocaleDateString('zh-CN')}</div>
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
+        {/* Side nav */}
+        <nav className="w-full lg:w-48 flex-shrink-0 flex lg:flex-col gap-1 overflow-x-auto">
+          {sections.map(item => {
+            const Icon = item.icon;
+            const active = section === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setSection(item.id)}
+                className={cn(
+                  'h-9 px-3 rounded-lg text-sm font-medium inline-flex items-center gap-2 whitespace-nowrap transition-colors',
+                  active
+                    ? 'bg-primary-500 text-background-50'
+                    : 'text-foreground-500 hover:bg-background-100 hover:text-foreground-700',
+                )}
+              >
+                <Icon className="w-4 h-4" />
+                {item.label}
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="h-9 px-3 rounded-lg text-sm font-medium inline-flex items-center gap-2 text-red-600 hover:bg-red-50 mt-2 lg:mt-4"
+          >
+            <LogOut className="w-4 h-4" />
+            退出登录
+          </button>
+        </nav>
+
+        {/* Content */}
+        <div className="flex-1 w-full min-w-0 max-w-xl">
+          {section === 'profile' && (
+            <form onSubmit={handleSaveProfile} className="rounded-xl border border-background-200/70 bg-background-50 p-5 space-y-4">
+              <h2 className="text-sm font-semibold text-foreground-800 flex items-center gap-2">
+                <User className="w-4 h-4 text-primary-500" /> 个人资料
+              </h2>
+              <div className="flex items-center gap-3 text-sm text-foreground-500">
+                <Mail className="w-4 h-4" />
+                <span>{user.email}</span>
               </div>
-            </div>
-            <label className="block">
-              <span className="block text-xs text-foreground-500 mb-1.5">用户名</span>
-              <input
-                value={username}
-                onChange={event => setUsername(event.target.value)}
-                required
-                minLength={3}
-                maxLength={32}
-                className="w-full h-10 px-3 rounded-lg bg-background-50 border border-background-200/70 text-sm text-foreground-900 focus:outline-none focus:border-primary-300"
-              />
-            </label>
-            <label className="block">
-              <span className="block text-xs text-foreground-500 mb-1.5">个人简介</span>
-              <textarea
-                value={bio}
-                onChange={event => setBio(event.target.value)}
-                maxLength={300}
-                rows={3}
-                className="w-full px-3 py-2 rounded-lg bg-background-50 border border-background-200/70 text-sm text-foreground-900 focus:outline-none focus:border-primary-300 resize-none"
-              />
-            </label>
-            <button disabled={updateProfile.isPending} className="h-9 px-4 rounded-lg bg-primary-500 text-background-50 text-sm font-medium disabled:opacity-50 inline-flex items-center gap-2">
-              {updateProfile.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
-              保存资料
-            </button>
-          </form>
-        </section>
+              <label className="block text-xs text-foreground-500">
+                用户名
+                <input
+                  value={username}
+                  onChange={e => setUsername(e.target.value)}
+                  minLength={2}
+                  maxLength={32}
+                  required
+                  className="mt-1 w-full h-9 px-3 rounded-lg border border-background-200/70 bg-white text-sm"
+                />
+              </label>
+              <label className="block text-xs text-foreground-500">
+                简介
+                <textarea
+                  value={bio}
+                  onChange={e => setBio(e.target.value)}
+                  maxLength={300}
+                  rows={3}
+                  className="mt-1 w-full px-3 py-2 rounded-lg border border-background-200/70 bg-white text-sm resize-none"
+                />
+              </label>
+              <button
+                type="submit"
+                disabled={updateProfile.isPending}
+                className="h-9 px-4 rounded-lg bg-primary-500 text-background-50 text-sm font-medium disabled:opacity-50 inline-flex items-center gap-2"
+              >
+                {updateProfile.isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                保存资料
+              </button>
+            </form>
+          )}
 
-        <section className="bg-white rounded-xl border border-background-200/70 p-5">
-          <h2 className="text-sm font-semibold text-foreground-700 mb-4 flex items-center gap-2">
-            <KeyRound className="w-4 h-4" />
-            修改密码
-          </h2>
-          <form onSubmit={handleChangePassword} className="space-y-3">
-            <input
-              type="password"
-              value={currentPassword}
-              onChange={event => setCurrentPassword(event.target.value)}
-              placeholder="当前密码"
-              required
-              className="w-full h-10 px-3 rounded-lg bg-background-50 border border-background-200/70 text-sm focus:outline-none focus:border-primary-300"
-            />
-            <input
-              type="password"
-              value={newPassword}
-              onChange={event => setNewPassword(event.target.value)}
-              placeholder="新密码（至少 12 位）"
-              required
-              minLength={12}
-              className="w-full h-10 px-3 rounded-lg bg-background-50 border border-background-200/70 text-sm focus:outline-none focus:border-primary-300"
-            />
-            <label className="flex items-center gap-2 text-xs text-foreground-500">
-              <input type="checkbox" checked={revokeOthers} onChange={event => setRevokeOthers(event.target.checked)} />
-              同时退出其他设备
-            </label>
-            <button disabled={changePassword.isPending} className="h-9 px-4 rounded-lg border border-background-200 text-sm text-foreground-700 disabled:opacity-50 inline-flex items-center gap-2">
-              {changePassword.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
-              更新密码
-            </button>
-          </form>
-        </section>
+          {section === 'security' && (
+            <form onSubmit={handleChangePassword} className="rounded-xl border border-background-200/70 bg-background-50 p-5 space-y-4">
+              <h2 className="text-sm font-semibold text-foreground-800 flex items-center gap-2">
+                <KeyRound className="w-4 h-4 text-primary-500" /> 修改密码
+              </h2>
+              <label className="block text-xs text-foreground-500">
+                当前密码
+                <input
+                  type="password"
+                  value={currentPassword}
+                  onChange={e => setCurrentPassword(e.target.value)}
+                  required
+                  className="mt-1 w-full h-9 px-3 rounded-lg border border-background-200/70 bg-white text-sm"
+                />
+              </label>
+              <label className="block text-xs text-foreground-500">
+                新密码
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={e => setNewPassword(e.target.value)}
+                  required
+                  minLength={8}
+                  className="mt-1 w-full h-9 px-3 rounded-lg border border-background-200/70 bg-white text-sm"
+                />
+              </label>
+              <label className="inline-flex items-center gap-2 text-sm text-foreground-600">
+                <input type="checkbox" checked={revokeOthers} onChange={e => setRevokeOthers(e.target.checked)} />
+                修改后注销其他设备
+              </label>
+              <button
+                type="submit"
+                disabled={changePassword.isPending}
+                className="h-9 px-4 rounded-lg bg-primary-500 text-background-50 text-sm font-medium disabled:opacity-50"
+              >
+                {changePassword.isPending ? '更新中…' : '更新密码'}
+              </button>
+            </form>
+          )}
 
-        <section className="bg-white rounded-xl border border-background-200/70 p-5">
-          <h2 className="text-sm font-semibold text-foreground-700 mb-4 flex items-center gap-2">
-            <MonitorSmartphone className="w-4 h-4" />
-            活动会话
-          </h2>
-          {sessionsQuery.isLoading ? (
-            <div className="text-sm text-foreground-400">加载中...</div>
-          ) : sessionsQuery.isError ? (
-            <button onClick={() => sessionsQuery.refetch()} className="text-sm text-red-500">加载失败，点击重试</button>
-          ) : (
-            <div className="divide-y divide-background-100">
-              {(sessionsQuery.data ?? []).map(session => (
-                <div key={session.id} className="py-3 flex items-center gap-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm text-foreground-800">
-                      {session.device} {session.current && <span className="text-primary-600 text-xs">· 当前会话</span>}
+          {section === 'sessions' && (
+            <div className="rounded-xl border border-background-200/70 bg-background-50 p-5">
+              <h2 className="text-sm font-semibold text-foreground-800 flex items-center gap-2 mb-4">
+                <MonitorSmartphone className="w-4 h-4 text-primary-500" /> 登录设备
+              </h2>
+              {sessionsQuery.isLoading && <LoadingSkeleton count={2} />}
+              {sessionsQuery.isError && (
+                <ErrorState message="加载会话失败" onRetry={() => sessionsQuery.refetch()} />
+              )}
+              <ul className="space-y-2">
+                {sessions.map(session => (
+                  <li
+                    key={session.id}
+                    className="flex items-center gap-3 p-3 rounded-lg border border-background-200/60 bg-white"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-foreground-800 truncate">
+                        {session.device || '未知设备'}
+                        {session.current && (
+                          <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-green-50 text-green-700">当前</span>
+                        )}
+                      </p>
+                      <p className="text-[11px] text-foreground-400 mt-0.5">
+                        最近活跃 {session.lastSeenAt ? new Date(session.lastSeenAt).toLocaleString('zh-CN') : '—'}
+                      </p>
                     </div>
-                    <div className="text-xs text-foreground-400">
-                      {session.approximateLocation || '未知位置'} · 最近活动 {new Date(session.lastSeenAt).toLocaleString('zh-CN')}
-                    </div>
-                  </div>
-                  {!session.current && (
-                    <button
-                      onClick={() => revokeSession.mutate(session.id)}
-                      disabled={revokeSession.isPending}
-                      className="w-8 h-8 rounded-md text-foreground-300 hover:text-red-500 hover:bg-red-50 flex items-center justify-center"
-                      aria-label="撤销会话"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-              ))}
-              {(sessionsQuery.data ?? []).length === 0 && <div className="py-4 text-sm text-foreground-400">暂无活动会话</div>}
+                    {!session.current && (
+                      <button
+                        type="button"
+                        onClick={() => revokeSession.mutate(session.id, {
+                          onSuccess: () => toast('success', '已注销该设备'),
+                          onError: err => toast('error', err.message || '操作失败'),
+                        })}
+                        className="w-8 h-8 rounded-md text-foreground-400 hover:text-red-600 hover:bg-red-50 flex items-center justify-center"
+                        aria-label="注销设备"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              {sessions.length === 0 && !sessionsQuery.isLoading && (
+                <p className="text-sm text-foreground-400">暂无会话记录</p>
+              )}
             </div>
           )}
-        </section>
-
-        <section className="bg-white rounded-xl border border-background-200/70 p-5">
-          <h2 className="text-sm font-semibold text-foreground-700 mb-3 flex items-center gap-2"><Mail className="w-4 h-4" />账户信息</h2>
-          <div className="text-sm text-foreground-500">{user.email} · {user.role === 'admin' ? '管理员' : '用户'}</div>
-        </section>
-
-        <button
-          onClick={handleLogout}
-          disabled={logout.isPending}
-          className="w-full h-10 rounded-lg border border-red-200 text-red-600 text-sm font-medium hover:bg-red-50 disabled:opacity-50 flex items-center justify-center gap-2"
-        >
-          <LogOut className="w-4 h-4" />
-          退出登录
-        </button>
+        </div>
       </div>
     </div>
   );

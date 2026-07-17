@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/yixian-huang/navax/internal/database"
+	"github.com/yixian-huang/navax/internal/identity"
 	"github.com/yixian-huang/navax/internal/navigation"
 )
 
@@ -319,4 +320,123 @@ func parseDBTime(value string) (time.Time, error) {
 		return time.Time{}, fmt.Errorf("parse database time %q: %w", value, err)
 	}
 	return parsed, nil
+}
+
+// ---- Email codes ----
+
+func (s *SQLStore) CreateEmailCode(ctx context.Context, record EmailCodeRecord, now time.Time) error {
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO auth_email_codes(id, email, purpose, code_hash, payload_json, expires_at, attempts, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, 0, ?)`,
+		record.ID, record.Email, string(record.Purpose), record.CodeHash, record.Payload,
+		dbTime(record.ExpiresAt), dbTime(now),
+	)
+	return err
+}
+
+func (s *SQLStore) LatestEmailCode(ctx context.Context, email string, purpose EmailCodePurpose, now time.Time) (EmailCodeRecord, error) {
+	var record EmailCodeRecord
+	var purposeRaw, expiresAt string
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id, email, purpose, code_hash, payload_json, expires_at, attempts
+		FROM auth_email_codes
+		WHERE email = ? AND purpose = ? AND consumed_at IS NULL AND expires_at > ?
+		ORDER BY created_at DESC LIMIT 1`, email, string(purpose), dbTime(now),
+	).Scan(&record.ID, &record.Email, &purposeRaw, &record.CodeHash, &record.Payload, &expiresAt, &record.Attempts)
+	if errors.Is(err, sql.ErrNoRows) {
+		return EmailCodeRecord{}, ErrEmailCodeInvalid
+	}
+	if err != nil {
+		return EmailCodeRecord{}, err
+	}
+	record.Purpose = EmailCodePurpose(purposeRaw)
+	record.ExpiresAt, err = parseDBTime(expiresAt)
+	return record, err
+}
+
+func (s *SQLStore) ConsumeEmailCode(ctx context.Context, id string, now time.Time) error {
+	res, err := s.db.ExecContext(ctx, `
+		UPDATE auth_email_codes SET consumed_at = ? WHERE id = ? AND consumed_at IS NULL`,
+		dbTime(now), id)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrEmailCodeInvalid
+	}
+	return nil
+}
+
+func (s *SQLStore) BumpEmailCodeAttempt(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE auth_email_codes SET attempts = attempts + 1 WHERE id = ?`, id)
+	return err
+}
+
+// ---- OAuth ----
+
+func (s *SQLStore) SaveOAuthState(ctx context.Context, state, provider, invitationToken string, expiresAt, now time.Time) error {
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO oauth_states(state, provider, invitation_token, expires_at, created_at)
+		VALUES (?, ?, ?, ?, ?)`, state, provider, invitationToken, dbTime(expiresAt), dbTime(now))
+	return err
+}
+
+func (s *SQLStore) TakeOAuthState(ctx context.Context, state string, now time.Time) (provider, invitationToken string, err error) {
+	err = database.WithinTx(ctx, s.db, nil, func(tx *sql.Tx) error {
+		var expiresAt string
+		scanErr := tx.QueryRowContext(ctx, `
+			SELECT provider, invitation_token, expires_at FROM oauth_states WHERE state = ?`, state,
+		).Scan(&provider, &invitationToken, &expiresAt)
+		if errors.Is(scanErr, sql.ErrNoRows) {
+			return ErrOAuthState
+		}
+		if scanErr != nil {
+			return scanErr
+		}
+		exp, parseErr := parseDBTime(expiresAt)
+		if parseErr != nil || now.After(exp) {
+			_, _ = tx.ExecContext(ctx, `DELETE FROM oauth_states WHERE state = ?`, state)
+			return ErrOAuthState
+		}
+		_, delErr := tx.ExecContext(ctx, `DELETE FROM oauth_states WHERE state = ?`, state)
+		return delErr
+	})
+	return provider, invitationToken, err
+}
+
+func (s *SQLStore) UserByOAuth(ctx context.Context, provider, subject string) (User, error) {
+	row := s.db.QueryRowContext(ctx, userSelect+`
+		FROM users u JOIN oauth_identities o ON o.user_id = u.id
+		WHERE o.provider = ? AND o.subject = ?`, provider, subject)
+	return scanUser(row)
+}
+
+func (s *SQLStore) LinkOAuthIdentity(ctx context.Context, id, provider, subject, userID, email string, now time.Time) error {
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO oauth_identities(id, provider, subject, user_id, email, created_at)
+		VALUES (?, ?, ?, ?, ?, ?)`, id, provider, subject, userID, email, dbTime(now))
+	return mapConflict(err)
+}
+
+func (s *SQLStore) CreateOAuthUser(ctx context.Context, params RegistrationParams, provider, subject string, now time.Time) error {
+	return database.WithinTx(ctx, s.db, nil, func(tx *sql.Tx) error {
+		if err := insertUser(ctx, tx, params.User); err != nil {
+			return mapConflict(err)
+		}
+		if err := insertPersonalPage(ctx, tx, params.PageID, params.UncategorizedID, params.User, params.Slug); err != nil {
+			return mapConflict(err)
+		}
+		if err := insertSession(ctx, tx, params.Session); err != nil {
+			return err
+		}
+		linkID, err := identity.New("oai")
+		if err != nil {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, `
+			INSERT INTO oauth_identities(id, provider, subject, user_id, email, created_at)
+			VALUES (?, ?, ?, ?, ?, ?)`, linkID, provider, subject, params.User.ID, params.User.Email, dbTime(now))
+		return mapConflict(err)
+	})
 }

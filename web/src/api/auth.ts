@@ -33,6 +33,30 @@ export const authApi = {
   login: (data: LoginRequest) =>
     request<ApiResponse<AuthSession>>('/auth/login', { method: 'POST', body: data }),
 
+  requestEmailCode: (data: {
+    email: string;
+    purpose: 'register' | 'login';
+    username?: string;
+    password?: string;
+    invitationToken?: string;
+  }) =>
+    request<ApiResponse<{ message: string }>>('/auth/email-code', { method: 'POST', body: data }),
+
+  loginWithEmailCode: (data: { email: string; code: string }) =>
+    request<ApiResponse<AuthSession>>('/auth/login/email-code', { method: 'POST', body: data }),
+
+  registerWithEmailCode: (data: { email: string; code: string }) =>
+    request<ApiResponse<AuthSession>>('/auth/register/email-code', { method: 'POST', body: data }),
+
+  listOAuthProviders: () =>
+    request<ApiResponse<{ providers: string[] }>>('/auth/oauth/providers'),
+
+  oauthStartURL: (provider: string, invitationToken?: string) => {
+    const base = `/api/v1/auth/oauth/${encodeURIComponent(provider)}/start`;
+    if (!invitationToken) return base;
+    return `${base}?invitationToken=${encodeURIComponent(invitationToken)}`;
+  },
+
   logout: () =>
     request<ApiResponse<null>>('/auth/logout', { method: 'POST' }),
 

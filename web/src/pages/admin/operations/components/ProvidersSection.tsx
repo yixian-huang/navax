@@ -1,18 +1,20 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, Info, KeyRound, Mail, Network, RotateCw, Save, Server } from 'lucide-react';
+import { CheckCircle2, Github, Info, KeyRound, Mail, Network, RotateCw, Save, Server } from 'lucide-react';
 import { adminApi } from '@/api/admin';
 import type { ProviderConfig, ProviderKind, ProviderSettings } from '@/api/types';
 import { ErrorState, LoadingSkeleton } from '@/components/base/SharedUI';
 import { FormField, FormInput, FormSelect } from '@/components/base/FormField';
 import { useToast } from '@/components/base/Toast';
 
-const providerKinds: ProviderKind[] = ['smtp', 'storage', 'dns'];
+const providerKinds: ProviderKind[] = ['smtp', 'storage', 'dns', 'oauth_google', 'oauth_github'];
 
 const providerMeta = {
-  smtp: { label: 'SMTP 邮件', description: '邀请邮件、密码找回等系统通知', icon: Mail, secret: 'password', secretLabel: 'SMTP 密码' },
+  smtp: { label: 'SMTP 邮件', description: '邀请邮件、密码找回、邮箱验证码等系统通知', icon: Mail, secret: 'password', secretLabel: 'SMTP 密码' },
   storage: { label: '图片存储', description: '默认本地磁盘；可选切换到 S3 兼容对象存储', icon: Server, secret: 'secretKey', secretLabel: 'Secret Key' },
   dns: { label: 'DNS 服务', description: '子域名自动化扩展预留（暂未接入）', icon: Network, secret: 'token', secretLabel: 'API Token' },
+  oauth_google: { label: 'Google 登录', description: 'OAuth 客户端；回调地址见下方说明', icon: Mail, secret: 'clientSecret', secretLabel: 'Client Secret' },
+  oauth_github: { label: 'GitHub 登录', description: 'OAuth App；回调地址见下方说明', icon: Github, secret: 'clientSecret', secretLabel: 'Client Secret' },
 } as const;
 
 type FormSettings = Record<string, string | number | boolean>;
@@ -29,6 +31,10 @@ function boolean(settings: Record<string, unknown>, key: string, fallback = fals
   return typeof settings[key] === 'boolean' ? settings[key] as boolean : fallback;
 }
 
+function isOAuth(kind: ProviderKind) {
+  return kind === 'oauth_google' || kind === 'oauth_github';
+}
+
 function initialSettings(provider: ProviderConfig): FormSettings {
   const settings = provider.settings;
   if (provider.kind === 'smtp') {
@@ -43,6 +49,9 @@ function initialSettings(provider: ProviderConfig): FormSettings {
       bucket: text(settings, 'bucket'), prefix: text(settings, 'prefix'), pathStyle: boolean(settings, 'pathStyle'),
       accessKey: text(settings, 'accessKey'), publicBaseUrl: text(settings, 'publicBaseUrl'),
     };
+  }
+  if (isOAuth(provider.kind)) {
+    return { clientId: text(settings, 'clientId') };
   }
   return {
     provider: text(settings, 'provider'), zoneId: text(settings, 'zoneId'), apiEndpoint: text(settings, 'apiEndpoint'),
@@ -73,11 +82,19 @@ function providerSettings(kind: ProviderKind, settings: FormSettings): ProviderS
       ...(publicBaseUrl ? { publicBaseUrl } : {}),
     };
   }
+  if (isOAuth(kind)) {
+    return { clientId: String(settings.clientId).trim() };
+  }
   const apiEndpoint = String(settings.apiEndpoint).trim();
   return {
     provider: String(settings.provider).trim(), zoneId: String(settings.zoneId).trim(), ttl: Number(settings.ttl),
     ...(apiEndpoint ? { apiEndpoint } : {}),
   };
+}
+
+function oauthCallbackHint(kind: ProviderKind) {
+  const provider = kind === 'oauth_google' ? 'google' : 'github';
+  return `/api/v1/auth/oauth/${provider}/callback`;
 }
 
 function ProviderCard({ provider }: { provider: ProviderConfig }) {
@@ -156,6 +173,10 @@ function ProviderCard({ provider }: { provider: ProviderConfig }) {
               </>
             ) : null}
           </>
+        ) : isOAuth(provider.kind) ? (
+          <FormField label="Client ID">
+            <FormInput value={String(settings.clientId)} onChange={event => update('clientId', event.target.value)} placeholder="OAuth 应用 Client ID" />
+          </FormField>
         ) : (
           <>
             <FormField label="DNS Provider"><FormInput value={String(settings.provider)} onChange={event => update('provider', event.target.value)} placeholder="cloudflare" /></FormField>
@@ -190,8 +211,25 @@ function ProviderCard({ provider }: { provider: ProviderConfig }) {
           </p>
         </div>
       ) : null}
+      {isOAuth(provider.kind) ? (
+        <div className="rounded-lg bg-primary-50 border border-primary-200/70 p-3 flex items-start gap-2">
+          <Info className="w-3.5 h-3.5 text-primary-600 mt-0.5 shrink-0" />
+          <p className="text-xs text-primary-800 leading-relaxed">
+            在第三方控制台登记的<strong>回调 URL</strong>应为站点根地址 + <code>{oauthCallbackHint(provider.kind)}</code>
+            （例如 <code>https://nav.ax{oauthCallbackHint(provider.kind)}</code>）。启用并填写 Client ID / Secret 后，登录页会显示对应按钮。
+          </p>
+        </div>
+      ) : null}
+      {provider.kind === 'smtp' ? (
+        <div className="rounded-lg bg-primary-50 border border-primary-200/70 p-3 flex items-start gap-2">
+          <Info className="w-3.5 h-3.5 text-primary-600 mt-0.5 shrink-0" />
+          <p className="text-xs text-primary-800 leading-relaxed">
+            注册与邮箱验证码登录依赖 SMTP。未配置或未启用时，邮箱验证码流程会返回服务不可用。
+          </p>
+        </div>
+      ) : null}
 
-      {/* Secrets only apply to SMTP / S3 / DNS — not local disk storage. */}
+      {/* Secrets only apply to SMTP / S3 / DNS / OAuth — not local disk storage. */}
       {!(provider.kind === 'storage' && settings.driver !== 's3') ? (
         <div className="rounded-lg bg-background-50 border border-background-200/60 p-3">
           <div className="flex items-center gap-2 mb-2">

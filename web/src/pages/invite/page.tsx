@@ -22,10 +22,14 @@ export default function InvitePage() {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [code, setCode] = useState('');
+  const [step, setStep] = useState<'form' | 'code'>('form');
   const [loading, setLoading] = useState(false);
+  const [sending, setSending] = useState(false);
   const [validating, setValidating] = useState(true);
   const [valid, setValid] = useState(false);
   const [inviterName, setInviterName] = useState('');
+  const [oauthProviders, setOauthProviders] = useState<string[]>([]);
   const { toast } = useToast();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -51,15 +55,35 @@ export default function InvitePage() {
       }
     };
     void validate();
+    authApi.listOAuthProviders()
+      .then(res => { if (!cancelled) setOauthProviders(res.data.providers ?? []); })
+      .catch(() => {});
     return () => { cancelled = true; };
   }, [token]);
+
+  const handleSendCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!token) return;
+    setSending(true);
+    try {
+      await authApi.requestEmailCode({
+        email, purpose: 'register', username, password, invitationToken: token,
+      });
+      setStep('code');
+      toast('success', '验证码已发送，请查收邮件');
+    } catch (error) {
+      toast('error', error instanceof Error ? error.message : '发送验证码失败');
+    } finally {
+      setSending(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     if (!token) return;
     try {
-      const response = await authApi.registerViaInvite(token, { username, email, password });
+      const response = await authApi.registerWithEmailCode({ email, code });
       queryClient.setQueryData(['auth', 'session'], {
         authenticated: true,
         user: response.data.user,
@@ -120,7 +144,8 @@ export default function InvitePage() {
             </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          {step === 'form' ? (
+          <form onSubmit={handleSendCode} className="space-y-4">
             <div>
               <label htmlFor="username" className="block text-sm font-medium text-foreground-700 mb-1.5">用户名</label>
               <div className="relative">
@@ -176,17 +201,59 @@ export default function InvitePage() {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={sending}
               className="w-full h-11 rounded-lg bg-primary-500 text-background-50 dark:text-foreground-950 text-sm font-medium hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-150 flex items-center justify-center gap-2 whitespace-nowrap"
             >
-              {loading ? '创建中...' : (
+              {sending ? '发送中...' : (
                 <>
-                  创建账号
+                  发送邮箱验证码
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
             </button>
           </form>
+          ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <p className="text-xs text-foreground-500">验证码已发送至 <span className="font-medium">{email}</span></p>
+            <div>
+              <label className="block text-sm font-medium text-foreground-700 mb-1.5">验证码</label>
+              <input
+                value={code}
+                onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                required
+                minLength={6}
+                maxLength={6}
+                inputMode="numeric"
+                className="w-full h-11 px-4 rounded-lg bg-background-50 border border-background-200/70 text-sm tracking-widest focus:outline-none focus:border-primary-300"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={loading || code.length < 6}
+              className="w-full h-11 rounded-lg bg-primary-500 text-background-50 text-sm font-medium disabled:opacity-50"
+            >
+              {loading ? '创建中...' : '验证并创建账号'}
+            </button>
+            <button type="button" onClick={() => setStep('form')} className="w-full text-xs text-foreground-400">
+              返回修改信息
+            </button>
+          </form>
+          )}
+
+          {oauthProviders.length > 0 && step === 'form' && token && (
+            <div className="mt-4 grid gap-2">
+              {oauthProviders.includes('google') && (
+                <a href={authApi.oauthStartURL('google', token)} className="h-10 rounded-lg border border-background-200/70 text-sm inline-flex items-center justify-center gap-2 hover:bg-background-100">
+                  <i className="ri-google-fill" /> 使用 Google 接受邀请
+                </a>
+              )}
+              {oauthProviders.includes('github') && (
+                <a href={authApi.oauthStartURL('github', token)} className="h-10 rounded-lg border border-background-200/70 text-sm inline-flex items-center justify-center gap-2 hover:bg-background-100">
+                  <i className="ri-github-fill" /> 使用 GitHub 接受邀请
+                </a>
+              )}
+            </div>
+          )}
 
           <p className="mt-6 text-center text-sm text-foreground-400">
             已有账号？<Link to="/login" className="text-primary-600 hover:text-primary-700 font-medium">登录</Link>

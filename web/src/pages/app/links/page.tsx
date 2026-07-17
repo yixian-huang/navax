@@ -99,12 +99,16 @@ export default function LinksPage() {
   const { markSaving, markSaved, markError } = useSaveStatus();
   const { toast } = useToast();
 
-  // UI
+  // UI — focus mode for large catalogs: manage | preview | both (side-by-side)
+  const [editorFocus, setEditorFocus] = useState<'manage' | 'preview' | 'both'>(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) return 'manage';
+    return 'both';
+  });
   const [leftOpen, setLeftOpen] = useState(true);
   const [expandedCat, setExpandedCat] = useState<string | null>(null);
   const [filter, setFilter] = useState('');
   const [viewport, setViewport] = useState<Viewport>('desktop');
-  const [viewMode, setViewMode] = useState<'card' | 'table'>('card');
+  const [viewMode, setViewMode] = useState<'card' | 'table'>('table');
   const [showAddCat, setShowAddCat] = useState(false);
   const [showAddSite, setShowAddSite] = useState(false);
   const [addSiteCatId, setAddSiteCatId] = useState<string>('');
@@ -712,14 +716,49 @@ export default function LinksPage() {
     );
   }
 
+  const showManage = editorFocus === 'manage' || editorFocus === 'both';
+  const showPreview = editorFocus === 'preview' || editorFocus === 'both';
+
   return (
     <div className="-m-4 md:-m-6 flex flex-col h-[calc(100vh-7.5rem)]">
+      {/* Focus tabs — critical when managing thousands of links */}
+      <div className="flex-shrink-0 border-b border-background-200/70 bg-background-50 px-3 py-2 flex items-center gap-2 flex-wrap">
+        <span className="text-[11px] text-foreground-400 mr-1">工作区</span>
+        {([
+          { id: 'manage' as const, label: '链接管理', hint: '分类/表格，适合大批量' },
+          { id: 'preview' as const, label: '实时预览', hint: '拖拽布局' },
+          { id: 'both' as const, label: '分栏', hint: '宽屏对照' },
+        ]).map(tab => (
+          <button
+            key={tab.id}
+            type="button"
+            title={tab.hint}
+            onClick={() => {
+              setEditorFocus(tab.id);
+              if (tab.id === 'manage' || tab.id === 'both') setLeftOpen(true);
+            }}
+            className={cn(
+              'h-8 px-3 rounded-md text-xs font-medium transition-colors',
+              editorFocus === tab.id
+                ? 'bg-primary-500 text-background-50'
+                : 'bg-background-100 text-foreground-500 hover:text-foreground-700',
+            )}
+          >
+            {tab.label}
+          </button>
+        ))}
+        <span className="text-[11px] text-foreground-300 ml-auto hidden sm:inline">
+          站点多时建议用「链接管理」+ 表格视图
+        </span>
+      </div>
       <div className="flex flex-1 min-h-0">
       {/* ---- Left Panel ---- */}
       <div
         className={cn(
           'flex-shrink-0 border-r border-background-200/70 bg-white flex flex-col transition-all duration-200 overflow-hidden',
-          leftOpen ? 'w-80 xl:w-[360px]' : 'w-0',
+          !showManage && 'w-0 border-0',
+          showManage && editorFocus === 'manage' && 'w-full border-0',
+          showManage && editorFocus === 'both' && (leftOpen ? 'w-80 xl:w-[360px]' : 'w-0'),
         )}
       >
         {/* Left Panel Header */}
@@ -1103,11 +1142,14 @@ export default function LinksPage() {
       </div>
 
       {/* ---- Right Panel: Live Preview ---- */}
-      <div className="flex-1 flex flex-col bg-background-50 min-w-0">
+      <div className={cn(
+        'flex-1 flex flex-col bg-background-50 min-w-0',
+        !showPreview && 'hidden',
+      )}>
         {/* Preview toolbar */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-background-200/70 bg-white">
           <div className="flex items-center gap-2">
-            {!leftOpen && (
+            {!leftOpen && showManage && (
               <button
                 onClick={() => setLeftOpen(true)}
                 className="w-7 h-7 flex items-center justify-center rounded-lg text-foreground-400 hover:bg-background-100 transition-colors duration-150"

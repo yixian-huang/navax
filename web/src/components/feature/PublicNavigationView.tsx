@@ -152,11 +152,23 @@ export default function PublicNavigationView({
     window.open(site.url, '_blank', 'noopener,noreferrer');
   }, [recordSiteClick]);
 
-  const timeStr = now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
+  const hour12 = settings?.display.clockFormat === '12h';
+  const timeStr = now.toLocaleTimeString('zh-CN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12,
+  });
+  const showSeconds = settings?.display.showSeconds !== false;
   const secondsStr = now.toLocaleTimeString('zh-CN', { second: '2-digit' }).padStart(2, '0');
-  const dateStr = now.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' });
+  const dateFmt = settings?.display.dateFormat || 'long';
+  const dateStr = dateFmt === 'compact'
+    ? now.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })
+    : dateFmt === 'short'
+      ? now.toLocaleDateString('zh-CN', { month: 'long', day: 'numeric' })
+      : now.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' });
   const weekDay = weekDays[now.getDay()];
   const greeting = getTimeGreeting();
+  const subtitle = (settings?.display.subtitle || '').trim();
 
   const bg = settings?.appearance.background;
   const backgroundUrl =
@@ -196,6 +208,8 @@ export default function PublicNavigationView({
             showGreeting={settings?.display.showGreeting ?? true}
             showDate={settings?.display.showDate ?? true}
             showClock={settings?.display.showClock ?? true}
+            showSeconds={showSeconds}
+            subtitle={subtitle}
           />
         );
     }

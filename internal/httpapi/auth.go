@@ -51,6 +51,14 @@ func (h *AuthHandler) Mount(router chi.Router) {
 	router.Get("/auth/invitations/{token}", h.validateInvitation)
 	router.Post("/auth/invitations/{token}/register", h.register)
 	router.Post("/auth/register", h.registerOpen)
+	// Email one-time codes (register / passwordless login)
+	router.Post("/auth/email-code", h.requestEmailCode)
+	router.Post("/auth/login/email-code", h.loginEmailCode)
+	router.Post("/auth/register/email-code", h.registerEmailCode)
+	// OAuth
+	router.Get("/auth/oauth/providers", h.oauthProviders)
+	router.Get("/auth/oauth/{provider}/start", h.oauthStart)
+	router.Get("/auth/oauth/{provider}/callback", h.oauthCallback)
 }
 
 type bootstrapRequest struct {
@@ -222,6 +230,124 @@ func (h *AuthHandler) registerOpen(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, r, http.StatusCreated, authSessionData(session))
 }
 
+func (h *AuthHandler) requestEmailCode(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		Email           string `json:"email"`
+		Purpose         string `json:"purpose"` // register | login
+		Username        string `json:"username"`
+		Password        string `json:"password"`
+		InvitationToken string `json:"invitationToken"`
+	}
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+	purpose := auth.EmailCodePurpose(request.Purpose)
+	payload := auth.RegisterPayload{
+		Username: request.Username, Password: request.Password, InvitationToken: request.InvitationToken,
+	}
+	code, err := h.service.RequestEmailCode(r.Context(), request.Email, purpose, payload)
+	if err != nil {
+		h.writeAuthError(w, r, err)
+		return
+	}
+	if code != "" && h.mailer != nil && h.mailer.MailConfigured(r.Context()) {
+		msg := emailCodeMessage(h.instanceName, request.Email, code, request.Purpose)
+		if sendErr := h.mailer.SendMail(r.Context(), msg); sendErr != nil {
+			slog.Warn("send email code", "error", sendErr)
+			WriteError(w, r, http.StatusServiceUnavailable, "SERVICE_UNAVAILABLE", "邮件发送失败，请检查 SMTP 配置", nil)
+			return
+		}
+	} else if purpose == auth.EmailCodeRegister && code != "" {
+		// Registration requires mail delivery.
+		WriteError(w, r, http.StatusServiceUnavailable, "SERVICE_UNAVAILABLE", "服务器未配置邮件服务，无法发送验证码", nil)
+		return
+	}
+	// Generic response for login (and success register after send).
+	WriteJSON(w, r, http.StatusOK, map[string]any{
+		"message": "若邮箱可用，验证码已发送，请在 10 分钟内完成验证。",
+	})
+}
+
+func (h *AuthHandler) loginEmailCode(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		Email string `json:"email"`
+		Code  string `json:"code"`
+	}
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+	session, token, err := h.service.VerifyEmailCodeLogin(r.Context(), request.Email, request.Code, deviceSummary(r))
+	if err != nil {
+		h.writeAuthError(w, r, err)
+		return
+	}
+	h.setSessionCookie(w, token, session.ExpiresAt)
+	WriteJSON(w, r, http.StatusOK, authSessionData(session))
+}
+
+func (h *AuthHandler) registerEmailCode(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		Email string `json:"email"`
+		Code  string `json:"code"`
+	}
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+	session, token, err := h.service.VerifyEmailCodeRegister(r.Context(), request.Email, request.Code, deviceSummary(r))
+	if err != nil {
+		h.writeAuthError(w, r, err)
+		return
+	}
+	h.setSessionCookie(w, token, session.ExpiresAt)
+	WriteJSON(w, r, http.StatusCreated, authSessionData(session))
+}
+
+func (h *AuthHandler) oauthProviders(w http.ResponseWriter, r *http.Request) {
+	providers, err := h.service.ListEnabledOAuth(r.Context())
+	if err != nil {
+		WriteError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "读取 OAuth 配置失败", nil)
+		return
+	}
+	list := make([]string, 0, len(providers))
+	for _, p := range providers {
+		list = append(list, string(p))
+	}
+	WriteJSON(w, r, http.StatusOK, map[string]any{"providers": list})
+}
+
+func (h *AuthHandler) oauthStart(w http.ResponseWriter, r *http.Request) {
+	provider := auth.OAuthProvider(chi.URLParam(r, "provider"))
+	invite := r.URL.Query().Get("invitationToken")
+	authorizeURL, _, err := h.service.BeginOAuth(r.Context(), provider, invite)
+	if err != nil {
+		h.writeAuthError(w, r, err)
+		return
+	}
+	http.Redirect(w, r, authorizeURL, http.StatusFound)
+}
+
+func (h *AuthHandler) oauthCallback(w http.ResponseWriter, r *http.Request) {
+	provider := auth.OAuthProvider(chi.URLParam(r, "provider"))
+	if r.URL.Query().Get("error") != "" {
+		http.Redirect(w, r, "/login?oauth=denied", http.StatusFound)
+		return
+	}
+	session, token, err := h.service.CompleteOAuth(
+		r.Context(), provider, r.URL.Query().Get("code"), r.URL.Query().Get("state"), deviceSummary(r),
+	)
+	if err != nil {
+		slog.Warn("oauth callback", "provider", provider, "error", err)
+		http.Redirect(w, r, "/login?oauth=error", http.StatusFound)
+		return
+	}
+	h.setSessionCookie(w, token, session.ExpiresAt)
+	if session.User.Role == "admin" {
+		http.Redirect(w, r, "/admin", http.StatusFound)
+		return
+	}
+	http.Redirect(w, r, "/app?scope=personal", http.StatusFound)
+}
+
 func (h *AuthHandler) writeAuthError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, auth.ErrTooManyAttempts):
@@ -246,6 +372,14 @@ func (h *AuthHandler) writeAuthError(w http.ResponseWriter, r *http.Request, err
 		WriteError(w, r, http.StatusGone, "INVITATION_EXHAUSTED", "邀请使用次数已耗尽", nil)
 	case errors.Is(err, auth.ErrInvitationInvalid):
 		WriteError(w, r, http.StatusNotFound, "INVITATION_NOT_FOUND", "邀请不存在", nil)
+	case errors.Is(err, auth.ErrEmailCodeInvalid), errors.Is(err, auth.ErrEmailCodeExpired):
+		WriteError(w, r, http.StatusUnauthorized, "INVALID_CREDENTIALS", "验证码无效或已过期", nil)
+	case errors.Is(err, auth.ErrMailRequired):
+		WriteError(w, r, http.StatusServiceUnavailable, "SERVICE_UNAVAILABLE", "邮件服务未配置", nil)
+	case errors.Is(err, auth.ErrOAuthNotConfigured):
+		WriteError(w, r, http.StatusNotFound, "NOT_FOUND", "该 OAuth 登录方式未启用", nil)
+	case errors.Is(err, auth.ErrOAuthDenied), errors.Is(err, auth.ErrOAuthState):
+		WriteError(w, r, http.StatusUnauthorized, "INVALID_CREDENTIALS", "OAuth 授权失败，请重试", nil)
 	case errors.Is(err, auth.ErrConflict):
 		WriteError(w, r, http.StatusConflict, "CONFLICT", "用户名、邮箱或页面地址已存在", nil)
 	case errors.Is(err, auth.ErrInvalidResetToken):
