@@ -126,6 +126,10 @@ export default function HomePage() {
   const weekDay = weekDays[now.getDay()];
   const greeting = getTimeGreeting();
 
+  const bg = settings?.appearance.background;
+  const backgroundUrl = bg?.type === 'image' && bg.value ? bg.value : undefined;
+  const wallpaperMode = Boolean(backgroundUrl);
+
   const layoutProps = {
     query, onQueryChange: setQuery, engine, onEngineChange: setEngine, onSearch: handleSearch,
     categories, activeCategory, onCategoryChange: setActiveCategory,
@@ -133,6 +137,7 @@ export default function HomePage() {
     totalSites, onSiteOpen: handleSiteOpen,
     searchSuggestions,
     showEngineSelector: settings?.search?.showEngineSelector ?? true,
+    wallpaperMode,
   };
 
   const renderLayout = () => {
@@ -226,9 +231,6 @@ export default function HomePage() {
     );
   }
 
-  const bg = settings?.appearance.background;
-  const backgroundUrl = bg?.type === 'image' && bg.value ? bg.value : undefined;
-
   return (
     <PublicShell
       showSearch={false}
@@ -237,7 +239,8 @@ export default function HomePage() {
       backgroundOpacity={bg?.opacity ?? 1}
     >
       {renderLayout()}
-      <BrowserGuide />
+      {/* Wallpaper already denser visually — skip the onboarding guide chrome */}
+      {!wallpaperMode && <BrowserGuide />}
     </PublicShell>
   );
 }

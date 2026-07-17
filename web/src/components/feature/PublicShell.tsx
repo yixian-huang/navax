@@ -21,7 +21,7 @@ interface PublicShellProps {
   backgroundUrl?: string;
   /**
    * Image strength 0–1 (higher = more of the photo shows through).
-   * A light scrim is layered on top for text readability.
+   * Readability uses local glass surfaces on content, not a full-page wash.
    */
   backgroundOpacity?: number;
 }
@@ -59,9 +59,8 @@ export default function PublicShell({
 
   useKeyboardShortcuts({});
 
-  // Image opacity: clamp so a weak photo still shows; scrim stays light for text.
+  // Keep the photo vivid; only a soft edge vignette (not a flat white wash).
   const imageAlpha = Math.min(1, Math.max(0.25, backgroundOpacity));
-  const scrimAlpha = Math.min(0.55, Math.max(0.12, 1 - imageAlpha));
 
   return (
     <div
@@ -69,6 +68,7 @@ export default function PublicShell({
         'min-h-screen flex flex-col relative',
         hasBackground ? 'bg-transparent' : 'bg-background-100',
       )}
+      data-wallpaper={hasBackground ? 'true' : undefined}
     >
       {hasBackground && (
         <div className="fixed inset-0 z-0 pointer-events-none" aria-hidden>
@@ -81,19 +81,25 @@ export default function PublicShell({
             className="absolute inset-0 w-full h-full object-cover"
             style={{ opacity: imageAlpha }}
           />
+          {/* Soft vignette only — center stays photographic; edges ease chrome contrast */}
           <div
             className="absolute inset-0"
-            style={{ backgroundColor: `rgba(255, 255, 255, ${scrimAlpha})` }}
+            style={{
+              background: [
+                'radial-gradient(ellipse 90% 75% at 50% 35%, transparent 35%, rgba(15, 23, 42, 0.22) 100%)',
+                'linear-gradient(to bottom, rgba(255,255,255,0.10) 0%, transparent 18%, transparent 72%, rgba(15,23,42,0.16) 100%)',
+              ].join(', '),
+            }}
           />
         </div>
       )}
 
-      {/* Navbar — transparent by default, glass on scroll */}
+      {/* Navbar — glass when wallpaper or scrolled so logo/links stay legible */}
       <header
         className={cn(
           'fixed top-0 left-0 right-0 z-50 transition-all duration-300',
-          scrolled
-            ? 'bg-background-50/80 backdrop-blur-xl border-b border-background-200/50 shadow-raised'
+          scrolled || hasBackground
+            ? 'bg-background-50/75 backdrop-blur-xl border-b border-background-200/40 shadow-raised'
             : 'bg-transparent',
         )}
       >
@@ -105,13 +111,13 @@ export default function PublicShell({
           <div className="flex items-center gap-1.5">
             <Link
               to="/discover"
-              className="h-9 px-3 flex items-center text-xs text-foreground-300 hover:text-primary-500 transition-colors duration-200 whitespace-nowrap"
+              className="h-9 px-3 flex items-center text-xs text-foreground-500 hover:text-primary-500 transition-colors duration-200 whitespace-nowrap"
             >
               发现
             </Link>
             <Link
               to="/login"
-              className="h-9 px-3 flex items-center text-xs text-foreground-400 hover:text-foreground-600 transition-colors duration-200 whitespace-nowrap"
+              className="h-9 px-3 flex items-center text-xs text-foreground-600 hover:text-foreground-800 transition-colors duration-200 whitespace-nowrap"
             >
               登录
             </Link>
@@ -126,25 +132,42 @@ export default function PublicShell({
 
       <footer className="mt-auto relative z-10">
         <div className="mx-auto max-w-4xl px-6 md:px-8 py-8">
-          <div className="hairline mb-6" />
-          <div className="flex items-center justify-between gap-4 flex-wrap">
-            <span className="text-[11px] text-foreground-300 tracking-wide">
-              nav.ax · 开源导航站
-            </span>
-            <nav className="flex items-center gap-4">
-              <Link to="/privacy" className="text-[11px] text-foreground-300 hover:text-primary-500 transition-colors duration-200">隐私政策</Link>
-              <Link to="/terms" className="text-[11px] text-foreground-300 hover:text-primary-500 transition-colors duration-200">服务条款</Link>
-              <Link to="/cookies" className="text-[11px] text-foreground-300 hover:text-primary-500 transition-colors duration-200">Cookie 说明</Link>
-              <a
-                href="https://github.com"
-                target="_blank"
-                rel="nofollow noopener noreferrer"
-                className="text-[11px] text-foreground-300 hover:text-primary-500 transition-colors duration-200"
-              >
-                GitHub
-              </a>
-            </nav>
-          </div>
+          {hasBackground ? (
+            <div className="wallpaper-surface-soft rounded-xl px-4 py-3">
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <span className="text-[11px] text-foreground-500 tracking-wide">
+                  nav.ax
+                </span>
+                <nav className="flex items-center gap-3">
+                  <Link to="/privacy" className="text-[11px] text-foreground-500 hover:text-primary-500 transition-colors duration-200">隐私</Link>
+                  <Link to="/terms" className="text-[11px] text-foreground-500 hover:text-primary-500 transition-colors duration-200">条款</Link>
+                  <Link to="/cookies" className="text-[11px] text-foreground-500 hover:text-primary-500 transition-colors duration-200">Cookie</Link>
+                </nav>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="hairline mb-6" />
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <span className="text-[11px] text-foreground-300 tracking-wide">
+                  nav.ax · 开源导航站
+                </span>
+                <nav className="flex items-center gap-4">
+                  <Link to="/privacy" className="text-[11px] text-foreground-300 hover:text-primary-500 transition-colors duration-200">隐私政策</Link>
+                  <Link to="/terms" className="text-[11px] text-foreground-300 hover:text-primary-500 transition-colors duration-200">服务条款</Link>
+                  <Link to="/cookies" className="text-[11px] text-foreground-300 hover:text-primary-500 transition-colors duration-200">Cookie 说明</Link>
+                  <a
+                    href="https://github.com"
+                    target="_blank"
+                    rel="nofollow noopener noreferrer"
+                    className="text-[11px] text-foreground-300 hover:text-primary-500 transition-colors duration-200"
+                  >
+                    GitHub
+                  </a>
+                </nav>
+              </div>
+            </>
+          )}
         </div>
       </footer>
     </div>

@@ -1,4 +1,5 @@
 import { SearchSection, SitesSection, FooterActions } from './SharedSections';
+import { cn } from '@/lib/utils';
 import type { Density, Site } from '@/api/types';
 import type { SearchEngine } from '@/components/base/SearchBar';
 
@@ -18,6 +19,7 @@ interface LayoutProps {
   onSiteOpen: (s: Site) => void;
   searchSuggestions?: string[];
   showEngineSelector?: boolean;
+  wallpaperMode?: boolean;
 }
 
 export default function LayoutBrowseFirst({
@@ -25,37 +27,45 @@ export default function LayoutBrowseFirst({
   categories, activeCategory, onCategoryChange,
   activeSites, density, onDensityChange, totalSites, onSiteOpen,
   searchSuggestions,
+  wallpaperMode = false,
 }: LayoutProps) {
   return (
-    <div className="mx-auto max-w-4xl px-6 md:px-8 pt-12 md:pt-16 pb-24">
+    <div className={cn(
+      'mx-auto max-w-4xl px-6 md:px-8 pb-24',
+      wallpaperMode ? 'pt-10 md:pt-12' : 'pt-12 md:pt-16',
+    )}>
       {/* Inline compact search at top — z-20 so menus clear the sites section */}
-      <div className="relative z-20 mb-10 rise-in">
+      <div className="relative z-20 mb-8 md:mb-10 rise-in">
         <SearchSection
           query={query} onQueryChange={onQueryChange} engine={engine}
           onEngineChange={onEngineChange} onSearch={onSearch} delay={0}
           size="md"
           suggestions={searchSuggestions} showEngineSelector={showEngineSelector}
+          wallpaperMode={wallpaperMode}
         />
       </div>
 
-      {/* Sites first — the star of this layout */}
-      <div className="mb-8 rise-in" style={{ animationDelay: '40ms' }}>
-        <h2 className="font-heading text-lg text-foreground-900 tracking-tight mb-1">
-          我的收藏
-        </h2>
-        <p className="text-xs text-foreground-400 mb-4">
-          快速访问你最常用的站点
-        </p>
-      </div>
+      {/* Wallpaper: sites section already labels itself via tabs; skip extra prose */}
+      {!wallpaperMode && (
+        <div className="mb-8 rise-in" style={{ animationDelay: '40ms' }}>
+          <h2 className="font-heading text-lg text-foreground-900 tracking-tight mb-1">
+            我的收藏
+          </h2>
+          <p className="text-xs text-foreground-400 mb-4">
+            快速访问你最常用的站点
+          </p>
+        </div>
+      )}
 
       <SitesSection
         categories={categories} activeCategory={activeCategory}
         onCategoryChange={onCategoryChange} activeSites={activeSites}
         density={density} onDensityChange={onDensityChange}
         totalSites={totalSites} query={query} onSiteOpen={onSiteOpen} delay={80}
+        wallpaperMode={wallpaperMode}
       />
 
-      <FooterActions />
+      <FooterActions wallpaperMode={wallpaperMode} />
     </div>
   );
 }

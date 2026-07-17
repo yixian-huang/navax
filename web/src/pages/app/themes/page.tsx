@@ -281,10 +281,14 @@ export default function ThemesPage() {
                 className="w-full h-full object-cover"
                 style={{ opacity: Math.min(1, Math.max(0.25, bgConfig.opacity)) }}
               />
+              {/* Match public shell: soft vignette, not a flat white wash */}
               <div
                 className="absolute inset-0 pointer-events-none"
                 style={{
-                  backgroundColor: `rgba(255,255,255,${Math.min(0.55, Math.max(0.12, 1 - bgConfig.opacity))})`,
+                  background: [
+                    'radial-gradient(ellipse 90% 75% at 50% 35%, transparent 35%, rgba(15, 23, 42, 0.22) 100%)',
+                    'linear-gradient(to bottom, rgba(255,255,255,0.10) 0%, transparent 40%, rgba(15,23,42,0.14) 100%)',
+                  ].join(', '),
                 }}
               />
               <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center gap-2">

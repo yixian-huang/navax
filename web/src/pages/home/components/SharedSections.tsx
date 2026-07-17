@@ -3,12 +3,14 @@ import SearchBar from '@/components/base/SearchBar';
 import SiteGrid, { SiteCountLabel } from '@/components/base/SiteGrid';
 import CategoryTabs from '@/components/base/CategoryTabs';
 import DensitySwitcher from '@/components/base/DensitySwitcher';
+import { cn } from '@/lib/utils';
 import type { Density, Site } from '@/api/types';
 import type { SearchEngine } from '@/components/base/SearchBar';
 
 export function SearchSection({
   query, onQueryChange, engine, onEngineChange, onSearch,
   delay, size = 'lg', suggestions, showEngineSelector = true,
+  wallpaperMode = false,
 }: {
   query: string; onQueryChange: (v: string) => void;
   engine: SearchEngine; onEngineChange: (e: SearchEngine) => void;
@@ -17,11 +19,19 @@ export function SearchSection({
   size?: 'lg' | 'md';
   suggestions?: string[];
   showEngineSelector?: boolean;
+  /** Wallpaper mode: no permanent hint; slightly tighter spacing. */
+  wallpaperMode?: boolean;
 }) {
   // relative z-20: rise-in uses transform (stacking context). Without z-index,
   // later sections (SitesSection) paint over search engine / history dropdowns.
   return (
-    <div className="relative z-20 mb-14 md:mb-16 rise-in" style={{ animationDelay: `${delay}ms` }}>
+    <div
+      className={cn(
+        'relative z-20 rise-in',
+        wallpaperMode ? 'mb-8 md:mb-10' : 'mb-14 md:mb-16',
+      )}
+      style={{ animationDelay: `${delay}ms` }}
+    >
       <SearchBar
         value={query}
         onChange={onQueryChange}
@@ -29,7 +39,7 @@ export function SearchSection({
         engine={engine}
         onEngineChange={onEngineChange}
         showEngineSelector={showEngineSelector}
-        showHint
+        showHint={!wallpaperMode}
         size={size}
         suggestions={suggestions}
       />
@@ -41,6 +51,7 @@ export function SitesSection({
   categories, activeCategory, onCategoryChange,
   activeSites, density, onDensityChange,
   totalSites, query, onSiteOpen, delay,
+  wallpaperMode = false,
 }: {
   categories: any[]; activeCategory: string;
   onCategoryChange: (id: string) => void;
@@ -49,19 +60,39 @@ export function SitesSection({
   totalSites: number; query: string;
   onSiteOpen: (s: Site) => void;
   delay: number;
+  wallpaperMode?: boolean;
 }) {
   return (
-    <div className="rise-in" style={{ animationDelay: `${delay}ms` }}>
-      <div className="flex items-baseline justify-between gap-4 mb-5">
-        <div className="flex items-baseline gap-3">
-          <h2 className="font-heading text-lg text-foreground-900 tracking-tight">收藏站点</h2>
-          <SiteCountLabel count={activeSites.length} total={totalSites} query={query} />
+    <div
+      className={cn(
+        'rise-in',
+        wallpaperMode && 'wallpaper-surface rounded-2xl p-4 md:p-5',
+      )}
+      style={{ animationDelay: `${delay}ms` }}
+    >
+      <div className={cn(
+        'flex items-baseline justify-between gap-4',
+        wallpaperMode ? 'mb-3' : 'mb-5',
+      )}>
+        <div className="flex items-baseline gap-3 min-w-0">
+          {!wallpaperMode && (
+            <h2 className="font-heading text-lg text-foreground-900 tracking-tight">收藏站点</h2>
+          )}
+          {wallpaperMode ? (
+            query ? (
+              <span className="text-[11px] text-foreground-500 tracking-wide truncate">
+                {activeSites.length} 个结果
+              </span>
+            ) : null
+          ) : (
+            <SiteCountLabel count={activeSites.length} total={totalSites} query={query} />
+          )}
         </div>
         <DensitySwitcher density={density} onChange={onDensityChange} />
       </div>
 
       {categories.length > 1 && (
-        <div className="mb-8">
+        <div className={wallpaperMode ? 'mb-4' : 'mb-8'}>
           <CategoryTabs
             categories={categories}
             activeId={activeCategory}
@@ -81,7 +112,41 @@ export function SitesSection({
   );
 }
 
-export function FooterActions() {
+export function FooterActions({ wallpaperMode = false }: { wallpaperMode?: boolean }) {
+  if (wallpaperMode) {
+    // Wallpaper: single quiet row — no competing labels with the photo.
+    return (
+      <div className="mt-10 md:mt-12 flex justify-center rise-in">
+        <div className="wallpaper-surface-soft rounded-full px-2 py-1.5 flex items-center gap-0.5">
+          <Link
+            to="/app/links"
+            className="h-8 px-3 inline-flex items-center gap-1.5 text-[11px] text-foreground-600 hover:text-primary-500 transition-colors duration-200 rounded-full hover:bg-background-50/60"
+            title="管理站点"
+          >
+            <i className="ri-settings-3-line text-sm" />
+            管理
+          </Link>
+          <Link
+            to="/app"
+            className="h-8 px-3 inline-flex items-center gap-1.5 text-[11px] text-foreground-600 hover:text-primary-500 transition-colors duration-200 rounded-full hover:bg-background-50/60"
+            title="编辑主页"
+          >
+            <i className="ri-layout-grid-line text-sm" />
+            编辑
+          </Link>
+          <Link
+            to="/discover"
+            className="h-8 px-3 inline-flex items-center gap-1.5 text-[11px] text-foreground-500 hover:text-primary-500 transition-colors duration-200 rounded-full hover:bg-background-50/60"
+            title="发现精选"
+          >
+            <i className="ri-compass-3-line text-sm" />
+            发现
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="mt-20 md:mt-24">
       <div className="hairline-gradient mb-7" />

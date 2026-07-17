@@ -138,6 +138,21 @@ body {
   transform: translateY(-2px);
 }
 
+/* Wallpaper mode: local glass panels keep type legible without washing out the photo. */
+.wallpaper-surface {
+  background: oklch(var(--background-50) / 0.82);
+  -webkit-backdrop-filter: blur(18px) saturate(1.15);
+  backdrop-filter: blur(18px) saturate(1.15);
+  border: 1px solid oklch(var(--background-200) / 0.45);
+  box-shadow: var(--elevation-surface);
+}
+.wallpaper-surface-soft {
+  background: oklch(var(--background-50) / 0.72);
+  -webkit-backdrop-filter: blur(14px) saturate(1.1);
+  backdrop-filter: blur(14px) saturate(1.1);
+  border: 1px solid oklch(var(--background-200) / 0.35);
+}
+
 /* ---- Fade / rise entrance ---- */
 @keyframes riseIn {
   from { opacity: 0; transform: translateY(12px); }

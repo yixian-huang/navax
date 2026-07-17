@@ -1,4 +1,5 @@
 import { SearchSection, SitesSection, FooterActions } from './SharedSections';
+import { cn } from '@/lib/utils';
 import type { Density, Site } from '@/api/types';
 import type { SearchEngine } from '@/components/base/SearchBar';
 
@@ -18,6 +19,7 @@ interface LayoutProps {
   onSiteOpen: (s: Site) => void;
   searchSuggestions?: string[];
   showEngineSelector?: boolean;
+  wallpaperMode?: boolean;
 }
 
 export default function LayoutSearchFocus({
@@ -25,20 +27,27 @@ export default function LayoutSearchFocus({
   categories, activeCategory, onCategoryChange,
   activeSites, density, onDensityChange, totalSites, onSiteOpen,
   searchSuggestions,
+  wallpaperMode = false,
 }: LayoutProps) {
   return (
-    <div className="mx-auto max-w-4xl px-6 md:px-8 pt-20 md:pt-28 pb-24">
-      {/* Big centered search — the hero of this layout */}
-      <div className="text-center mb-8 rise-in">
-        <h2 className="font-heading text-lg text-foreground-500 mb-10 tracking-wide">
-          搜索你的收藏，或直接输入网址
-        </h2>
-      </div>
+    <div className={cn(
+      'mx-auto max-w-4xl px-6 md:px-8 pb-24',
+      wallpaperMode ? 'pt-14 md:pt-20' : 'pt-20 md:pt-28',
+    )}>
+      {/* Wallpaper: search is self-explanatory — drop instructional headline */}
+      {!wallpaperMode && (
+        <div className="text-center mb-8 rise-in">
+          <h2 className="font-heading text-lg text-foreground-500 mb-10 tracking-wide">
+            搜索你的收藏，或直接输入网址
+          </h2>
+        </div>
+      )}
 
       <SearchSection
         query={query} onQueryChange={onQueryChange} engine={engine}
         onEngineChange={onEngineChange} onSearch={onSearch} delay={60}
         suggestions={searchSuggestions} showEngineSelector={showEngineSelector}
+        wallpaperMode={wallpaperMode}
       />
 
       <SitesSection
@@ -46,9 +55,10 @@ export default function LayoutSearchFocus({
         onCategoryChange={onCategoryChange} activeSites={activeSites}
         density={density} onDensityChange={onDensityChange}
         totalSites={totalSites} query={query} onSiteOpen={onSiteOpen} delay={120}
+        wallpaperMode={wallpaperMode}
       />
 
-      <FooterActions />
+      <FooterActions wallpaperMode={wallpaperMode} />
     </div>
   );
 }
