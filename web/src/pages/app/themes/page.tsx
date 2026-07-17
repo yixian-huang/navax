@@ -267,6 +267,7 @@ export default function ThemesPage() {
               <img
                 src={bgConfig.image}
                 alt="背景预览"
+                referrerPolicy="no-referrer"
                 className="w-full h-full object-cover"
               />
               <div

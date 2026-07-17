@@ -184,21 +184,28 @@ export default function HomePage() {
   }
 
   if (error) {
-    // 契约规定主站未发布时返回 404：对访客是空状态而非故障，管理员额外给发布入口。
+    // 契约规定主站/子域未发布时返回 404：对访客是空状态而非故障。
     if ((error as { status?: number }).status === 404) {
+      const host = typeof window !== 'undefined' ? window.location.hostname.toLowerCase() : '';
+      const isSubdomainHost = host.split('.').length > 2
+        || (host.endsWith('.localhost') && host !== 'localhost');
       return (
         <PublicShell showSearch={false}>
           <div className="mx-auto max-w-4xl px-6 md:px-8 pt-20 pb-20">
             <EmptyState
-              title="站点尚未发布"
-              description="管理员还没有发布导航内容，发布后这里会展示站点导航。"
+              title={isSubdomainHost ? '该子域名导航尚未发布' : '站点尚未发布'}
+              description={
+                isSubdomainHost
+                  ? '子域名绑定的是你的「个人导航」已发布内容。请到工作台切换到「我的导航」，添加链接后点击「发布」。主站内容不会自动出现在子域名上。'
+                  : '管理员还没有发布导航内容，发布后这里会展示站点导航。'
+              }
               action={
-                authSession?.user?.role === 'admin' ? (
+                authSession?.user ? (
                   <Link
-                    to="/app?scope=system"
+                    to={isSubdomainHost ? '/app?scope=personal' : (authSession.user.role === 'admin' ? '/app?scope=system' : '/app?scope=personal')}
                     className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-background-100 border border-background-200 text-sm text-foreground-600 hover:bg-background-200 transition-colors duration-150"
                   >
-                    去发布主站内容
+                    {isSubdomainHost ? '去发布我的导航' : '去发布主站内容'}
                   </Link>
                 ) : undefined
               }
@@ -226,6 +233,8 @@ export default function HomePage() {
           <img
             src={settings.appearance.background.value}
             alt=""
+            // External preset hosts (e.g. readdy) often reject requests with a site Referer.
+            referrerPolicy="no-referrer"
             className="w-full h-full object-cover"
           />
           <div

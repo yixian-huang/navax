@@ -178,7 +178,17 @@ export default function PublishPage() {
     setDomainError('');
     setApplying(true);
     applyMutation.mutate({ label: domainInput.trim() }, {
-      onSuccess: () => { toast('success', '申请已提交，等待审核'); setDomainInput(''); setApplying(false); },
+      onSuccess: (res) => {
+        const autoApproved = res?.data?.status === 'approved';
+        toast(
+          'success',
+          autoApproved
+            ? '子域名已生效。请切换到「我的导航」添加链接并发布，访客才能访问。'
+            : '申请已提交，等待审核。通过后需在「我的导航」发布内容才会显示。',
+        );
+        setDomainInput('');
+        setApplying(false);
+      },
       onError: (e: Error) => { toast('error', e.message || '申请失败'); setApplying(false); },
     });
   };
@@ -436,7 +446,13 @@ export default function PublishPage() {
                 管理员尚未启用子域名（需在系统配置中开启并设置根域名）。当前可使用公开路径{' '}
                 <code className="text-foreground-700">/u/{slug}</code> 访问已发布页面。
               </p>
-            ) : status === 'approved' && subdomain ? (
+            ) : (
+              <>
+            <p className="text-xs text-foreground-400 leading-relaxed">
+              子域名绑定的是你的<strong className="text-foreground-600">个人导航</strong>
+              （不是主站系统页）。申请成功后，需要在「我的导航」里添加链接并<strong className="text-foreground-600">发布</strong>，访客才能通过子域名看到内容。
+            </p>
+            {status === 'approved' && subdomain ? (
               <div className="space-y-3">
                 <div className="flex items-center gap-2">
                   <Globe className="w-4 h-4 text-green-500" />
@@ -553,6 +569,8 @@ export default function PublishPage() {
                 </form>
                 {domainError && <p className="text-xs text-red-500">{domainError}</p>}
               </div>
+            )}
+              </>
             )}
           </div>
         </div>
