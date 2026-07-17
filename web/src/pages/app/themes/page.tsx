@@ -269,10 +269,13 @@ export default function ThemesPage() {
                 alt="背景预览"
                 referrerPolicy="no-referrer"
                 className="w-full h-full object-cover"
+                style={{ opacity: Math.min(1, Math.max(0.25, bgConfig.opacity)) }}
               />
               <div
                 className="absolute inset-0 pointer-events-none"
-                style={{ backgroundColor: `rgba(255,255,255,${1 - bgConfig.opacity})` }}
+                style={{
+                  backgroundColor: `rgba(255,255,255,${Math.min(0.55, Math.max(0.12, 1 - bgConfig.opacity))})`,
+                }}
               />
               <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center gap-2">
                 <button
@@ -382,19 +385,19 @@ export default function ThemesPage() {
             </div>
           )}
 
-          {/* Opacity slider */}
+          {/* Image strength slider — higher value = more of the photo shows */}
           {bgConfig.image && (
             <div className="space-y-1 pt-1">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] text-foreground-400">背景透明度</span>
+                <span className="text-[10px] text-foreground-400">背景可见度</span>
                 <span className="text-[10px] font-mono text-foreground-600">
-                  {Math.round((1 - bgConfig.opacity) * 100)}% 不透明
+                  {Math.round(bgConfig.opacity * 100)}%
                 </span>
               </div>
               <input
                 type="range"
-                min={0}
-                max={0.8}
+                min={0.2}
+                max={1}
                 step={0.05}
                 value={bgConfig.opacity}
                 onChange={e => handleOpacityChange(Number(e.target.value))}
@@ -403,8 +406,8 @@ export default function ThemesPage() {
                 className="w-full accent-primary-500 h-1"
               />
               <div className="flex justify-between text-[9px] text-foreground-300">
-                <span>更明显</span>
                 <span>更淡</span>
+                <span>更明显</span>
               </div>
             </div>
           )}

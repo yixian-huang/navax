@@ -226,26 +226,17 @@ export default function HomePage() {
     );
   }
 
+  const bg = settings?.appearance.background;
+  const backgroundUrl = bg?.type === 'image' && bg.value ? bg.value : undefined;
+
   return (
-    <PublicShell showSearch={false} themeId={settings?.appearance.themeId}>
-      {settings?.appearance.background.type === 'image' && settings.appearance.background.value && (
-        <div className="fixed inset-0 z-0 pointer-events-none">
-          <img
-            src={settings.appearance.background.value}
-            alt=""
-            // External preset hosts (e.g. readdy) often reject requests with a site Referer.
-            referrerPolicy="no-referrer"
-            className="w-full h-full object-cover"
-          />
-          <div
-            className="absolute inset-0"
-            style={{ backgroundColor: `rgba(255,255,255,${1 - settings.appearance.background.opacity})` }}
-          />
-        </div>
-      )}
-      <div className="relative z-10">
-        {renderLayout()}
-      </div>
+    <PublicShell
+      showSearch={false}
+      themeId={settings?.appearance.themeId}
+      backgroundUrl={backgroundUrl}
+      backgroundOpacity={bg?.opacity ?? 1}
+    >
+      {renderLayout()}
       <BrowserGuide />
     </PublicShell>
   );

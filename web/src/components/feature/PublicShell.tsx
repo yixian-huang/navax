@@ -17,10 +17,24 @@ interface PublicShellProps {
   children: React.ReactNode;
   showSearch?: boolean;
   themeId?: string;
+  /** Full-bleed background image URL (page settings appearance.background). */
+  backgroundUrl?: string;
+  /**
+   * Image strength 0–1 (higher = more of the photo shows through).
+   * A light scrim is layered on top for text readability.
+   */
+  backgroundOpacity?: number;
 }
 
-export default function PublicShell({ children, showSearch = true, themeId = DEFAULT_THEME }: PublicShellProps) {
+export default function PublicShell({
+  children,
+  showSearch = true,
+  themeId = DEFAULT_THEME,
+  backgroundUrl,
+  backgroundOpacity = 1,
+}: PublicShellProps) {
   const [scrolled, setScrolled] = useState(false);
+  const hasBackground = Boolean(backgroundUrl);
 
   // 公开页主题来自服务端发布快照，不在浏览器持久化服务端状态。
   useEffect(() => {
@@ -45,8 +59,35 @@ export default function PublicShell({ children, showSearch = true, themeId = DEF
 
   useKeyboardShortcuts({});
 
+  // Image opacity: clamp so a weak photo still shows; scrim stays light for text.
+  const imageAlpha = Math.min(1, Math.max(0.25, backgroundOpacity));
+  const scrimAlpha = Math.min(0.55, Math.max(0.12, 1 - imageAlpha));
+
   return (
-    <div className="min-h-screen flex flex-col bg-background-100">
+    <div
+      className={cn(
+        'min-h-screen flex flex-col relative',
+        hasBackground ? 'bg-transparent' : 'bg-background-100',
+      )}
+    >
+      {hasBackground && (
+        <div className="fixed inset-0 z-0 pointer-events-none" aria-hidden>
+          <img
+            src={backgroundUrl}
+            alt=""
+            // External preset hosts often reject requests that include a site Referer.
+            referrerPolicy="no-referrer"
+            decoding="async"
+            className="absolute inset-0 w-full h-full object-cover"
+            style={{ opacity: imageAlpha }}
+          />
+          <div
+            className="absolute inset-0"
+            style={{ backgroundColor: `rgba(255, 255, 255, ${scrimAlpha})` }}
+          />
+        </div>
+      )}
+
       {/* Navbar — transparent by default, glass on scroll */}
       <header
         className={cn(
@@ -79,11 +120,11 @@ export default function PublicShell({ children, showSearch = true, themeId = DEF
       </header>
 
       {/* Spacer to compensate for fixed navbar */}
-      <div className="h-16 flex-shrink-0" />
+      <div className="h-16 flex-shrink-0 relative z-10" />
 
-      <main className="flex-1">{children}</main>
+      <main className="flex-1 relative z-10">{children}</main>
 
-      <footer className="mt-auto">
+      <footer className="mt-auto relative z-10">
         <div className="mx-auto max-w-4xl px-6 md:px-8 py-8">
           <div className="hairline mb-6" />
           <div className="flex items-center justify-between gap-4 flex-wrap">
