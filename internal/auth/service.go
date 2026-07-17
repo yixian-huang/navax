@@ -108,6 +108,7 @@ type Store interface {
 	Initialized(context.Context) (bool, error)
 	Bootstrap(context.Context, BootstrapParams) error
 	UserByEmail(context.Context, string) (User, error)
+	UserByUsername(context.Context, string) (User, error)
 	UserBySessionHash(context.Context, string, time.Time) (Session, error)
 	CreateSession(context.Context, SessionInput) error
 	DeleteSessionByHash(context.Context, string) error
@@ -187,16 +188,19 @@ func (s *Service) Bootstrap(ctx context.Context, providedToken string, input Boo
 	return Session{ID: sessionID, User: user, ExpiresAt: sessionInput.ExpiresAt}, plainToken, nil
 }
 
-func (s *Service) Login(ctx context.Context, email, password, device string) (Session, string, error) {
-	if len(email) > 254 || len(password) < 1 || len(password) > 1024 {
+// Login authenticates with email or username (identifier) and password.
+func (s *Service) Login(ctx context.Context, identifier, password, device string) (Session, string, error) {
+	identifier = strings.TrimSpace(identifier)
+	if len(identifier) < 1 || len(identifier) > 254 || len(password) < 1 || len(password) > 1024 {
 		return Session{}, "", ErrInvalidCredentials
 	}
-	key := normalizeEmail(email)
+	// Throttle key is normalized so email and mixed-case username share one bucket.
+	key := strings.ToLower(identifier)
 	now := s.now()
 	if retryAfter, blocked := s.throttle.retryAfter(key, now); blocked {
 		return Session{}, "", &ThrottledError{RetryAfter: retryAfter}
 	}
-	user, err := s.store.UserByEmail(ctx, key)
+	user, err := s.lookupLoginUser(ctx, identifier)
 	if err != nil {
 		s.throttle.fail(key, now)
 		return Session{}, "", ErrInvalidCredentials
@@ -211,6 +215,19 @@ func (s *Service) Login(ctx context.Context, email, password, device string) (Se
 	}
 	s.throttle.success(key)
 	return s.createSession(ctx, user, device)
+}
+
+func (s *Service) lookupLoginUser(ctx context.Context, identifier string) (User, error) {
+	// Prefer email when it looks like one; otherwise treat as username.
+	if strings.Contains(identifier, "@") {
+		return s.store.UserByEmail(ctx, normalizeEmail(identifier))
+	}
+	username := strings.TrimSpace(identifier)
+	if !usernamePattern.MatchString(username) {
+		// Still try email path for odd local-parts without @ is not possible; fail closed.
+		return User{}, ErrInvalidCredentials
+	}
+	return s.store.UserByUsername(ctx, username)
 }
 
 func (s *Service) Register(ctx context.Context, invitationToken string, input RegisterInput) (Session, string, error) {

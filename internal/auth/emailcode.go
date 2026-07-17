@@ -29,14 +29,25 @@ var (
 type EmailCodePurpose string
 
 const (
-	EmailCodeRegister EmailCodePurpose = "register"
-	EmailCodeLogin    EmailCodePurpose = "login"
+	EmailCodeRegister      EmailCodePurpose = "register"
+	EmailCodeLogin         EmailCodePurpose = "login"
+	EmailCodeOAuthRegister EmailCodePurpose = "oauth_register"
 )
 
 // RegisterPayload is stored with a register-purpose code until verified.
 type RegisterPayload struct {
 	Username        string `json:"username"`
 	Password        string `json:"password"`
+	InvitationToken string `json:"invitationToken,omitempty"`
+}
+
+// OAuthRegisterPayload is stored until the user confirms OAuth signup via email OTP.
+type OAuthRegisterPayload struct {
+	Provider        string `json:"provider"`
+	Subject         string `json:"subject"`
+	Email           string `json:"email"`
+	Username        string `json:"username"`
+	AvatarURL       string `json:"avatarUrl,omitempty"`
 	InvitationToken string `json:"invitationToken,omitempty"`
 }
 
