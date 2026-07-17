@@ -248,7 +248,7 @@ paths:
     post:
       tags: [Auth]
       operationId: registerOpen
-      summary: 公开注册（仅 registrationMode=open）
+      summary: 公开注册（仅 registrationMode=open；推荐使用邮箱验证码流程）
       requestBody:
         required: true
         content:
@@ -259,6 +259,105 @@ paths:
         '403': { $ref: '#/components/responses/ErrorResponse' }
         '409': { $ref: '#/components/responses/ErrorResponse' }
         '422': { $ref: '#/components/responses/ErrorResponse' }
+
+  /api/v1/auth/email-code:
+    post:
+      tags: [Auth]
+      operationId: requestEmailCode
+      summary: 发送邮箱验证码（注册或免密登录）
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmailCodeRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/MessageResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '422': { $ref: '#/components/responses/ErrorResponse' }
+        '429': { $ref: '#/components/responses/ErrorResponse' }
+        '503': { $ref: '#/components/responses/ErrorResponse' }
+  /api/v1/auth/login/email-code:
+    post:
+      tags: [Auth]
+      operationId: loginWithEmailCode
+      summary: 邮箱验证码登录
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmailCodeVerifyRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/AuthSessionResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '429': { $ref: '#/components/responses/ErrorResponse' }
+  /api/v1/auth/register/email-code:
+    post:
+      tags: [Auth]
+      operationId: registerWithEmailCode
+      summary: 邮箱验证码完成注册（公开或邀请 payload）
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmailCodeVerifyRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/AuthSessionResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+        '422': { $ref: '#/components/responses/ErrorResponse' }
+  /api/v1/auth/oauth/providers:
+    get:
+      tags: [Auth]
+      operationId: listOAuthProviders
+      summary: 列出已启用的 OAuth 登录方式
+      security: []
+      responses:
+        '200': { $ref: '#/components/responses/OAuthProvidersResponse' }
+  /api/v1/auth/oauth/{provider}/start:
+    get:
+      tags: [Auth]
+      operationId: startOAuth
+      summary: 跳转到第三方 OAuth 授权页
+      security: []
+      parameters:
+        - in: path
+          name: provider
+          required: true
+          schema: { type: string, enum: [google, github] }
+        - in: query
+          name: invitationToken
+          required: false
+          schema: { type: string, minLength: 24, maxLength: 256 }
+      responses:
+        '302': { description: 重定向到 OAuth 授权页 }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+  /api/v1/auth/oauth/{provider}/callback:
+    get:
+      tags: [Auth]
+      operationId: oauthCallback
+      summary: OAuth 回调；成功后设置会话并重定向到工作台
+      security: []
+      parameters:
+        - in: path
+          name: provider
+          required: true
+          schema: { type: string, enum: [google, github] }
+        - in: query
+          name: code
+          schema: { type: string }
+        - in: query
+          name: state
+          schema: { type: string }
+        - in: query
+          name: error
+          schema: { type: string }
+      responses:
+        '302': { description: 重定向到 /app 或 /login }
+
   /api/v1/me/profile:
     get:
       tags: [Auth]
@@ -693,6 +792,7 @@ paths:
         '401': { $ref: '#/components/responses/ErrorResponse' }
         '413': { $ref: '#/components/responses/ErrorResponse' }
         '415': { $ref: '#/components/responses/ErrorResponse' }
+        '422': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/assets/{kind}/{object}:
     get:
       tags: [Public]
@@ -1536,7 +1636,7 @@ components:
     ThemeId: { in: path, name: themeId, required: true, schema: { $ref: '#/components/schemas/Id' } }
     BackupId: { in: path, name: backupId, required: true, schema: { $ref: '#/components/schemas/Id' } }
     Slug: { in: path, name: slug, required: true, schema: { type: string, pattern: '^[a-z0-9](?:[a-z0-9-]{1,46}[a-z0-9])$', minLength: 3, maxLength: 48 } }
-    ProviderKind: { in: path, name: kind, required: true, schema: { type: string, enum: [smtp, storage, dns] } }
+    ProviderKind: { in: path, name: kind, required: true, schema: { type: string, enum: [smtp, storage, dns, oauth_google, oauth_github] } }
 
   responses:
     ErrorResponse:
@@ -1552,6 +1652,7 @@ components:
     BootstrapStatusResponse: { description: 初始化状态, content: { application/json: { schema: { $ref: '#/components/schemas/BootstrapStatusEnvelope' } } } }
     PublicConfigResponse: { description: 公开实例配置, content: { application/json: { schema: { $ref: '#/components/schemas/PublicConfigEnvelope' } } } }
     AuthSessionResponse: { description: 当前认证状态, content: { application/json: { schema: { $ref: '#/components/schemas/AuthSessionEnvelope' } } } }
+    OAuthProvidersResponse: { description: 已启用的 OAuth 提供方, content: { application/json: { schema: { $ref: '#/components/schemas/OAuthProvidersEnvelope' } } } }
     InvitationValidationResponse: { description: 邀请校验结果, content: { application/json: { schema: { $ref: '#/components/schemas/InvitationValidationEnvelope' } } } }
     UserResponse: { description: 用户, content: { application/json: { schema: { $ref: '#/components/schemas/UserEnvelope' } } } }
     SessionsResponse: { description: 会话列表, content: { application/json: { schema: { $ref: '#/components/schemas/SessionsEnvelope' } } } }
@@ -1643,6 +1744,13 @@ components:
         code: { const: OK }
         data: { type: 'null' }
         meta: { $ref: '#/components/schemas/ResponseMeta' }
+    SuccessEnvelope:
+      type: object
+      required: [code, meta]
+      properties:
+        code: { const: OK }
+        data: {}
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
     Health:
       type: object
       required: [status]
@@ -1728,6 +1836,28 @@ components:
         username: { type: string, pattern: '^[a-zA-Z0-9_-]{3,32}$' }
         email: { type: string, format: email, maxLength: 254 }
         password: { type: string, format: password, minLength: 12, maxLength: 1024 }
+    EmailCodeRequest:
+      type: object
+      required: [email, purpose]
+      properties:
+        email: { type: string, format: email, maxLength: 254 }
+        purpose: { type: string, enum: [register, login] }
+        username: { type: string, pattern: '^[a-zA-Z0-9_-]{3,32}$', description: purpose=register 时必填 }
+        password: { type: string, format: password, minLength: 12, maxLength: 1024, description: purpose=register 时必填 }
+        invitationToken: { type: string, minLength: 24, maxLength: 256, description: 邀请注册时传入 }
+    EmailCodeVerifyRequest:
+      type: object
+      required: [email, code]
+      properties:
+        email: { type: string, format: email, maxLength: 254 }
+        code: { type: string, pattern: '^[0-9]{6}$' }
+    OAuthProviders:
+      type: object
+      required: [providers]
+      properties:
+        providers:
+          type: array
+          items: { type: string, enum: [google, github] }
     ForgotPasswordRequest:
       type: object
       required: [email]
@@ -1900,6 +2030,10 @@ components:
             showClock: { type: boolean }
             showDate: { type: boolean }
             showGreeting: { type: boolean }
+            subtitle: { type: string, maxLength: 120, description: 问候语下方副标题；空则使用默认文案 }
+            clockFormat: { type: string, enum: [24h, 12h], description: 时钟制式，默认 24h }
+            dateFormat: { type: string, enum: [long, short, compact], description: 日期格式，默认 long }
+            showSeconds: { type: boolean, description: 是否显示秒数，默认 true }
         preferences:
           type: object
           required: [locale, timezone, openLinksInNewTab]
@@ -2407,7 +2541,7 @@ components:
         targetId: { type: string }
         detail: { type: string }
         createdAt: { $ref: '#/components/schemas/Timestamp' }
-    ProviderKind: { type: string, enum: [smtp, storage, dns] }
+    ProviderKind: { type: string, enum: [smtp, storage, dns, oauth_google, oauth_github] }
     ProviderSummary:
       type: object
       required: [kind, enabled, configured, hasSecret, updatedAt]
@@ -2511,6 +2645,7 @@ components:
     BootstrapStatusEnvelope: { allOf: [{ $ref: '#/components/schemas/EnvelopeBase' }, { type: object, properties: { data: { $ref: '#/components/schemas/BootstrapStatus' } }, required: [data] }] }
     PublicConfigEnvelope: { allOf: [{ $ref: '#/components/schemas/EnvelopeBase' }, { type: object, properties: { data: { $ref: '#/components/schemas/PublicConfig' } }, required: [data] }] }
     AuthSessionEnvelope: { allOf: [{ $ref: '#/components/schemas/EnvelopeBase' }, { type: object, properties: { data: { $ref: '#/components/schemas/AuthSession' } }, required: [data] }] }
+    OAuthProvidersEnvelope: { allOf: [{ $ref: '#/components/schemas/EnvelopeBase' }, { type: object, properties: { data: { $ref: '#/components/schemas/OAuthProviders' } }, required: [data] }] }
     InvitationValidationEnvelope: { allOf: [{ $ref: '#/components/schemas/EnvelopeBase' }, { type: object, properties: { data: { $ref: '#/components/schemas/InvitationValidation' } }, required: [data] }] }
     UserEnvelope: { allOf: [{ $ref: '#/components/schemas/EnvelopeBase' }, { type: object, properties: { data: { $ref: '#/components/schemas/User' } }, required: [data] }] }
     SessionsEnvelope: { allOf: [{ $ref: '#/components/schemas/EnvelopeBase' }, { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/SessionInfo' } } }, required: [data] }] }

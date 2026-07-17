@@ -386,10 +386,10 @@ func TestAPIContract(t *testing.T) {
 	})
 }
 
-// tinyPNG 生成一张合法的 2x2 PNG，供上传接口校验图片内容。
+// tinyPNG 生成一张合法的 64x64 PNG，供上传接口校验图片内容（背景图要求宽高至少 64px）。
 func tinyPNG(t *testing.T) []byte {
 	t.Helper()
-	img := image.NewRGBA(image.Rect(0, 0, 2, 2))
+	img := image.NewRGBA(image.Rect(0, 0, 64, 64))
 	img.Set(0, 0, color.RGBA{R: 74, G: 107, B: 82, A: 255})
 	var buffer bytes.Buffer
 	if err := png.Encode(&buffer, img); err != nil {
