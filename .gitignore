@@ -25,3 +25,4 @@
 *.sqlite
 *.sqlite3
 coverage.out
+.worktrees/
