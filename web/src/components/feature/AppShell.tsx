@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils';
 import { useCurrentUser } from '@/hooks/useQueries';
 import { LoadingSkeleton } from '@/components/base/SharedUI';
 import WorkspaceSidebar, { type SidebarNavItem } from '@/components/feature/WorkspaceSidebar';
+import PublishStatusControl from '@/components/feature/PublishStatusControl';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 
 const navItems: SidebarNavItem[] = [
@@ -186,13 +187,7 @@ export default function AppShell() {
           {isAdminUser && <EditModeToggle scope={scope} onToggle={toggleScope} />}
 
           {/* Actions */}
-          <Link
-            to={`/app/publish?scope=${scope}`}
-            className="hidden sm:inline-flex items-center gap-1.5 h-7 px-3 rounded-md bg-primary-500 text-background-50 dark:text-foreground-950 text-xs font-medium hover:bg-primary-600 transition-colors duration-150 whitespace-nowrap"
-          >
-            <Globe className="w-3 h-3" />
-            发布 & 域名
-          </Link>
+          <PublishStatusControl />
           <Link
             to={`/app/settings?scope=${scope}`}
             className="flex items-center gap-2 text-xs text-foreground-500 hover:text-foreground-700 transition-colors duration-150"
