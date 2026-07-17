@@ -94,30 +94,58 @@ export default function PublicShell({
         </div>
       )}
 
-      {/* Navbar — glass when wallpaper or scrolled so logo/links stay legible */}
+      {/*
+        Navbar transparency strategy:
+        - No wallpaper: transparent → solid glass on scroll (unchanged).
+        - Wallpaper: stay open over the photo; use type contrast, not a frosted bar.
+          Only after scroll, a *light* frost appears so content doesn't collide.
+      */}
       <header
         className={cn(
           'fixed top-0 left-0 right-0 z-50 transition-all duration-300',
-          scrolled || hasBackground
-            ? 'bg-background-50/75 backdrop-blur-xl border-b border-background-200/40 shadow-raised'
-            : 'bg-transparent',
+          hasBackground
+            ? (scrolled
+              ? 'bg-background-50/40 backdrop-blur-md border-b border-background-200/25'
+              : 'bg-transparent')
+            : (scrolled
+              ? 'bg-background-50/75 backdrop-blur-xl border-b border-background-200/40 shadow-raised'
+              : 'bg-transparent'),
         )}
       >
-        <nav className="mx-auto max-w-4xl px-6 md:px-8 h-16 flex items-center justify-between">
+        <nav className={cn(
+          'mx-auto max-w-4xl px-6 md:px-8 h-16 flex items-center justify-between',
+          // Readable logo/links without a permanent glass slab over the photo.
+          hasBackground && !scrolled && 'wallpaper-type',
+        )}>
           <Link to="/" className="flex items-center gap-2.5 group">
-            <span className="text-base font-heading font-semibold text-foreground-800 tracking-tight">nav.ax</span>
+            <span className={cn(
+              'text-base font-heading font-semibold tracking-tight',
+              hasBackground ? 'text-foreground-900' : 'text-foreground-800',
+            )}>
+              nav.ax
+            </span>
           </Link>
 
           <div className="flex items-center gap-1.5">
             <Link
               to="/discover"
-              className="h-9 px-3 flex items-center text-xs text-foreground-500 hover:text-primary-500 transition-colors duration-200 whitespace-nowrap"
+              className={cn(
+                'h-9 px-3 flex items-center text-xs transition-colors duration-200 whitespace-nowrap',
+                hasBackground
+                  ? 'text-foreground-700 hover:text-primary-500'
+                  : 'text-foreground-500 hover:text-primary-500',
+              )}
             >
               发现
             </Link>
             <Link
               to="/login"
-              className="h-9 px-3 flex items-center text-xs text-foreground-600 hover:text-foreground-800 transition-colors duration-200 whitespace-nowrap"
+              className={cn(
+                'h-9 px-3 flex items-center text-xs transition-colors duration-200 whitespace-nowrap',
+                hasBackground
+                  ? 'text-foreground-800 hover:text-foreground-950'
+                  : 'text-foreground-600 hover:text-foreground-800',
+              )}
             >
               登录
             </Link>
@@ -132,15 +160,19 @@ export default function PublicShell({
 
       <footer className="mt-auto relative z-10">
         <div className="mx-auto max-w-4xl px-6 md:px-8 py-8">
+          {/*
+            Wallpaper footer: no frost, no glowing text-shadow.
+            Quiet type only — legal chrome should not compete with the photo.
+          */}
           {hasBackground ? (
-            <div className="flex items-center justify-between gap-4 flex-wrap wallpaper-type">
-              <span className="text-[11px] text-foreground-700 tracking-wide">
+            <div className="flex items-center justify-between gap-4 flex-wrap border-t border-background-50/20 pt-6">
+              <span className="text-[11px] text-foreground-600/90 tracking-wide">
                 nav.ax
               </span>
               <nav className="flex items-center gap-3">
-                <Link to="/privacy" className="text-[11px] text-foreground-600 hover:text-primary-500 transition-colors duration-200">隐私</Link>
-                <Link to="/terms" className="text-[11px] text-foreground-600 hover:text-primary-500 transition-colors duration-200">条款</Link>
-                <Link to="/cookies" className="text-[11px] text-foreground-600 hover:text-primary-500 transition-colors duration-200">Cookie</Link>
+                <Link to="/privacy" className="text-[11px] text-foreground-600/80 hover:text-primary-500 transition-colors duration-200">隐私</Link>
+                <Link to="/terms" className="text-[11px] text-foreground-600/80 hover:text-primary-500 transition-colors duration-200">条款</Link>
+                <Link to="/cookies" className="text-[11px] text-foreground-600/80 hover:text-primary-500 transition-colors duration-200">Cookie</Link>
               </nav>
             </div>
           ) : (

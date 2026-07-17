@@ -110,12 +110,12 @@ export function SitesSection({
 
 export function FooterActions({ wallpaperMode = false }: { wallpaperMode?: boolean }) {
   if (wallpaperMode) {
-    // Wallpaper: text-only row, no frosted pill slab.
+    // Wallpaper: quiet text links — no glow, no frosted pill (matches shell footer).
     return (
-      <div className="mt-10 md:mt-12 flex justify-center gap-1 rise-in wallpaper-type">
+      <div className="mt-10 md:mt-12 flex justify-center gap-1 rise-in">
         <Link
           to="/app/links"
-          className="h-8 px-3 inline-flex items-center gap-1.5 text-[11px] text-foreground-700 hover:text-primary-500 transition-colors duration-200 rounded-full hover:bg-background-50/25"
+          className="h-8 px-3 inline-flex items-center gap-1.5 text-[11px] text-foreground-600/90 hover:text-primary-500 transition-colors duration-200 rounded-full hover:bg-background-50/20"
           title="管理站点"
         >
           <i className="ri-settings-3-line text-sm" />
@@ -123,7 +123,7 @@ export function FooterActions({ wallpaperMode = false }: { wallpaperMode?: boole
         </Link>
         <Link
           to="/app"
-          className="h-8 px-3 inline-flex items-center gap-1.5 text-[11px] text-foreground-700 hover:text-primary-500 transition-colors duration-200 rounded-full hover:bg-background-50/25"
+          className="h-8 px-3 inline-flex items-center gap-1.5 text-[11px] text-foreground-600/90 hover:text-primary-500 transition-colors duration-200 rounded-full hover:bg-background-50/20"
           title="编辑主页"
         >
           <i className="ri-layout-grid-line text-sm" />
@@ -131,7 +131,7 @@ export function FooterActions({ wallpaperMode = false }: { wallpaperMode?: boole
         </Link>
         <Link
           to="/discover"
-          className="h-8 px-3 inline-flex items-center gap-1.5 text-[11px] text-foreground-600 hover:text-primary-500 transition-colors duration-200 rounded-full hover:bg-background-50/25"
+          className="h-8 px-3 inline-flex items-center gap-1.5 text-[11px] text-foreground-600/80 hover:text-primary-500 transition-colors duration-200 rounded-full hover:bg-background-50/20"
           title="发现精选"
         >
           <i className="ri-compass-3-line text-sm" />

@@ -165,11 +165,14 @@ body {
   box-shadow: 0 4px 16px oklch(var(--foreground-900) / 0.08);
 }
 
-/* Free-floating type (tabs, density icons) stays readable without a panel. */
+/*
+ * Free-floating type over photos: thin dual-edge shadow only.
+ * Avoids the soft white “halo / frosted blob” look of heavy glow.
+ */
 [data-wallpaper] .wallpaper-type {
   text-shadow:
-    0 1px 1px oklch(var(--background-50) / 0.55),
-    0 0 12px oklch(var(--background-50) / 0.35);
+    0 0.5px 0 oklch(var(--background-50) / 0.7),
+    0 1px 2px oklch(var(--foreground-950) / 0.22);
 }
 
 [data-wallpaper] .site-card-list:hover {
