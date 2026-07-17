@@ -15,6 +15,9 @@ import '@/themes/packages';
 
 const DEFAULT_THEME = 'slate';
 
+// AGPL §13: every public page must offer users a way to reach the source.
+const SOURCE_REPO_URL = 'https://github.com/yixian-huang/navax';
+
 interface PublicShellProps {
   children: React.ReactNode;
   showSearch?: boolean;
@@ -210,6 +213,14 @@ export default function PublicShell({
                 <Link to="/privacy" className="text-[11px] wallpaper-ink-soft hover:opacity-100 opacity-90 transition-opacity duration-200">隐私</Link>
                 <Link to="/terms" className="text-[11px] wallpaper-ink-soft hover:opacity-100 opacity-90 transition-opacity duration-200">条款</Link>
                 <Link to="/cookies" className="text-[11px] wallpaper-ink-soft hover:opacity-100 opacity-90 transition-opacity duration-200">Cookie</Link>
+                <a
+                  href={SOURCE_REPO_URL}
+                  target="_blank"
+                  rel="nofollow noopener noreferrer"
+                  className="text-[11px] wallpaper-ink-soft hover:opacity-100 opacity-90 transition-opacity duration-200"
+                >
+                  源码
+                </a>
               </nav>
             </div>
           ) : (
@@ -224,12 +235,12 @@ export default function PublicShell({
                   <Link to="/terms" className="text-[11px] text-foreground-300 hover:text-primary-500 transition-colors duration-200">服务条款</Link>
                   <Link to="/cookies" className="text-[11px] text-foreground-300 hover:text-primary-500 transition-colors duration-200">Cookie 说明</Link>
                   <a
-                    href="https://github.com"
+                    href={SOURCE_REPO_URL}
                     target="_blank"
                     rel="nofollow noopener noreferrer"
                     className="text-[11px] text-foreground-300 hover:text-primary-500 transition-colors duration-200"
                   >
-                    GitHub
+                    源码
                   </a>
                 </nav>
               </div>
