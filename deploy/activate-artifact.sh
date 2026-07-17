@@ -44,7 +44,7 @@ swap_and_restart() {
 # script outright — hence the guarded `if ... && ...` instead of bare statements.
 if swap_and_restart "$RELEASE_ROOT/$VERSION_SAFE/navax" && probe_ready; then
   # Keep the 5 most recent release dirs (never touch previous/).
-  ls -1dt "$RELEASE_ROOT"/*/ 2>/dev/null | grep -v '/previous/$' | tail -n +6 | xargs -r rm -rf
+  ls -1dt "$RELEASE_ROOT"/*/ 2>/dev/null | grep -v '/previous/$' | tail -n +6 | xargs -r rm -rf || echo "WARN: release cleanup failed (non-fatal)" >&2
   echo ">>> activate ok: version=$VERSION"
   exit 0
 fi
