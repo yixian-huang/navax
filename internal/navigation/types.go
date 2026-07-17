@@ -162,19 +162,22 @@ type PublicCategory struct {
 
 // PublishedPage is the complete immutable public payload stored in a snapshot.
 type PublishedPage struct {
-	ID          string           `json:"id"`
-	SnapshotID  string           `json:"snapshotId"`
-	Kind        PageKind         `json:"kind"`
-	Title       string           `json:"title"`
-	Description string           `json:"description"`
-	Slug        string           `json:"slug"`
-	Visibility  Visibility       `json:"visibility"`
-	Owner       PublishedOwner   `json:"owner"`
-	Settings    PageSettings     `json:"settings"`
-	Categories  []PublicCategory `json:"categories"`
-	Subdomain   *string          `json:"subdomain,omitempty"`
-	PublishedAt time.Time        `json:"publishedAt"`
-	ETag        string           `json:"etag"`
+	ID             string           `json:"id"`
+	SnapshotID     string           `json:"snapshotId"`
+	Kind           PageKind         `json:"kind"`
+	Title          string           `json:"title"`
+	Description    string           `json:"description"`
+	SEOTitle       string           `json:"seoTitle,omitempty"`
+	SEODescription string           `json:"seoDescription,omitempty"`
+	OGImage        string           `json:"ogImage,omitempty"`
+	Slug           string           `json:"slug"`
+	Visibility     Visibility       `json:"visibility"`
+	Owner          PublishedOwner   `json:"owner"`
+	Settings       PageSettings     `json:"settings"`
+	Categories     []PublicCategory `json:"categories"`
+	Subdomain      *string          `json:"subdomain,omitempty"`
+	PublishedAt    time.Time        `json:"publishedAt"`
+	ETag           string           `json:"etag"`
 }
 
 type PagePatch struct {

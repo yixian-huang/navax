@@ -234,6 +234,9 @@ export interface PublishedPageContract {
   kind: PageKind;
   title: string;
   description: string;
+  seoTitle?: string;
+  seoDescription?: string;
+  ogImage?: string;
   slug: string;
   visibility: Exclude<Visibility, 'private'>;
   owner: { name: string; avatarUrl: string; visible: boolean };
@@ -243,6 +246,9 @@ export interface PublishedPageContract {
   publishedAt: string;
   etag: string;
 }
+
+/** 前端使用的公开/预览页面模型（与契约一致）。 */
+export type PublishedPage = PublishedPageContract;
 
 export interface Theme {
   id: string;
@@ -280,6 +286,7 @@ export interface PublicConfig {
     discover: boolean;
     analytics: boolean;
     subdomains: boolean;
+    mail: boolean;
   };
   limits: {
     maxCategoriesPerPage: number;
@@ -689,6 +696,7 @@ export interface SubdomainInfo {
   label?: string;
   status: ContractSubdomainStatus | LegacySubdomainStatus;
   fullDomain: string;
+  customDomain?: string | null;
   appliedAt: string;
   reviewedAt?: string | null;
   reason?: string;

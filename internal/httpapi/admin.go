@@ -77,6 +77,8 @@ func (h *AdminHandler) MountRoutes(management chi.Router) {
 	management.Get("/settings", h.settings)
 	management.Patch("/settings", h.updateSettings)
 	management.Get("/audit", h.audit)
+	management.Get("/discover", h.discoverPages)
+	management.Patch("/discover/{pageId}", h.updateDiscoverPage)
 }
 
 func (h *AdminHandler) overview(w http.ResponseWriter, r *http.Request) {
@@ -396,6 +398,41 @@ func (h *AdminHandler) audit(w http.ResponseWriter, r *http.Request) {
 		items = append(items, auditData(item))
 	}
 	writePaginated(w, r, items, result.Page, result.PageSize, result.Total)
+}
+
+func (h *AdminHandler) discoverPages(w http.ResponseWriter, r *http.Request) {
+	page, pageSize, ok := readPagination(w, r)
+	if !ok {
+		return
+	}
+	result, err := h.service.DiscoverPages(r.Context(), actorFromRequest(r), adminpkg.DiscoverFilter{
+		Search: r.URL.Query().Get("search"), Page: page, PageSize: pageSize,
+	})
+	if err != nil {
+		h.writeError(w, r, err)
+		return
+	}
+	writePaginated(w, r, result.Items, result.Page, result.PageSize, result.Total)
+}
+
+func (h *AdminHandler) updateDiscoverPage(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		Featured *bool     `json:"featured"`
+		Tags     *[]string `json:"tags"`
+	}
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+	item, err := h.service.UpdateDiscoverPage(
+		r.Context(), actorFromRequest(r), chi.URLParam(r, "pageId"),
+		adminpkg.DiscoverPatch{Featured: request.Featured, Tags: request.Tags},
+		middleware.GetReqID(r.Context()),
+	)
+	if err != nil {
+		h.writeError(w, r, err)
+		return
+	}
+	WriteJSON(w, r, http.StatusOK, item)
 }
 
 func (h *AdminHandler) writeError(w http.ResponseWriter, r *http.Request, err error) {

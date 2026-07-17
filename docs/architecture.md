@@ -58,7 +58,7 @@ HTTP 层只负责解析、校验、授权和序列化；业务模块拥有事务
 
 ## 5. HTTP 与安全
 
-同源 API 使用 Host-only、Secure、HttpOnly、SameSite=Lax Cookie。所有非安全方法校验 `Origin`/`Referer`（含登录与注册，防止 login CSRF）；登录、邀请、事件、改密、恢复令牌和链接检查分别限流。公开快照返回 ETag 与 Cache-Control。
+同源 API 使用 Host-only、Secure、HttpOnly、SameSite=Lax Cookie。非安全方法在提供 `Origin`/`Referer` 时必须匹配 `PUBLIC_BASE_URL`（拦截浏览器 CSRF）；无 Origin 的机器客户端（curl/脚本）允许访问。滥用限流为**进程内内存**实现，部署模型为**单实例**；登录、邀请、事件、改密、恢复令牌和链接检查分别限流。公开快照返回 ETag 与 Cache-Control。
 
 服务器抓取 URL 时，每次 DNS 解析和重定向都拒绝回环、私网、链路本地、保留地址及云元数据地址。上传限制 MIME、尺寸和大小，默认拒绝 SVG。
 

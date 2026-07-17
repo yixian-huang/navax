@@ -6,10 +6,10 @@ import (
 	"strings"
 )
 
-// VerifyOrigin rejects cross-site state changes on every non-safe method.
-// Browser fetch/XHR always send Origin for these; missing or mismatched Origin
-// (or Referer fallback) is treated as a CSRF/cross-site attempt — including
-// login/register/bootstrap, which would otherwise allow login CSRF.
+// VerifyOrigin rejects cross-site state changes on non-safe methods when a
+// browser Origin/Referer is present. Machine clients (curl, scripts) typically
+// omit Origin; those requests are allowed. When Origin/Referer is sent it must
+// match publicBaseURL, which blocks login CSRF and authenticated write CSRF.
 func VerifyOrigin(publicBaseURL string) func(http.Handler) http.Handler {
 	allowed, _ := url.Parse(publicBaseURL)
 	return func(next http.Handler) http.Handler {
@@ -22,8 +22,13 @@ func VerifyOrigin(publicBaseURL string) func(http.Handler) http.Handler {
 			if candidate == "" {
 				candidate = strings.TrimSpace(r.Header.Get("Referer"))
 			}
+			// No Origin/Referer: treat as non-browser / machine client.
+			if candidate == "" {
+				next.ServeHTTP(w, r)
+				return
+			}
 			parsed, err := url.Parse(candidate)
-			if err != nil || candidate == "" || !sameOrigin(parsed, allowed) {
+			if err != nil || !sameOrigin(parsed, allowed) {
 				WriteError(w, r, http.StatusForbidden, "FORBIDDEN", "请求来源校验失败", nil)
 				return
 			}

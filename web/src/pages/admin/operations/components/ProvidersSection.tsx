@@ -11,7 +11,7 @@ const providerKinds: ProviderKind[] = ['smtp', 'storage', 'dns'];
 
 const providerMeta = {
   smtp: { label: 'SMTP 邮件', description: '邀请邮件、密码找回等系统通知', icon: Mail, secret: 'password', secretLabel: 'SMTP 密码' },
-  storage: { label: '对象存储', description: '图标 / 图片上传（当前仅本地磁盘）', icon: Server, secret: 'secretKey', secretLabel: 'Secret Key' },
+  storage: { label: '对象存储', description: '图标 / 图片上传（本地磁盘或 S3 兼容存储）', icon: Server, secret: 'secretKey', secretLabel: 'Secret Key' },
   dns: { label: 'DNS 服务', description: '子域名自动化扩展预留（暂未接入）', icon: Network, secret: 'token', secretLabel: 'API Token' },
 } as const;
 
@@ -167,10 +167,10 @@ function ProviderCard({ provider }: { provider: ProviderConfig }) {
       </div>
 
       {provider.kind === 'storage' && settings.driver === 's3' ? (
-        <div className="rounded-lg bg-amber-50 border border-amber-200/70 p-3 flex items-start gap-2">
-          <Info className="w-3.5 h-3.5 text-amber-600 mt-0.5 shrink-0" />
-          <p className="text-xs text-amber-800 leading-relaxed">
-            S3 兼容存储尚未接入资源分发：无论此处如何配置，上传的图标与图片都会保存并从<strong>本地磁盘</strong>提供。此处仅用于保存配置与连通性测试。
+        <div className="rounded-lg bg-primary-50 border border-primary-200/70 p-3 flex items-start gap-2">
+          <Info className="w-3.5 h-3.5 text-primary-600 mt-0.5 shrink-0" />
+          <p className="text-xs text-primary-800 leading-relaxed">
+            启用后新上传的图片会写入 S3 兼容存储。若填写 publicBaseUrl，返回的资源 URL 将使用该公共前缀；否则仍通过本站 <code>/api/v1/assets/…</code> 代理读取。
           </p>
         </div>
       ) : null}

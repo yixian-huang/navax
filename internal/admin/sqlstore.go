@@ -3,6 +3,7 @@ package admin
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -470,6 +471,121 @@ func nullableString(value *string) any {
 func escapeLike(value string) string {
 	replacer := strings.NewReplacer("\\", "\\\\", "%", "\\%", "_", "\\_")
 	return replacer.Replace(value)
+}
+
+func (s *SQLStore) ListDiscoverPages(ctx context.Context, filter DiscoverFilter) (Page[DiscoverPage], error) {
+	where := ` WHERE p.kind = 'personal' AND pp.visibility = 'public' AND pp.current_snapshot_id IS NOT NULL AND u.status = 'active'`
+	args := make([]any, 0, 4)
+	if filter.Search != "" {
+		where += ` AND (pp.slug LIKE ? ESCAPE '\' OR u.username LIKE ? ESCAPE '\' OR json_extract(s.payload_json, '$.title') LIKE ? ESCAPE '\')`
+		pattern := "%" + escapeLike(filter.Search) + "%"
+		args = append(args, pattern, pattern, pattern)
+	}
+	joins := ` FROM page_publications pp
+		JOIN navigation_pages p ON p.id = pp.page_id
+		JOIN users u ON u.id = p.owner_id
+		JOIN published_snapshots s ON s.id = pp.current_snapshot_id`
+	var total int
+	if err := s.db.QueryRowContext(ctx, "SELECT COUNT(*)"+joins+where, args...).Scan(&total); err != nil {
+		return Page[DiscoverPage]{}, err
+	}
+	queryArgs := append(append([]any{}, args...), filter.PageSize, (filter.Page-1)*filter.PageSize)
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT p.id, pp.slug, COALESCE(json_extract(s.payload_json, '$.title'), pp.slug), u.id, u.username,
+		       pp.featured, pp.tags_json, s.published_at`+joins+where+`
+		ORDER BY pp.featured DESC, s.published_at DESC LIMIT ? OFFSET ?`, queryArgs...)
+	if err != nil {
+		return Page[DiscoverPage]{}, err
+	}
+	defer rows.Close()
+	items := make([]DiscoverPage, 0)
+	for rows.Next() {
+		var item DiscoverPage
+		var tagsJSON, publishedAt string
+		if err := rows.Scan(&item.PageID, &item.Slug, &item.Title, &item.OwnerID, &item.OwnerName, &item.Featured, &tagsJSON, &publishedAt); err != nil {
+			return Page[DiscoverPage]{}, err
+		}
+		if err := json.Unmarshal([]byte(tagsJSON), &item.Tags); err != nil {
+			item.Tags = []string{}
+		}
+		if item.Tags == nil {
+			item.Tags = []string{}
+		}
+		item.PublishedAt, err = parseDBTime(publishedAt)
+		if err != nil {
+			return Page[DiscoverPage]{}, err
+		}
+		items = append(items, item)
+	}
+	return Page[DiscoverPage]{Items: items, Page: filter.Page, PageSize: filter.PageSize, Total: total}, rows.Err()
+}
+
+func (s *SQLStore) UpdateDiscoverPage(ctx context.Context, pageID string, patch DiscoverPatch, now time.Time, audit AuditRecord) (DiscoverPage, error) {
+	err := database.WithinTx(ctx, s.db, nil, func(tx *sql.Tx) error {
+		var exists int
+		if err := tx.QueryRowContext(ctx, `
+			SELECT COUNT(*) FROM page_publications pp
+			JOIN navigation_pages p ON p.id = pp.page_id
+			WHERE pp.page_id = ? AND p.kind = 'personal' AND pp.visibility = 'public' AND pp.current_snapshot_id IS NOT NULL`,
+			pageID).Scan(&exists); err != nil {
+			return err
+		}
+		if exists == 0 {
+			return ErrNotFound
+		}
+		sets := make([]string, 0, 3)
+		args := make([]any, 0, 4)
+		if patch.Featured != nil {
+			sets = append(sets, "featured = ?")
+			if *patch.Featured {
+				args = append(args, 1)
+			} else {
+				args = append(args, 0)
+			}
+		}
+		if patch.Tags != nil {
+			encoded, err := json.Marshal(*patch.Tags)
+			if err != nil {
+				return err
+			}
+			sets = append(sets, "tags_json = ?")
+			args = append(args, string(encoded))
+		}
+		sets = append(sets, "updated_at = ?")
+		args = append(args, dbTime(now), pageID)
+		_, err := tx.ExecContext(ctx, "UPDATE page_publications SET "+strings.Join(sets, ", ")+" WHERE page_id = ?", args...)
+		if err != nil {
+			return err
+		}
+		return insertAudit(ctx, tx, audit)
+	})
+	if err != nil {
+		return DiscoverPage{}, err
+	}
+	var item DiscoverPage
+	var tagsJSON, publishedAt string
+	err = s.db.QueryRowContext(ctx, `
+		SELECT p.id, pp.slug, COALESCE(json_extract(s.payload_json, '$.title'), pp.slug), u.id, u.username,
+		       pp.featured, pp.tags_json, s.published_at
+		FROM page_publications pp
+		JOIN navigation_pages p ON p.id = pp.page_id
+		JOIN users u ON u.id = p.owner_id
+		JOIN published_snapshots s ON s.id = pp.current_snapshot_id
+		WHERE p.id = ?`, pageID).Scan(
+		&item.PageID, &item.Slug, &item.Title, &item.OwnerID, &item.OwnerName, &item.Featured, &tagsJSON, &publishedAt,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return DiscoverPage{}, ErrNotFound
+	}
+	if err != nil {
+		return DiscoverPage{}, err
+	}
+	_ = json.Unmarshal([]byte(tagsJSON), &item.Tags)
+	if item.Tags == nil {
+		item.Tags = []string{}
+	}
+	item.PublishedAt, err = parseDBTime(publishedAt)
+	return item, err
 }
 
 func mapSQLError(err error) error {

@@ -679,6 +679,23 @@ paths:
         '201': { $ref: '#/components/responses/SubdomainResponse' }
         '401': { $ref: '#/components/responses/ErrorResponse' }
         '409': { $ref: '#/components/responses/ErrorResponse' }
+    patch:
+      tags: [Pages]
+      operationId: setSubdomainCustomDomain
+      description: 为已批准子域名绑定可选 CNAME 主机名（需在 DNS 侧将 CNAME 指向 fullDomain）
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                customDomain: { type: [string, 'null'], maxLength: 253, description: 空或 null 表示清除 }
+      responses:
+        '200': { $ref: '#/components/responses/SubdomainResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
     delete:
       tags: [Pages]
       operationId: cancelSubdomainRequest
@@ -1020,6 +1037,60 @@ paths:
         '401': { $ref: '#/components/responses/ErrorResponse' }
         '403': { $ref: '#/components/responses/ErrorResponse' }
         '409': { $ref: '#/components/responses/ErrorResponse' }
+  /api/v1/admin/discover:
+    get:
+      tags: [Admin]
+      operationId: listDiscoverAdmin
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Search'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: 可运营的公开导航页列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/AdminDiscoverPage' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+  /api/v1/admin/discover/{pageId}:
+    patch:
+      tags: [Admin]
+      operationId: updateDiscoverAdmin
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/PageId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                featured: { type: boolean }
+                tags: { type: array, items: { type: string, maxLength: 32 }, maxItems: 12 }
+      responses:
+        '200':
+          description: 更新后的发现页运营字段
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/AdminDiscoverPage' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/admin/links:
     get:
       tags: [Admin]
@@ -1425,11 +1496,12 @@ components:
         registrationMode: { type: string, enum: [invite, closed] }
         features:
           type: object
-          required: [discover, analytics, subdomains]
+          required: [discover, analytics, subdomains, mail]
           properties:
             discover: { type: boolean }
             analytics: { type: boolean }
             subdomains: { type: boolean }
+            mail: { type: boolean, description: 是否已配置 SMTP，可用于密码重置邮件 }
         limits: { $ref: '#/components/schemas/Limits' }
     Role: { type: string, enum: [user, admin] }
     UserStatus: { type: string, enum: [active, disabled] }
@@ -1769,6 +1841,18 @@ components:
         featured: { type: boolean }
         viewCount: { type: integer, minimum: 0 }
         publishedAt: { $ref: '#/components/schemas/Timestamp' }
+    AdminDiscoverPage:
+      type: object
+      required: [pageId, slug, title, ownerName, ownerId, featured, tags, publishedAt]
+      properties:
+        pageId: { $ref: '#/components/schemas/Id' }
+        slug: { type: string }
+        title: { type: string }
+        ownerName: { type: string }
+        ownerId: { $ref: '#/components/schemas/Id' }
+        featured: { type: boolean }
+        tags: { type: array, items: { type: string } }
+        publishedAt: { $ref: '#/components/schemas/Timestamp' }
     DirectoryCategory:
       type: object
       required: [id, name, icon, sortOrder, enabled, siteCount]
@@ -1919,6 +2003,7 @@ components:
         username: { type: string }
         label: { type: string }
         fullDomain: { type: string }
+        customDomain: { type: [string, 'null'], description: 可选 CNAME 主机名 }
         status: { $ref: '#/components/schemas/SubdomainStatus' }
         appliedAt: { $ref: '#/components/schemas/Timestamp' }
         reviewedAt: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }

@@ -139,6 +139,19 @@ func Run(ctx context.Context, cfg config.Config, build BuildInfo) error {
 	if err != nil {
 		return fmt.Errorf("initialize asset storage: %w", err)
 	}
+	assetService.SetStorageResolver(func(ctx context.Context) (*assets.S3Config, error) {
+		endpoint, region, bucket, prefix, accessKey, secretKey, publicBaseURL, pathStyle, ok, resolveErr := providerService.ActiveS3Config(ctx)
+		if resolveErr != nil {
+			return nil, resolveErr
+		}
+		if !ok {
+			return nil, nil
+		}
+		return &assets.S3Config{
+			Endpoint: endpoint, Region: region, Bucket: bucket, Prefix: prefix,
+			AccessKey: accessKey, SecretKey: secretKey, PathStyle: pathStyle, PublicBaseURL: publicBaseURL,
+		}, nil
+	})
 	assetHandler := httpapi.NewAssetHandler(assetService)
 	subdomainService := subdomains.NewService(subdomains.NewSQLStore(db))
 	subdomainHandler := httpapi.NewSubdomainHandler(authService, subdomainService)
@@ -171,7 +184,19 @@ func Run(ctx context.Context, cfg config.Config, build BuildInfo) error {
 		if page.Visibility == navigation.VisibilityPublic || page.Kind == navigation.PageKindSystem {
 			robots = "index,follow"
 		}
-		return webui.SEO{Title: page.Title, Description: page.Description, Canonical: canonical, Robots: robots}, nil
+		title := page.Title
+		if strings.TrimSpace(page.SEOTitle) != "" {
+			title = page.SEOTitle
+		}
+		description := page.Description
+		if strings.TrimSpace(page.SEODescription) != "" {
+			description = page.SEODescription
+		}
+		image := page.OGImage
+		if image != "" && strings.HasPrefix(image, "/") {
+			image = strings.TrimRight(cfg.PublicBaseURL, "/") + image
+		}
+		return webui.SEO{Title: title, Description: description, Canonical: canonical, Robots: robots, Image: image}, nil
 	}})
 	if err != nil {
 		return fmt.Errorf("initialize embedded frontend: %w", err)

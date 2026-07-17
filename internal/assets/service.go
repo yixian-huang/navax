@@ -1,5 +1,6 @@
-// Package assets stores validated raster images on the local filesystem and
-// records their immutable metadata in SQLite.
+// Package assets stores validated raster images and records immutable metadata
+// in SQLite. When the storage provider is enabled with driver "s3", blobs are
+// written to S3-compatible object storage; otherwise they stay on local disk.
 package assets
 
 import (
@@ -33,6 +34,7 @@ var (
 	ErrInvalidObject = errors.New("invalid asset object key")
 	ErrNotFound      = errors.New("asset not found")
 	ErrInvalidOwner  = errors.New("invalid asset owner")
+	ErrStorage       = errors.New("object storage is unavailable")
 )
 
 const (
@@ -41,6 +43,10 @@ const (
 )
 
 var objectKeyPattern = regexp.MustCompile(`^(avatar|background|site-icon)/[a-f0-9]{32}\.(png|jpg|gif)$`)
+
+// StorageResolver returns the active object storage backend for uploads.
+// Returning (nil, nil) means local filesystem. Errors fail the upload.
+type StorageResolver func(ctx context.Context) (*S3Config, error)
 
 type Asset struct {
 	ID        string
@@ -51,13 +57,23 @@ type Asset struct {
 	MIMEType  string
 	Size      int64
 	SHA256    string
+	Driver    string
 	CreatedAt time.Time
 }
 
+// OpenResult is a seekable reader for public asset serving.
+type OpenResult struct {
+	Asset  Asset
+	Body   io.ReadSeekCloser
+	Size   int64
+	Closer func() error
+}
+
 type Service struct {
-	db   *sql.DB
-	root string
-	now  func() time.Time
+	db      *sql.DB
+	root    string
+	now     func() time.Time
+	resolve StorageResolver
 }
 
 func NewService(db *sql.DB, root string) (*Service, error) {
@@ -77,6 +93,11 @@ func NewService(db *sql.DB, root string) (*Service, error) {
 		}
 	}
 	return &Service{db: db, root: absolute, now: time.Now}, nil
+}
+
+// SetStorageResolver wires optional S3 configuration (typically from integrations).
+func (s *Service) SetStorageResolver(resolve StorageResolver) {
+	s.resolve = resolve
 }
 
 func (s *Service) MaxUploadBytes(ctx context.Context) (int64, error) {
@@ -136,20 +157,49 @@ func (s *Service) Upload(ctx context.Context, ownerID, kind, filename, declaredM
 		return Asset{}, err
 	}
 	objectKey := kind + "/" + randomName + extension
-	finalPath, err := s.pathForKey(objectKey)
-	if err != nil {
+	if _, err := temporary.Seek(0, io.SeekStart); err != nil {
 		return Asset{}, err
 	}
-	if err := temporary.Close(); err != nil {
-		return Asset{}, fmt.Errorf("close upload staging file: %w", err)
+
+	driver := "local"
+	publicURL := publicURLPrefix + objectKey
+	var s3cfg *S3Config
+	if s.resolve != nil {
+		s3cfg, err = s.resolve(ctx)
+		if err != nil {
+			return Asset{}, fmt.Errorf("%w: %v", ErrStorage, err)
+		}
 	}
-	if err := os.Rename(temporaryPath, finalPath); err != nil {
-		return Asset{}, fmt.Errorf("commit asset file: %w", err)
+	if s3cfg != nil {
+		store, err := newS3Store(*s3cfg)
+		if err != nil {
+			return Asset{}, fmt.Errorf("%w: %v", ErrStorage, err)
+		}
+		if err := store.Put(ctx, objectKey, detectedMIME, temporary, written); err != nil {
+			return Asset{}, fmt.Errorf("%w: %v", ErrStorage, err)
+		}
+		driver = "s3"
+		publicURL = store.PublicURL(objectKey)
+		_ = temporary.Close()
+		_ = os.Remove(temporaryPath)
+		temporaryPath = ""
+	} else {
+		finalPath, err := s.pathForKey(objectKey)
+		if err != nil {
+			return Asset{}, err
+		}
+		if err := temporary.Close(); err != nil {
+			return Asset{}, fmt.Errorf("close upload staging file: %w", err)
+		}
+		if err := os.Rename(temporaryPath, finalPath); err != nil {
+			return Asset{}, fmt.Errorf("commit asset file: %w", err)
+		}
+		temporaryPath = finalPath
+		if err := os.Chmod(finalPath, 0o600); err != nil {
+			return Asset{}, fmt.Errorf("secure asset file: %w", err)
+		}
 	}
-	temporaryPath = finalPath
-	if err := os.Chmod(finalPath, 0o600); err != nil {
-		return Asset{}, fmt.Errorf("secure asset file: %w", err)
-	}
+
 	id, err := identity.New("ast")
 	if err != nil {
 		return Asset{}, err
@@ -157,12 +207,12 @@ func (s *Service) Upload(ctx context.Context, ownerID, kind, filename, declaredM
 	now := s.now().UTC()
 	asset := Asset{
 		ID: id, OwnerID: ownerID, Kind: kind, ObjectKey: objectKey,
-		URL: publicURLPrefix + objectKey, MIMEType: detectedMIME, Size: written,
+		URL: publicURL, MIMEType: detectedMIME, Size: written, Driver: driver,
 		SHA256: hex.EncodeToString(hasher.Sum(nil)), CreatedAt: now,
 	}
 	_, err = s.db.ExecContext(ctx, `
 		INSERT INTO assets(id, owner_id, kind, storage_driver, object_key, url, mime_type, size_bytes, sha256, created_at)
-		VALUES (?, ?, ?, 'local', ?, ?, ?, ?, ?, ?)`, asset.ID, asset.OwnerID, asset.Kind,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, asset.ID, asset.OwnerID, asset.Kind, driver,
 		asset.ObjectKey, asset.URL, asset.MIMEType, asset.Size, asset.SHA256, dbTime(asset.CreatedAt))
 	if err != nil {
 		return Asset{}, fmt.Errorf("record asset: %w", err)
@@ -171,12 +221,52 @@ func (s *Service) Upload(ctx context.Context, ownerID, kind, filename, declaredM
 	return asset, nil
 }
 
-func (s *Service) Open(ctx context.Context, objectKey string) (Asset, *os.File, error) {
-	path, err := s.pathForKey(objectKey)
-	if err != nil {
+// Open returns a seekable body for local assets, or streams from S3 when needed.
+// For external publicBaseUrl S3 objects the handler may redirect; Open still
+// proxies content so relative /api/v1/assets URLs always work.
+func (s *Service) Open(ctx context.Context, objectKey string) (Asset, io.ReadSeekCloser, error) {
+	if _, err := s.pathForKey(objectKey); err != nil {
 		return Asset{}, nil, err
 	}
 	asset, err := s.assetByKey(ctx, objectKey)
+	if err != nil {
+		return Asset{}, nil, err
+	}
+	if asset.Driver == "s3" {
+		var s3cfg *S3Config
+		if s.resolve != nil {
+			s3cfg, err = s.resolve(ctx)
+			if err != nil {
+				return Asset{}, nil, fmt.Errorf("%w: %v", ErrStorage, err)
+			}
+		}
+		if s3cfg == nil {
+			return Asset{}, nil, ErrNotFound
+		}
+		store, err := newS3Store(*s3cfg)
+		if err != nil {
+			return Asset{}, nil, err
+		}
+		body, size, contentType, err := store.Open(ctx, objectKey)
+		if err != nil {
+			return Asset{}, nil, err
+		}
+		if contentType != "" {
+			asset.MIMEType = contentType
+		}
+		if size > 0 {
+			asset.Size = size
+		}
+		// Buffer to satisfy ServeContent Seek requirement.
+		data, err := io.ReadAll(io.LimitReader(body, asset.Size+1))
+		_ = body.Close()
+		if err != nil {
+			return Asset{}, nil, err
+		}
+		return asset, &bytesReadSeekCloser{data: data}, nil
+	}
+
+	path, err := s.pathForKey(objectKey)
 	if err != nil {
 		return Asset{}, nil, err
 	}
@@ -212,9 +302,9 @@ func (s *Service) assetByKey(ctx context.Context, objectKey string) (Asset, erro
 	var asset Asset
 	var createdAt string
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, owner_id, kind, object_key, url, mime_type, size_bytes, sha256, created_at
-		FROM assets WHERE object_key = ? AND storage_driver = 'local'`, objectKey).Scan(
-		&asset.ID, &asset.OwnerID, &asset.Kind, &asset.ObjectKey, &asset.URL,
+		SELECT id, owner_id, kind, storage_driver, object_key, url, mime_type, size_bytes, sha256, created_at
+		FROM assets WHERE object_key = ?`, objectKey).Scan(
+		&asset.ID, &asset.OwnerID, &asset.Kind, &asset.Driver, &asset.ObjectKey, &asset.URL,
 		&asset.MIMEType, &asset.Size, &asset.SHA256, &createdAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -238,6 +328,41 @@ func (s *Service) pathForKey(objectKey string) (string, error) {
 	}
 	return path, nil
 }
+
+type bytesReadSeekCloser struct {
+	data []byte
+	off  int64
+}
+
+func (b *bytesReadSeekCloser) Read(p []byte) (int, error) {
+	if b.off >= int64(len(b.data)) {
+		return 0, io.EOF
+	}
+	n := copy(p, b.data[b.off:])
+	b.off += int64(n)
+	return n, nil
+}
+
+func (b *bytesReadSeekCloser) Seek(offset int64, whence int) (int64, error) {
+	var next int64
+	switch whence {
+	case io.SeekStart:
+		next = offset
+	case io.SeekCurrent:
+		next = b.off + offset
+	case io.SeekEnd:
+		next = int64(len(b.data)) + offset
+	default:
+		return 0, fmt.Errorf("invalid seek whence")
+	}
+	if next < 0 {
+		return 0, fmt.Errorf("negative position")
+	}
+	b.off = next
+	return next, nil
+}
+
+func (b *bytesReadSeekCloser) Close() error { return nil }
 
 func inspectImage(file *os.File, filename, declaredMIME string) (string, string, error) {
 	if _, err := file.Seek(0, io.SeekStart); err != nil {

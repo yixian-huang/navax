@@ -318,7 +318,7 @@ handlers.push((url, init) => {
         publicBaseUrl: window.location.origin,
         rootDomain: null,
         registrationMode: 'invite',
-        features: { discover: true, analytics: true, subdomains: false },
+        features: { discover: true, analytics: true, subdomains: false, mail: true },
         limits: { maxCategoriesPerPage: 50, maxSitesPerPage: 1000, maxUploadBytes: 5 * 1024 * 1024 },
       },
       meta: { message: '', detail: '' },

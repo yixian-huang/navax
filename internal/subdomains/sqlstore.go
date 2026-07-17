@@ -187,7 +187,7 @@ func (s *SQLStore) Review(ctx context.Context, params ReviewParams) (Request, er
 }
 
 const requestSelect = `
-	SELECT s.id, s.user_id, u.username, s.label, s.full_domain, s.status,
+	SELECT s.id, s.user_id, u.username, s.label, s.full_domain, s.custom_domain, s.status,
 	       s.applied_at, s.reviewed_at, s.reason
 	FROM subdomain_requests s JOIN users u ON u.id = s.user_id`
 
@@ -196,9 +196,9 @@ type rowScanner interface{ Scan(...any) error }
 func scanRequest(row rowScanner) (Request, error) {
 	var item Request
 	var appliedAt string
-	var reviewedAt sql.NullString
+	var reviewedAt, customDomain sql.NullString
 	if err := row.Scan(
-		&item.ID, &item.UserID, &item.Username, &item.Label, &item.FullDomain,
+		&item.ID, &item.UserID, &item.Username, &item.Label, &item.FullDomain, &customDomain,
 		&item.Status, &appliedAt, &reviewedAt, &item.Reason,
 	); err != nil {
 		return Request{}, err
@@ -214,7 +214,49 @@ func scanRequest(row rowScanner) (Request, error) {
 		}
 		item.ReviewedAt = &value
 	}
+	if customDomain.Valid && customDomain.String != "" {
+		value := customDomain.String
+		item.CustomDomain = &value
+	}
 	return item, nil
+}
+
+func (s *SQLStore) SetCustomDomain(ctx context.Context, userID string, customDomain *string, now time.Time, audit AuditRecord) (Request, error) {
+	err := database.WithinTx(ctx, s.db, nil, func(tx *sql.Tx) error {
+		var requestID string
+		err := tx.QueryRowContext(ctx, `
+			SELECT id FROM subdomain_requests
+			WHERE user_id = ? AND status = 'approved'
+			ORDER BY reviewed_at DESC, id DESC LIMIT 1`, userID).Scan(&requestID)
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrInvalidTransition
+		}
+		if err != nil {
+			return err
+		}
+		var domain any
+		if customDomain != nil {
+			domain = *customDomain
+		}
+		if _, err := tx.ExecContext(ctx, `
+			UPDATE subdomain_requests SET custom_domain = ?, reviewed_at = COALESCE(reviewed_at, ?)
+			WHERE id = ? AND status = 'approved'`, domain, dbTime(now), requestID); err != nil {
+			return mapSQLError(err)
+		}
+		audit.TargetID = requestID
+		return insertAudit(ctx, tx, audit)
+	})
+	if err != nil {
+		return Request{}, err
+	}
+	item, err := s.LatestForUser(ctx, userID)
+	if err != nil {
+		return Request{}, err
+	}
+	if item == nil {
+		return Request{}, ErrNotFound
+	}
+	return *item, nil
 }
 
 type auditExecer interface {

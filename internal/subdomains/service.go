@@ -43,15 +43,16 @@ type Actor struct {
 }
 
 type Request struct {
-	ID         string
-	UserID     string
-	Username   string
-	Label      string
-	FullDomain string
-	Status     string
-	AppliedAt  time.Time
-	ReviewedAt *time.Time
-	Reason     string
+	ID           string
+	UserID       string
+	Username     string
+	Label        string
+	FullDomain   string
+	CustomDomain *string
+	Status       string
+	AppliedAt    time.Time
+	ReviewedAt   *time.Time
+	Reason       string
 }
 
 type Page struct {
@@ -99,6 +100,7 @@ type Store interface {
 	CancelPending(context.Context, string, time.Time, AuditRecord) error
 	List(context.Context, string, int, int) (Page, error)
 	Review(context.Context, ReviewParams) (Request, error)
+	SetCustomDomain(context.Context, string, *string, time.Time, AuditRecord) (Request, error)
 }
 
 type Service struct {
@@ -186,6 +188,30 @@ func (s *Service) Requests(ctx context.Context, actor Actor, status string, page
 	}
 	page, pageSize = pagination(page, pageSize)
 	return s.store.List(ctx, status, page, pageSize)
+}
+
+// SetCustomDomain binds an optional CNAME host to the user's approved subdomain.
+// Pass empty customDomain to clear. DNS must point the CNAME at FullDomain.
+func (s *Service) SetCustomDomain(ctx context.Context, userID, username, customDomain, requestID string) (Request, error) {
+	if userID == "" || username == "" {
+		return Request{}, ErrInvalidInput
+	}
+	var domain *string
+	customDomain = strings.ToLower(strings.Trim(strings.TrimSpace(customDomain), "."))
+	if customDomain != "" {
+		if len(customDomain) < 3 || len(customDomain) > 253 || strings.ContainsAny(customDomain, "/: ") || !strings.Contains(customDomain, ".") {
+			return Request{}, ErrInvalidInput
+		}
+		domain = &customDomain
+	}
+	now := s.now().UTC()
+	audit, err := newAudit(userID, username, "subdomain.custom_domain", userID, map[string]any{
+		"customDomain": customDomain,
+	}, requestID, now)
+	if err != nil {
+		return Request{}, err
+	}
+	return s.store.SetCustomDomain(ctx, userID, domain, now, audit)
 }
 
 func (s *Service) Review(ctx context.Context, actor Actor, requestID, decision, reason, httpRequestID string) (Request, error) {

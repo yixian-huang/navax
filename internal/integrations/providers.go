@@ -187,6 +187,39 @@ func (s *Service) mergedSecrets(ctx context.Context, kind Kind, incoming map[str
 	return merged, nil
 }
 
+// ActiveS3Config returns S3 credentials when storage is enabled with driver s3.
+// A nil config means callers should use local disk storage.
+func (s *Service) ActiveS3Config(ctx context.Context) (endpoint, region, bucket, prefix, accessKey, secretKey, publicBaseURL string, pathStyle bool, ok bool, err error) {
+	provider, err := s.Get(ctx, Storage)
+	if err != nil {
+		return "", "", "", "", "", "", "", false, false, err
+	}
+	if !provider.Enabled || !provider.Configured {
+		return "", "", "", "", "", "", "", false, false, nil
+	}
+	if stringSetting(provider.Settings, "driver") != "s3" {
+		return "", "", "", "", "", "", "", false, false, nil
+	}
+	secrets, err := s.mergedSecrets(ctx, Storage, nil)
+	if err != nil {
+		return "", "", "", "", "", "", "", false, false, err
+	}
+	if secrets["secretKey"] == "" {
+		return "", "", "", "", "", "", "", false, false, fmt.Errorf("%w: secretKey is required", ErrInvalidSettings)
+	}
+	pathStyle = boolSetting(provider.Settings, "pathStyle")
+	return stringSetting(provider.Settings, "endpoint"),
+		stringSetting(provider.Settings, "region"),
+		stringSetting(provider.Settings, "bucket"),
+		stringSetting(provider.Settings, "prefix"),
+		stringSetting(provider.Settings, "accessKey"),
+		secrets["secretKey"],
+		stringSetting(provider.Settings, "publicBaseUrl"),
+		pathStyle,
+		true,
+		nil
+}
+
 func (s *Service) Test(ctx context.Context, kind Kind) (TestResult, error) {
 	started := time.Now()
 	provider, err := s.Get(ctx, kind)
@@ -400,6 +433,11 @@ func validateHTTPURL(raw string) error {
 func stringSetting(settings map[string]any, name string) string {
 	value, _ := settings[name].(string)
 	return strings.TrimSpace(value)
+}
+
+func boolSetting(settings map[string]any, name string) bool {
+	value, _ := settings[name].(bool)
+	return value
 }
 
 func numericSetting(settings map[string]any, name string) (int, bool) {

@@ -33,6 +33,7 @@ func (h *SubdomainHandler) Mount(router chi.Router) {
 func (h *SubdomainHandler) MountUserRoutes(router chi.Router) {
 	router.Get("/me/subdomain", h.mine)
 	router.Post("/me/subdomain", h.apply)
+	router.Patch("/me/subdomain", h.setCustomDomain)
 	router.Delete("/me/subdomain", h.cancel)
 }
 
@@ -80,6 +81,28 @@ func (h *SubdomainHandler) cancel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	WriteJSON(w, r, http.StatusOK, nil)
+}
+
+func (h *SubdomainHandler) setCustomDomain(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		CustomDomain *string `json:"customDomain"`
+	}
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+	domain := ""
+	if request.CustomDomain != nil {
+		domain = *request.CustomDomain
+	}
+	session, _ := SessionFromContext(r.Context())
+	item, err := h.service.SetCustomDomain(
+		r.Context(), session.User.ID, session.User.Username, domain, middleware.GetReqID(r.Context()),
+	)
+	if err != nil {
+		h.writeError(w, r, err)
+		return
+	}
+	WriteJSON(w, r, http.StatusOK, subdomainData(item))
 }
 
 func (h *SubdomainHandler) requests(w http.ResponseWriter, r *http.Request) {
@@ -154,7 +177,8 @@ func subdomainActor(r *http.Request) subdomains.Actor {
 func subdomainData(item subdomains.Request) map[string]any {
 	data := map[string]any{
 		"id": item.ID, "userId": item.UserID, "label": item.Label,
-		"fullDomain": item.FullDomain, "status": item.Status, "appliedAt": item.AppliedAt,
+		"fullDomain": item.FullDomain, "customDomain": item.CustomDomain,
+		"status": item.Status, "appliedAt": item.AppliedAt,
 		"reviewedAt": item.ReviewedAt, "reason": item.Reason,
 	}
 	if item.Username != "" {

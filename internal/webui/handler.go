@@ -18,6 +18,7 @@ type SEO struct {
 	Description string
 	Canonical   string
 	Robots      string
+	Image       string
 }
 
 type Options struct {
@@ -74,6 +75,7 @@ var (
 	ogTitlePattern     = regexp.MustCompile(`<meta property="og:title" content="[^"]*"\s*/?>`)
 	ogDescription      = regexp.MustCompile(`<meta property="og:description" content="[^"]*"\s*/?>`)
 	ogURLPattern       = regexp.MustCompile(`<meta property="og:url" content="[^"]*"\s*/?>`)
+	ogImagePattern     = regexp.MustCompile(`<meta property="og:image" content="[^"]*"\s*/?>`)
 )
 
 func renderSEO(source []byte, seo SEO) []byte {
@@ -92,6 +94,10 @@ func renderSEO(source []byte, seo SEO) []byte {
 		escaped := html.EscapeString(seo.Canonical)
 		value = canonicalPattern.ReplaceAllString(value, `<link rel="canonical" href="`+escaped+`" />`)
 		value = ogURLPattern.ReplaceAllString(value, `<meta property="og:url" content="`+escaped+`" />`)
+	}
+	if seo.Image != "" {
+		escaped := html.EscapeString(seo.Image)
+		value = ogImagePattern.ReplaceAllString(value, `<meta property="og:image" content="`+escaped+`" />`)
 	}
 	if seo.Robots != "" {
 		value = strings.Replace(value, "</head>", `    <meta name="robots" content="`+html.EscapeString(seo.Robots)+`" />`+"\n  </head>", 1)

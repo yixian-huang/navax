@@ -2,19 +2,28 @@
 // nav.ax Forgot Password Page — /forgot-password
 // ============================================================
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import PublicShell from '@/components/feature/PublicShell';
-import { Mail, ArrowRight, MailCheck } from 'lucide-react';
+import { Mail, ArrowRight, MailCheck, ShieldAlert } from 'lucide-react';
 import { authApi } from '@/api/auth';
+import { getPublicConfig } from '@/api/assets';
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [mailEnabled, setMailEnabled] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    getPublicConfig()
+      .then(response => setMailEnabled(response.data.features?.mail === true))
+      .catch(() => setMailEnabled(null));
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (mailEnabled === false) return;
     setLoading(true);
     try {
       // The response is intentionally generic; we always show the same
@@ -28,6 +37,30 @@ export default function ForgotPasswordPage() {
     }
   };
 
+  if (mailEnabled === false) {
+    return (
+      <PublicShell showSearch={false}>
+        <div className="min-h-[80vh] flex items-center justify-center px-4">
+          <div className="w-full max-w-sm text-center">
+            <div className="w-16 h-16 rounded-full bg-amber-50 flex items-center justify-center mx-auto mb-4">
+              <ShieldAlert className="w-8 h-8 text-amber-600" />
+            </div>
+            <h1 className="text-xl font-semibold text-foreground-900 mb-2">邮件服务未配置</h1>
+            <p className="text-sm text-foreground-400 mb-6">
+              当前实例尚未配置 SMTP，无法发送密码重置邮件。请联系站点管理员重置密码。
+            </p>
+            <Link
+              to="/login"
+              className="inline-flex items-center gap-2 h-10 px-5 rounded-lg bg-primary-500 text-background-50 dark:text-foreground-950 text-sm font-medium hover:bg-primary-600 transition-colors duration-150"
+            >
+              返回登录
+            </Link>
+          </div>
+        </div>
+      </PublicShell>
+    );
+  }
+
   if (submitted) {
     return (
       <PublicShell showSearch={false}>
@@ -40,7 +73,7 @@ export default function ForgotPasswordPage() {
             <p className="text-sm text-foreground-400 mb-6">
               如果 <span className="text-foreground-600">{email}</span> 对应一个有效账号，我们已发送一封包含密码重置链接的邮件。链接将在 1 小时后失效。
             </p>
-            <p className="text-xs text-foreground-300 mb-6">没有收到？请检查垃圾邮件文件夹，或确认站点已配置邮件服务。</p>
+            <p className="text-xs text-foreground-300 mb-6">没有收到？请检查垃圾邮件文件夹。</p>
             <Link
               to="/login"
               className="inline-flex items-center gap-2 h-10 px-5 rounded-lg bg-primary-500 text-background-50 dark:text-foreground-950 text-sm font-medium hover:bg-primary-600 transition-colors duration-150"
@@ -86,7 +119,7 @@ export default function ForgotPasswordPage() {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || mailEnabled === null}
               className="w-full h-11 rounded-lg bg-primary-500 text-background-50 dark:text-foreground-950 text-sm font-medium hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-150 flex items-center justify-center gap-2 whitespace-nowrap"
             >
               {loading ? '发送中...' : (

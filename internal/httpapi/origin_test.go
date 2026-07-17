@@ -30,15 +30,15 @@ func TestVerifyOriginForAuthenticatedWrite(t *testing.T) {
 	}
 }
 
-func TestVerifyOriginRejectsLoginWithoutOrigin(t *testing.T) {
+func TestVerifyOriginAllowsMachineClientWithoutOrigin(t *testing.T) {
 	handler := VerifyOrigin("https://nav.ax")(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	request := httptest.NewRequest(http.MethodPost, "https://nav.ax/api/v1/auth/login", nil)
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
-	if response.Code != http.StatusForbidden {
-		t.Fatalf("login without origin status = %d", response.Code)
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("machine client login status = %d", response.Code)
 	}
 }
 
@@ -52,5 +52,18 @@ func TestVerifyOriginAllowsSameOriginLogin(t *testing.T) {
 	handler.ServeHTTP(response, request)
 	if response.Code != http.StatusNoContent {
 		t.Fatalf("same-origin login status = %d", response.Code)
+	}
+}
+
+func TestVerifyOriginRejectsEvilOriginLogin(t *testing.T) {
+	handler := VerifyOrigin("https://nav.ax")(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	request := httptest.NewRequest(http.MethodPost, "https://nav.ax/api/v1/auth/login", nil)
+	request.Header.Set("Origin", "https://evil.example")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("evil origin login status = %d", response.Code)
 	}
 }

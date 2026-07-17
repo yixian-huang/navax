@@ -22,6 +22,7 @@ const AnalyticsPage = lazy(() => import("@/pages/app/analytics/page"));
 const WidgetsPage = lazy(() => import("@/pages/app/widgets/page"));
 const ThemesPage = lazy(() => import("@/pages/app/themes/page"));
 const PublishPage = lazy(() => import("@/pages/app/publish/page"));
+const PreviewPage = lazy(() => import("@/pages/app/preview/page"));
 const ImportExportPage = lazy(() => import("@/pages/app/import-export/page"));
 const SettingsPage = lazy(() => import("@/pages/app/settings/page"));
 const AdminOverview = lazy(() => import("@/pages/admin/overview/page"));
@@ -34,6 +35,7 @@ const AdminSettingsPage = lazy(() => import("@/pages/admin/settings/page"));
 const AdminAuditPage = lazy(() => import("@/pages/admin/audit/page"));
 const AdminLinksPage = lazy(() => import("@/pages/admin/links/page"));
 const AdminOperationsPage = lazy(() => import("@/pages/admin/operations/page"));
+const AdminDiscoverPage = lazy(() => import("@/pages/admin/discover/page"));
 
 const routes: RouteObject[] = [
   // Public
@@ -94,6 +96,7 @@ const routes: RouteObject[] = [
       { path: "widgets", element: <WidgetsPage /> },
       { path: "themes", element: <ThemesPage /> },
       { path: "publish", element: <PublishPage /> },
+      { path: "preview", element: <PreviewPage /> },
       { path: "import-export", element: <ImportExportPage /> },
       { path: "settings", element: <SettingsPage /> },
       { path: "domain", element: <Navigate to="/app/publish" replace /> },
@@ -109,6 +112,7 @@ const routes: RouteObject[] = [
       { path: "users", element: <AdminUsersPage /> },
       { path: "invitations", element: <AdminInvitationsPage /> },
       { path: "directory", element: <AdminDirectoryPage /> },
+      { path: "discover", element: <AdminDiscoverPage /> },
       { path: "links", element: <AdminLinksPage /> },
       { path: "categories", element: <AdminCategoriesPage /> },
       { path: "themes", element: <AdminThemesPage /> },

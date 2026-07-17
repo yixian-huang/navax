@@ -29,6 +29,7 @@ type Features struct {
 	Discover   bool `json:"discover"`
 	Analytics  bool `json:"analytics"`
 	Subdomains bool `json:"subdomains"`
+	Mail       bool `json:"mail"`
 }
 
 type Limits struct {
@@ -90,6 +91,13 @@ func (s *Service) Config(ctx context.Context) (Config, error) {
 	}
 	if rootDomain.Valid {
 		config.RootDomain = &rootDomain.String
+	}
+	// Password recovery depends on an enabled SMTP provider with settings.
+	var mailEnabled bool
+	var settingsJSON string
+	if mailErr := s.db.QueryRowContext(ctx, `
+		SELECT enabled, settings_json FROM provider_configs WHERE kind = 'smtp'`).Scan(&mailEnabled, &settingsJSON); mailErr == nil {
+		config.Features.Mail = mailEnabled && len(strings.TrimSpace(settingsJSON)) > 2
 	}
 	return config, nil
 }

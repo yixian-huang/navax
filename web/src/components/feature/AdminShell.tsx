@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { Link, useLocation, Outlet, Navigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Link2, FolderOpen, Palette,
-  Settings, FileSearch, Shield, Menu, Home, ChevronRight, ArrowLeft, Globe, Wrench
+  Settings, FileSearch, Shield, Menu, Home, ChevronRight, ArrowLeft, Globe, Wrench, Star
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useCurrentUser } from '@/hooks/useQueries';
@@ -13,6 +13,7 @@ const navItems: SidebarNavItem[] = [
   { path: '/admin', icon: LayoutDashboard, label: '运营概览' },
   { path: '/admin/users', icon: Users, label: '用户管理' },
   { path: '/admin/invitations', icon: Link2, label: '邀请管理' },
+  { path: '/admin/discover', icon: Star, label: '发现页运营' },
   { path: '/admin/links', icon: Globe, label: '链接管理' },
   { path: '/admin/categories', icon: FolderOpen, label: '公共分类' },
   { path: '/admin/themes', icon: Palette, label: '主题管理' },
@@ -25,6 +26,7 @@ const breadcrumbLabels: Record<string, string> = {
   '/admin': '运营概览',
   '/admin/users': '用户管理',
   '/admin/invitations': '邀请管理',
+  '/admin/discover': '发现页运营',
   '/admin/links': '链接管理',
   '/admin/categories': '公共分类',
   '/admin/themes': '主题管理',

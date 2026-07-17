@@ -92,7 +92,7 @@ func (h *AssetHandler) upload(w http.ResponseWriter, r *http.Request) {
 
 func (h *AssetHandler) read(w http.ResponseWriter, r *http.Request) {
 	objectKey := strings.TrimPrefix(chi.URLParam(r, "*"), "/")
-	asset, file, err := h.service.Open(r.Context(), objectKey)
+	asset, body, err := h.service.Open(r.Context(), objectKey)
 	if err != nil {
 		if errors.Is(err, assets.ErrInvalidObject) || errors.Is(err, assets.ErrNotFound) {
 			WriteError(w, r, http.StatusNotFound, "NOT_FOUND", "图片不存在", nil)
@@ -101,7 +101,7 @@ func (h *AssetHandler) read(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "读取图片失败", nil)
 		return
 	}
-	defer file.Close()
+	defer body.Close()
 	w.Header().Set("Content-Type", asset.MIMEType)
 	w.Header().Set("Content-Length", strconv.FormatInt(asset.Size, 10))
 	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
@@ -109,7 +109,7 @@ func (h *AssetHandler) read(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Cross-Origin-Resource-Policy", "same-site")
 	w.Header().Set("Content-Security-Policy", "default-src 'none'; sandbox")
-	http.ServeContent(w, r, objectKey, asset.CreatedAt, file)
+	http.ServeContent(w, r, objectKey, asset.CreatedAt, body)
 }
 
 func (h *AssetHandler) writeError(w http.ResponseWriter, r *http.Request, err error) {
@@ -122,6 +122,8 @@ func (h *AssetHandler) writeError(w http.ResponseWriter, r *http.Request, err er
 		WriteError(w, r, http.StatusUnprocessableEntity, "VALIDATION_FAILED", "kind 必须是 avatar、background 或 site-icon", nil)
 	case errors.Is(err, assets.ErrInvalidOwner):
 		WriteError(w, r, http.StatusUnauthorized, "AUTH_REQUIRED", "请先登录", nil)
+	case errors.Is(err, assets.ErrStorage):
+		WriteError(w, r, http.StatusServiceUnavailable, "SERVICE_UNAVAILABLE", "对象存储暂不可用", nil)
 	default:
 		WriteError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "保存图片失败", nil)
 	}

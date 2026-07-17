@@ -197,6 +197,29 @@ type AuditRecord struct {
 	AuditEntry
 }
 
+// DiscoverPage is a public navigation page surface for admin curation.
+type DiscoverPage struct {
+	PageID      string    `json:"pageId"`
+	Slug        string    `json:"slug"`
+	Title       string    `json:"title"`
+	OwnerName   string    `json:"ownerName"`
+	OwnerID     string    `json:"ownerId"`
+	Featured    bool      `json:"featured"`
+	Tags        []string  `json:"tags"`
+	PublishedAt time.Time `json:"publishedAt"`
+}
+
+type DiscoverFilter struct {
+	Search   string
+	Page     int
+	PageSize int
+}
+
+type DiscoverPatch struct {
+	Featured *bool
+	Tags     *[]string
+}
+
 type Store interface {
 	OverviewCounts(context.Context, time.Time) (Counts, error)
 	ListUsers(context.Context, UserFilter) (Page[auth.User], error)
@@ -213,6 +236,8 @@ type Store interface {
 	UpdateSettings(context.Context, SystemSettingsPatch, time.Time, AuditRecord) (SystemSettings, error)
 	AppendAudit(context.Context, AuditRecord) error
 	ListAudit(context.Context, AuditFilter) (Page[AuditEntry], error)
+	ListDiscoverPages(context.Context, DiscoverFilter) (Page[DiscoverPage], error)
+	UpdateDiscoverPage(context.Context, string, DiscoverPatch, time.Time, AuditRecord) (DiscoverPage, error)
 }
 
 type Service struct {
@@ -410,6 +435,51 @@ func (s *Service) WriteAudit(ctx context.Context, actor Actor, action, targetTyp
 		return err
 	}
 	return s.store.AppendAudit(ctx, record)
+}
+
+func (s *Service) DiscoverPages(ctx context.Context, actor Actor, filter DiscoverFilter) (Page[DiscoverPage], error) {
+	if err := authorize(actor); err != nil {
+		return Page[DiscoverPage]{}, err
+	}
+	filter.Page, filter.PageSize = pagination(filter.Page, filter.PageSize)
+	filter.Search = strings.TrimSpace(filter.Search)
+	return s.store.ListDiscoverPages(ctx, filter)
+}
+
+func (s *Service) UpdateDiscoverPage(ctx context.Context, actor Actor, pageID string, patch DiscoverPatch, requestID string) (DiscoverPage, error) {
+	if err := authorize(actor); err != nil {
+		return DiscoverPage{}, err
+	}
+	if patch.Featured == nil && patch.Tags == nil {
+		return DiscoverPage{}, ErrInvalidInput
+	}
+	if patch.Tags != nil {
+		cleaned := make([]string, 0, len(*patch.Tags))
+		seen := map[string]struct{}{}
+		for _, tag := range *patch.Tags {
+			tag = strings.TrimSpace(tag)
+			if tag == "" || len([]rune(tag)) > 32 {
+				return DiscoverPage{}, ErrInvalidInput
+			}
+			key := strings.ToLower(tag)
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			cleaned = append(cleaned, tag)
+			if len(cleaned) > 12 {
+				return DiscoverPage{}, ErrInvalidInput
+			}
+		}
+		*patch.Tags = cleaned
+	}
+	audit, err := s.audit(actor, "discover.update", "page", pageID, map[string]any{
+		"featured": patch.Featured, "tags": patch.Tags,
+	}, requestID)
+	if err != nil {
+		return DiscoverPage{}, err
+	}
+	return s.store.UpdateDiscoverPage(ctx, pageID, patch, s.now().UTC(), audit)
 }
 
 func (s *Service) Audit(ctx context.Context, actor Actor, filter AuditFilter) (Page[AuditEntry], error) {

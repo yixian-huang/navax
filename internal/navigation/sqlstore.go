@@ -559,15 +559,17 @@ func (s *SQLStore) PublicHome(ctx context.Context) (PublishedPage, error) {
 }
 
 func (s *SQLStore) PublicHomeForHost(ctx context.Context, host string) (PublishedPage, error) {
+	normalizedHost := strings.ToLower(strings.Trim(host, "."))
 	page, err := loadPublicSnapshot(ctx, s.db, `
 		SELECT ps.payload_json FROM subdomain_requests sr
 		JOIN navigation_pages n ON n.owner_id = sr.user_id AND n.kind = 'personal'
 		JOIN page_publications pp ON pp.page_id = n.id
 		JOIN published_snapshots ps ON ps.id = pp.current_snapshot_id
 		JOIN users u ON u.id = sr.user_id
-		WHERE sr.full_domain = ? COLLATE NOCASE AND sr.status = 'approved'
+		WHERE sr.status = 'approved'
+		  AND (sr.full_domain = ? COLLATE NOCASE OR sr.custom_domain = ? COLLATE NOCASE)
 		  AND ps.visibility IN ('unlisted', 'public') AND u.status = 'active'
-		ORDER BY sr.reviewed_at DESC LIMIT 1`, host)
+		ORDER BY sr.reviewed_at DESC LIMIT 1`, normalizedHost, normalizedHost)
 	if err == nil {
 		return page, nil
 	}
@@ -846,8 +848,13 @@ func buildPublishedPage(page Page, snapshotID string, visibility Visibility, slu
 		owner.Name = page.OwnerName
 		owner.AvatarURL = page.OwnerAvatarURL
 	}
+	ogImage := ""
+	if page.Settings.Appearance.Background.Type == "image" {
+		ogImage = strings.TrimSpace(page.Settings.Appearance.Background.Value)
+	}
 	return PublishedPage{
 		ID: page.ID, SnapshotID: snapshotID, Kind: page.Kind, Title: page.Title, Description: page.Description,
+		SEOTitle: page.Publication.SEOTitle, SEODescription: page.Publication.SEODescription, OGImage: ogImage,
 		Slug: slug, Visibility: visibility,
 		Owner:    owner,
 		Settings: page.Settings, Categories: categories, PublishedAt: publishedAt,
