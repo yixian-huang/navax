@@ -35,26 +35,26 @@ probe_ready() {
 }
 
 swap_and_restart() {
-  install -o navax -g navax -m 0755 "$1" "$APP_BIN"
-  systemctl restart "$UNIT"
+  install -o navax -g navax -m 0755 "$1" "$APP_BIN" || return 1
+  systemctl restart "$UNIT" || return 1
 }
 
-swap_and_restart "$RELEASE_ROOT/$VERSION_SAFE/navax"
-
-if probe_ready; then
+# Any failure here (bad binary, missing user, restart failure) or a failed
+# readyz probe must fall through to the rollback path below, never abort the
+# script outright — hence the guarded `if ... && ...` instead of bare statements.
+if swap_and_restart "$RELEASE_ROOT/$VERSION_SAFE/navax" && probe_ready; then
   # Keep the 5 most recent release dirs (never touch previous/).
   ls -1dt "$RELEASE_ROOT"/*/ 2>/dev/null | grep -v '/previous/$' | tail -n +6 | xargs -r rm -rf
   echo ">>> activate ok: version=$VERSION"
   exit 0
 fi
 
-echo "!!! readyz probe failed for $VERSION — rolling back to previous binary" >&2
+echo "!!! activation failed for $VERSION — rolling back to previous binary" >&2
 if [ -f "$RELEASE_ROOT/previous/navax" ]; then
-  swap_and_restart "$RELEASE_ROOT/previous/navax"
-  if probe_ready; then
+  if swap_and_restart "$RELEASE_ROOT/previous/navax" && probe_ready; then
     echo "!!! rollback complete — previous version restored and healthy" >&2
   else
-    echo "!!! ROLLBACK FAILED — manual intervention required (previous binary at $RELEASE_ROOT/previous/navax)" >&2
+    echo "!!! ROLLBACK FAILED — manual intervention required (attempted restore to $APP_BIN; health unconfirmed)" >&2
   fi
 else
   echo "!!! no previous binary recorded — nothing to roll back to" >&2
