@@ -91,7 +91,7 @@ export function SortableCategoryBlock({
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: category.id,
-    data: { type: 'category' },
+    data: { type: 'category', categoryId: category.id },
   });
 
   const style = {
@@ -99,6 +99,9 @@ export function SortableCategoryBlock({
     transition,
     opacity: isDragging ? 0.4 : 1,
   };
+
+  // Keep site ids stable for SortableContext; include category id so empty drop still hits this container via parent sortable.
+  const siteIds = category.sites.map(s => s.id);
 
   return (
     <div
@@ -109,13 +112,14 @@ export function SortableCategoryBlock({
         isDragging && 'z-40',
         isOver && 'ring-2 ring-primary-300 bg-primary-50/30 rounded-lg',
       )}
+      data-category-id={category.id}
     >
       <div className="flex items-center gap-2 mb-2 px-1">
         <button
           {...attributes}
           {...listeners}
           className="cursor-grab active:cursor-grabbing text-foreground-300 hover:text-foreground-500 transition-colors duration-150 touch-none flex-shrink-0"
-          aria-label={`拖拽 ${category.name}`}
+          aria-label={`拖拽分类 ${category.name}`}
         >
           <GripVertical className="w-4 h-4" />
         </button>
@@ -127,10 +131,10 @@ export function SortableCategoryBlock({
         )}
       </div>
 
-      <SortableContext items={category.sites.map(s => s.id)} strategy={rectSortingStrategy}>
+      <SortableContext items={siteIds} strategy={rectSortingStrategy} id={category.id}>
         <div
           className={cn(
-            'grid gap-2 rounded-lg p-2 min-h-[40px] transition-colors duration-200',
+            'grid gap-2 rounded-lg p-2 min-h-[48px] transition-colors duration-200',
             isOver ? 'bg-primary-50/60 border border-dashed border-primary-200' : 'border border-transparent',
             density === 'comfortable' ? 'gap-3' : '',
           )}
@@ -145,7 +149,7 @@ export function SortableCategoryBlock({
             />
           ))}
           {category.sites.length === 0 && (
-            <div className="col-span-full py-4 text-center text-xs text-foreground-300">
+            <div className="col-span-full py-4 text-center text-xs text-foreground-300 border border-dashed border-background-200/60 rounded-md">
               拖拽站点到这里
             </div>
           )}

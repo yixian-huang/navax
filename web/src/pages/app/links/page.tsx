@@ -12,10 +12,12 @@ import {
 import {
   DndContext,
   closestCenter,
+  pointerWithin,
   KeyboardSensor,
   PointerSensor,
   useSensor,
   useSensors,
+  type CollisionDetection,
   type DragEndEvent,
   type DragOverEvent,
 } from '@dnd-kit/core';
@@ -23,6 +25,7 @@ import {
   SortableContext,
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
+  arrayMove,
 } from '@dnd-kit/sortable';
 import { SortableSiteCard, SortableCategoryBlock, WidgetPreview } from '@/components/feature/DnDPreview';
 import {
@@ -56,6 +59,14 @@ import SiteTable, { type FlatSite } from '@/pages/app/links/components/SiteTable
 import BatchLinkChecker from '@/pages/app/links/components/BatchLinkChecker';
 import IconRenderer from '@/components/base/IconRenderer';
 import type { NavigationPage, Category, Site, Density } from '@/api/types';
+
+/** Resolve which category an over/active id belongs to (category id or site id). */
+function findCategoryId(page: NavigationPage, itemId: string | number): string | null {
+  const id = String(itemId);
+  if (page.categories.some(c => c.id === id)) return id;
+  const cat = page.categories.find(c => c.sites.some(s => s.id === id));
+  return cat?.id ?? null;
+}
 
 type Viewport = 'desktop' | 'tablet' | 'mobile';
 
@@ -385,70 +396,72 @@ export default function LinksPage() {
     return { name: cat.name, icon: cat.icon } as CategoryEditData;
   };
 
-  // ---- DnD ----
-  const handleDragEnd = useCallback(
-    (event: DragEndEvent) => {
+  // Prefer pointer-within so dropping on another category's sites hits that container.
+  const collisionDetection = useCallback<CollisionDetection>((args) => {
+    const pointerHits = pointerWithin(args);
+    if (pointerHits.length > 0) return pointerHits;
+    return closestCenter(args);
+  }, []);
+
+  // ---- DnD (multi-container: categories + sites across categories) ----
+  const handleDragOver = useCallback(
+    (event: DragOverEvent) => {
       const { active, over } = event;
-      setOverCategoryId(null);
-      if (!over || active.id === over.id || !page) return;
-
-      const activeData = active.data.current;
-      const isCategory = activeData?.type === 'category';
-
-      if (isCategory) {
-        const catIdx = page.categories.findIndex(c => c.id === active.id);
-        const overIdx = page.categories.findIndex(c => c.id === over.id);
-        if (catIdx === -1 || overIdx === -1 || catIdx === overIdx) return;
-        setLocalPage(prev => {
-          const p = prev || page;
-          const cats = [...p.categories];
-          const [moved] = cats.splice(catIdx, 1);
-          cats.splice(overIdx, 0, moved);
-          return { ...p, categories: cats };
-        });
-        setHasLayoutChanges(true);
+      if (!over || !page) {
+        setOverCategoryId(null);
         return;
       }
 
-      // Site drag
-      const sourceCat = page.categories.find(c => c.sites.some(s => s.id === active.id));
-      if (!sourceCat) return;
-
-      const overCategory = page.categories.find(
-        c => c.id === over.id && c.sites.every(s => s.id !== over.id),
-      );
-      if (overCategory && overCategory.id !== sourceCat.id) {
-        setLocalPage(prev => {
-          const p = prev || page;
-          const site = sourceCat.sites.find(s => s.id === active.id);
-          if (!site) return p;
-          return {
-            ...p,
-            categories: p.categories.map(c => {
-              if (c.id === sourceCat.id) return { ...c, sites: c.sites.filter(s => s.id !== active.id) };
-              if (c.id === overCategory.id) return { ...c, sites: [...c.sites, { ...site, categoryId: c.id }] };
-              return c;
-            }),
-          };
-        });
-        setHasLayoutChanges(true);
+      // Only sites cross containers; categories reorder on drag end.
+      if (active.data.current?.type === 'category') {
+        setOverCategoryId(null);
         return;
       }
 
-      const sourceIdx = sourceCat.sites.findIndex(s => s.id === active.id);
-      const overIdx = sourceCat.sites.findIndex(s => s.id === over.id);
-      if (sourceIdx === -1 || overIdx === -1 || sourceIdx === overIdx) return;
+      const activeCatId =
+        (active.data.current?.categoryId as string | undefined)
+        ?? findCategoryId(page, active.id);
+      const overCatId = findCategoryId(page, over.id);
 
+      if (!activeCatId || !overCatId) {
+        setOverCategoryId(null);
+        return;
+      }
+
+      setOverCategoryId(overCatId);
+
+      // Same category: sortable handles order on drag end.
+      if (activeCatId === overCatId) return;
+
+      // Cross-category: move site into target list while dragging (dnd-kit multi-container).
       setLocalPage(prev => {
         const p = prev || page;
+        const sourceCat = p.categories.find(c => c.sites.some(s => s.id === active.id));
+        const targetCat = p.categories.find(c => c.id === overCatId);
+        if (!sourceCat || !targetCat || sourceCat.id === targetCat.id) return p;
+
+        const site = sourceCat.sites.find(s => s.id === active.id);
+        if (!site) return p;
+
+        const overIsSiteInTarget = targetCat.sites.some(s => s.id === over.id);
+        const overIndex = overIsSiteInTarget
+          ? targetCat.sites.findIndex(s => s.id === over.id)
+          : targetCat.sites.length;
+
+        const moved: Site = { ...site, categoryId: targetCat.id };
         return {
           ...p,
           categories: p.categories.map(c => {
-            if (c.id !== sourceCat.id) return c;
-            const sites = [...c.sites];
-            const [moved] = sites.splice(sourceIdx, 1);
-            sites.splice(overIdx, 0, moved);
-            return { ...c, sites };
+            if (c.id === sourceCat.id) {
+              return { ...c, sites: c.sites.filter(s => s.id !== active.id) };
+            }
+            if (c.id === targetCat.id) {
+              const sites = c.sites.filter(s => s.id !== active.id);
+              const next = [...sites];
+              next.splice(Math.max(0, overIndex), 0, moved);
+              return { ...c, sites: next };
+            }
+            return c;
           }),
         };
       });
@@ -457,20 +470,79 @@ export default function LinksPage() {
     [page],
   );
 
-  const handleDragOver = useCallback(
-    (event: DragOverEvent) => {
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
       const { active, over } = event;
-      if (!over || !active.data.current || active.data.current.type !== 'site') {
-        setOverCategoryId(null);
+      setOverCategoryId(null);
+      if (!over || !page) return;
+
+      const activeData = active.data.current;
+
+      // Category reorder
+      if (activeData?.type === 'category') {
+        const overCatId = findCategoryId(page, over.id);
+        if (!overCatId || active.id === overCatId) return;
+        const catIdx = page.categories.findIndex(c => c.id === active.id);
+        const overIdx = page.categories.findIndex(c => c.id === overCatId);
+        if (catIdx === -1 || overIdx === -1 || catIdx === overIdx) return;
+        setLocalPage(prev => {
+          const p = prev || page;
+          return { ...p, categories: arrayMove(p.categories, catIdx, overIdx) };
+        });
+        setHasLayoutChanges(true);
         return;
       }
-      if (over.data.current?.type === 'category') {
-        setOverCategoryId(over.id as string);
-      } else {
-        if (!page) return;
-        const cat = page.categories.find(c => c.sites.some(s => s.id === over.id));
-        setOverCategoryId(cat?.id || null);
+
+      // Site: cross-category already applied in dragOver; finalize same-category reorder.
+      const sourceCat = page.categories.find(c => c.sites.some(s => s.id === active.id));
+      if (!sourceCat) return;
+
+      const overCatId = findCategoryId(page, over.id);
+      if (!overCatId) return;
+
+      if (overCatId !== sourceCat.id) {
+        // Ensure final placement if dragOver missed (e.g. drop on empty category header).
+        setLocalPage(prev => {
+          const p = prev || page;
+          const from = p.categories.find(c => c.sites.some(s => s.id === active.id));
+          if (!from) return p;
+          // Already moved?
+          if (from.id === overCatId) return p;
+          const site = from.sites.find(s => s.id === active.id);
+          if (!site) return p;
+          return {
+            ...p,
+            categories: p.categories.map(c => {
+              if (c.id === from.id) return { ...c, sites: c.sites.filter(s => s.id !== active.id) };
+              if (c.id === overCatId) {
+                if (c.sites.some(s => s.id === active.id)) return c;
+                return { ...c, sites: [...c.sites, { ...site, categoryId: c.id }] };
+              }
+              return c;
+            }),
+          };
+        });
+        setHasLayoutChanges(true);
+        return;
       }
+
+      // Same-category reorder
+      if (active.id === over.id) return;
+      const oldIndex = sourceCat.sites.findIndex(s => s.id === active.id);
+      const newIndex = sourceCat.sites.findIndex(s => s.id === over.id);
+      if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return;
+
+      setLocalPage(prev => {
+        const p = prev || page;
+        return {
+          ...p,
+          categories: p.categories.map(c => {
+            if (c.id !== sourceCat.id) return c;
+            return { ...c, sites: arrayMove(c.sites, oldIndex, newIndex) };
+          }),
+        };
+      });
+      setHasLayoutChanges(true);
     },
     [page],
   );
@@ -1010,7 +1082,7 @@ export default function LinksPage() {
         <div className="flex-1 overflow-y-auto p-4 md:p-6">
           <DndContext
             sensors={sensors}
-            collisionDetection={closestCenter}
+            collisionDetection={collisionDetection}
             onDragEnd={handleDragEnd}
             onDragOver={handleDragOver}
           >
@@ -1062,7 +1134,7 @@ export default function LinksPage() {
           </DndContext>
 
           <p className="text-[11px] text-foreground-300 mt-3 text-center">
-            拖拽分类手柄排序 · 拖站点到分类标题上跨分类移动
+            拖拽分类手柄排序 · 拖站点到其他分类（标题或站点上）即可跨分类移动 · 改完点「保存」
           </p>
         </div>
       </div>
