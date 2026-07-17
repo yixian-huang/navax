@@ -152,13 +152,16 @@ export default function SiteCard({ site, density, onOpen, onEdit, onDelete, sear
 
   if (density === 'list') {
     return (
-      <CardWrapper {...shared} className="flex items-center gap-3.5 px-3 py-2.5 rounded-lg hover:bg-background-100 transition-colors duration-200 focus-visible:outline-offset-[-2px]">
+      <CardWrapper
+        {...shared}
+        className="site-card-list flex items-center gap-3.5 px-3 py-2.5 rounded-lg hover:bg-background-100 transition-colors duration-200 focus-visible:outline-offset-[-2px]"
+      >
         <Favicon url={site.url} className="w-5 h-5 flex-shrink-0" />
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-medium text-foreground-800 truncate group-hover:text-accent-500 transition-colors duration-200">
             <HighlightText text={site.title} query={q} />
           </span>
-          <span className="block text-[11px] text-foreground-300 truncate font-mono">
+          <span className="block text-[11px] text-foreground-300 truncate font-mono site-card-list-domain">
             <HighlightText text={domain} query={q} />
           </span>
         </span>

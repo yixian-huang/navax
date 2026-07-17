@@ -52,7 +52,7 @@ export default function LayoutFull({
           className={cn(
             'rise-in',
             wallpaperMode
-              ? 'wallpaper-surface rounded-2xl px-5 py-4 md:px-6 md:py-5 mb-6 md:mb-8'
+              ? 'wallpaper-type mb-6 md:mb-8'
               : 'mb-12 md:mb-16',
           )}
         >

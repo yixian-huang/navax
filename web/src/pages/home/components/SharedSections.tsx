@@ -62,14 +62,10 @@ export function SitesSection({
   delay: number;
   wallpaperMode?: boolean;
 }) {
+  // No section-level slab for categories / density / site grid — wallpaper shows
+  // through; individual site cards use low-opacity frost via [data-wallpaper].
   return (
-    <div
-      className={cn(
-        'rise-in',
-        wallpaperMode && 'wallpaper-surface rounded-2xl p-4 md:p-5',
-      )}
-      style={{ animationDelay: `${delay}ms` }}
-    >
+    <div className="rise-in" style={{ animationDelay: `${delay}ms` }}>
       <div className={cn(
         'flex items-baseline justify-between gap-4',
         wallpaperMode ? 'mb-3' : 'mb-5',
@@ -80,7 +76,7 @@ export function SitesSection({
           )}
           {wallpaperMode ? (
             query ? (
-              <span className="text-[11px] text-foreground-500 tracking-wide truncate">
+              <span className="text-[11px] text-foreground-700 tracking-wide truncate wallpaper-type">
                 {activeSites.length} 个结果
               </span>
             ) : null
@@ -92,7 +88,7 @@ export function SitesSection({
       </div>
 
       {categories.length > 1 && (
-        <div className={wallpaperMode ? 'mb-4' : 'mb-8'}>
+        <div className={cn(wallpaperMode ? 'mb-4 wallpaper-type' : 'mb-8')}>
           <CategoryTabs
             categories={categories}
             activeId={activeCategory}
@@ -114,35 +110,33 @@ export function SitesSection({
 
 export function FooterActions({ wallpaperMode = false }: { wallpaperMode?: boolean }) {
   if (wallpaperMode) {
-    // Wallpaper: single quiet row — no competing labels with the photo.
+    // Wallpaper: text-only row, no frosted pill slab.
     return (
-      <div className="mt-10 md:mt-12 flex justify-center rise-in">
-        <div className="wallpaper-surface-soft rounded-full px-2 py-1.5 flex items-center gap-0.5">
-          <Link
-            to="/app/links"
-            className="h-8 px-3 inline-flex items-center gap-1.5 text-[11px] text-foreground-600 hover:text-primary-500 transition-colors duration-200 rounded-full hover:bg-background-50/60"
-            title="管理站点"
-          >
-            <i className="ri-settings-3-line text-sm" />
-            管理
-          </Link>
-          <Link
-            to="/app"
-            className="h-8 px-3 inline-flex items-center gap-1.5 text-[11px] text-foreground-600 hover:text-primary-500 transition-colors duration-200 rounded-full hover:bg-background-50/60"
-            title="编辑主页"
-          >
-            <i className="ri-layout-grid-line text-sm" />
-            编辑
-          </Link>
-          <Link
-            to="/discover"
-            className="h-8 px-3 inline-flex items-center gap-1.5 text-[11px] text-foreground-500 hover:text-primary-500 transition-colors duration-200 rounded-full hover:bg-background-50/60"
-            title="发现精选"
-          >
-            <i className="ri-compass-3-line text-sm" />
-            发现
-          </Link>
-        </div>
+      <div className="mt-10 md:mt-12 flex justify-center gap-1 rise-in wallpaper-type">
+        <Link
+          to="/app/links"
+          className="h-8 px-3 inline-flex items-center gap-1.5 text-[11px] text-foreground-700 hover:text-primary-500 transition-colors duration-200 rounded-full hover:bg-background-50/25"
+          title="管理站点"
+        >
+          <i className="ri-settings-3-line text-sm" />
+          管理
+        </Link>
+        <Link
+          to="/app"
+          className="h-8 px-3 inline-flex items-center gap-1.5 text-[11px] text-foreground-700 hover:text-primary-500 transition-colors duration-200 rounded-full hover:bg-background-50/25"
+          title="编辑主页"
+        >
+          <i className="ri-layout-grid-line text-sm" />
+          编辑
+        </Link>
+        <Link
+          to="/discover"
+          className="h-8 px-3 inline-flex items-center gap-1.5 text-[11px] text-foreground-600 hover:text-primary-500 transition-colors duration-200 rounded-full hover:bg-background-50/25"
+          title="发现精选"
+        >
+          <i className="ri-compass-3-line text-sm" />
+          发现
+        </Link>
       </div>
     );
   }

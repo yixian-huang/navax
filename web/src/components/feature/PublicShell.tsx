@@ -133,17 +133,15 @@ export default function PublicShell({
       <footer className="mt-auto relative z-10">
         <div className="mx-auto max-w-4xl px-6 md:px-8 py-8">
           {hasBackground ? (
-            <div className="wallpaper-surface-soft rounded-xl px-4 py-3">
-              <div className="flex items-center justify-between gap-4 flex-wrap">
-                <span className="text-[11px] text-foreground-500 tracking-wide">
-                  nav.ax
-                </span>
-                <nav className="flex items-center gap-3">
-                  <Link to="/privacy" className="text-[11px] text-foreground-500 hover:text-primary-500 transition-colors duration-200">隐私</Link>
-                  <Link to="/terms" className="text-[11px] text-foreground-500 hover:text-primary-500 transition-colors duration-200">条款</Link>
-                  <Link to="/cookies" className="text-[11px] text-foreground-500 hover:text-primary-500 transition-colors duration-200">Cookie</Link>
-                </nav>
-              </div>
+            <div className="flex items-center justify-between gap-4 flex-wrap wallpaper-type">
+              <span className="text-[11px] text-foreground-700 tracking-wide">
+                nav.ax
+              </span>
+              <nav className="flex items-center gap-3">
+                <Link to="/privacy" className="text-[11px] text-foreground-600 hover:text-primary-500 transition-colors duration-200">隐私</Link>
+                <Link to="/terms" className="text-[11px] text-foreground-600 hover:text-primary-500 transition-colors duration-200">条款</Link>
+                <Link to="/cookies" className="text-[11px] text-foreground-600 hover:text-primary-500 transition-colors duration-200">Cookie</Link>
+              </nav>
             </div>
           ) : (
             <>

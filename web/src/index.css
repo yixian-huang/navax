@@ -138,19 +138,45 @@ body {
   transform: translateY(-2px);
 }
 
-/* Wallpaper mode: local glass panels keep type legible without washing out the photo. */
+/* Wallpaper mode: very light frost — never a solid white slab over the photo. */
 .wallpaper-surface {
-  background: oklch(var(--background-50) / 0.82);
-  -webkit-backdrop-filter: blur(18px) saturate(1.15);
-  backdrop-filter: blur(18px) saturate(1.15);
-  border: 1px solid oklch(var(--background-200) / 0.45);
-  box-shadow: var(--elevation-surface);
+  background: oklch(var(--background-50) / 0.28);
+  -webkit-backdrop-filter: blur(14px) saturate(1.08);
+  backdrop-filter: blur(14px) saturate(1.08);
+  border: 1px solid oklch(var(--background-200) / 0.22);
 }
 .wallpaper-surface-soft {
-  background: oklch(var(--background-50) / 0.72);
-  -webkit-backdrop-filter: blur(14px) saturate(1.1);
-  backdrop-filter: blur(14px) saturate(1.1);
-  border: 1px solid oklch(var(--background-200) / 0.35);
+  background: oklch(var(--background-50) / 0.16);
+  -webkit-backdrop-filter: blur(10px) saturate(1.05);
+  backdrop-filter: blur(10px) saturate(1.05);
+  border: 1px solid oklch(var(--background-200) / 0.14);
+}
+
+/* Site cards sit on the photo with the same low-opacity frost (no section slab). */
+[data-wallpaper] .material-card {
+  background: oklch(var(--background-50) / 0.36);
+  -webkit-backdrop-filter: blur(12px) saturate(1.08);
+  backdrop-filter: blur(12px) saturate(1.08);
+  border: 1px solid oklch(var(--background-200) / 0.22);
+  box-shadow: 0 1px 2px oklch(var(--foreground-900) / 0.05);
+}
+[data-wallpaper] .material-card:hover {
+  background: oklch(var(--background-50) / 0.48);
+  box-shadow: 0 4px 16px oklch(var(--foreground-900) / 0.08);
+}
+
+/* Free-floating type (tabs, density icons) stays readable without a panel. */
+[data-wallpaper] .wallpaper-type {
+  text-shadow:
+    0 1px 1px oklch(var(--background-50) / 0.55),
+    0 0 12px oklch(var(--background-50) / 0.35);
+}
+
+[data-wallpaper] .site-card-list:hover {
+  background: oklch(var(--background-50) / 0.28);
+}
+[data-wallpaper] .site-card-list-domain {
+  color: oklch(var(--foreground-700));
 }
 
 /* ---- Fade / rise entrance ---- */
