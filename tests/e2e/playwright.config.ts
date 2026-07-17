@@ -22,6 +22,8 @@ export default defineConfig({
     url: `${BASE_URL}/readyz`,
     reuseExistingServer: false,
     timeout: 30_000,
+    // navax 的 slog JSON（含启动失败原因）走 stdout，默认会被丢弃。
+    stdout: 'pipe',
   },
   projects: [
     { name: 'setup', testMatch: /global\.setup\.ts/ },
