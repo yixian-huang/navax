@@ -186,7 +186,7 @@ export default function SiteCard({ site, density, onOpen, onEdit, onDelete, sear
               'block text-[11px] truncate site-card-list-domain',
               desc
                 ? 'text-foreground-400 site-card-list-desc'
-                : 'text-foreground-300 font-mono',
+                : 'text-foreground-300 font-mono site-card-list-domain',
             )}
           >
             <HighlightText text={secondary} query={q} />
@@ -222,7 +222,7 @@ export default function SiteCard({ site, density, onOpen, onEdit, onDelete, sear
         <h3 className="text-sm font-semibold text-foreground-900 truncate group-hover:text-accent-500 transition-colors duration-200">
           <HighlightText text={site.title} query={q} />
         </h3>
-        <p className="text-[11px] text-foreground-300 truncate font-mono mt-0.5">
+        <p className="site-card-domain text-[11px] text-foreground-300 truncate font-mono mt-0.5">
           <HighlightText text={domain} query={q} />
         </p>
         {desc ? (

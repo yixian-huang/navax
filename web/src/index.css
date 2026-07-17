@@ -297,18 +297,30 @@ body {
 [data-wallpaper] .site-card-list:hover {
   background: oklch(var(--background-50) / 0.28);
 }
-[data-wallpaper] .site-card-list-domain {
-  color: oklch(var(--foreground-700));
-}
-/* Muted description under domain / list secondary — follow wallpaper ink */
-[data-wallpaper] .site-card-desc,
-[data-wallpaper] .site-card-list-desc {
-  color: oklch(var(--foreground-600));
-}
-[data-wallpaper][data-wallpaper-tone="dark"] .site-card-desc,
-[data-wallpaper][data-wallpaper-tone="dark"] .site-card-list-desc {
-  color: var(--wp-ink-muted);
+
+/*
+ * Site secondary lines (domain / description) over wallpaper.
+ * Must beat `.wallpaper-ink-scope .material-card * { color: unset }` (0,3,0)
+ * so frosted cards still get sampled ink + edge shadow.
+ * light tone → dark soft ink; dark tone → light soft ink (via --wp-*).
+ */
+[data-wallpaper] .site-card-list .site-card-list-domain,
+[data-wallpaper] .site-card-list .site-card-list-desc,
+[data-wallpaper] .material-card .site-card-domain,
+[data-wallpaper] .material-card .site-card-desc,
+[data-wallpaper] .wallpaper-ink-scope .material-card .site-card-domain,
+[data-wallpaper] .wallpaper-ink-scope .material-card .site-card-desc,
+[data-wallpaper] .wallpaper-ink-scope .material-card .site-card-domain *,
+[data-wallpaper] .wallpaper-ink-scope .material-card .site-card-desc * {
+  color: var(--wp-ink-soft);
   text-shadow: var(--wp-shadow);
+}
+/* Description slightly stronger than domain so it stays readable when both show */
+[data-wallpaper] .material-card .site-card-desc,
+[data-wallpaper] .wallpaper-ink-scope .material-card .site-card-desc,
+[data-wallpaper] .wallpaper-ink-scope .material-card .site-card-desc *,
+[data-wallpaper] .site-card-list .site-card-list-desc {
+  color: var(--wp-ink-muted);
 }
 
 /* Quiet empty state on public home / wallpaper */
