@@ -49,10 +49,13 @@ import PropertiesPanel, {
   type CategoryEditData,
 } from '@/components/base/PropertiesPanel';
 import { useSaveStatus } from '@/hooks/useSaveStatus';
+import { useToast } from '@/components/base/Toast';
 import { cn } from '@/lib/utils';
+import { draftSaveToastMessage } from '@/lib/publish-state';
 import SiteTable, { type FlatSite } from '@/pages/app/links/components/SiteTable';
 import BatchLinkChecker from '@/pages/app/links/components/BatchLinkChecker';
 import IconRenderer from '@/components/base/IconRenderer';
+import PublishDraftBanner from '@/components/feature/PublishDraftBanner';
 import type { NavigationPage, Category, Site, Density } from '@/api/types';
 
 type Viewport = 'desktop' | 'tablet' | 'mobile';
@@ -83,6 +86,7 @@ export default function LinksPage() {
   const deleteSite = useDeleteSite();
   const saveComposition = useSavePageComposition();
   const { markSaving, markSaved, markError } = useSaveStatus();
+  const { toast } = useToast();
 
   // UI
   const [leftOpen, setLeftOpen] = useState(true);
@@ -219,13 +223,27 @@ export default function LinksPage() {
           id: editingItem.id,
           data: { title: sd.title, url: sd.url, icon: sd.icon, description: sd.description },
         },
-        { onSuccess: () => { markSaved(); setPanelOpen(false); }, onError: () => markError('保存站点失败') },
+        {
+          onSuccess: () => {
+            markSaved();
+            setPanelOpen(false);
+            toast('success', draftSaveToastMessage(page?.publication));
+          },
+          onError: () => markError('保存站点失败'),
+        },
       );
     } else {
       const cd = data as CategoryEditData;
       updateCategory.mutate(
         { id: editingItem.id, data: { name: cd.name, icon: cd.icon } },
-        { onSuccess: () => { markSaved(); setPanelOpen(false); }, onError: () => markError('保存分类失败') },
+        {
+          onSuccess: () => {
+            markSaved();
+            setPanelOpen(false);
+            toast('success', draftSaveToastMessage(page?.publication));
+          },
+          onError: () => markError('保存分类失败'),
+        },
       );
     }
   };
@@ -332,8 +350,9 @@ export default function LinksPage() {
       markError(`${failed} 个站点删除失败`);
     } else {
       markSaved();
+      toast('success', draftSaveToastMessage(page?.publication));
     }
-  }, [selectedSiteIds, deleteSite, markSaving, markSaved, markError]);
+  }, [selectedSiteIds, deleteSite, markSaving, markSaved, markError, toast, page?.publication]);
 
   // Derive managed links for batch checker
   const managedLinks = useMemo(() => {
@@ -487,10 +506,11 @@ export default function LinksPage() {
         markSaved();
         setHasLayoutChanges(false);
         setLocalPage(null);
+        toast('success', draftSaveToastMessage(page.publication));
       },
       onError: () => markError('保存布局失败'),
     });
-  }, [page, saveComposition, markSaving, markSaved, markError]);
+  }, [page, saveComposition, markSaving, markSaved, markError, toast]);
 
   // ---- Loading ----
   if (isLoading) return <LoadingSkeleton count={4} />;
@@ -513,6 +533,7 @@ export default function LinksPage() {
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold font-heading text-foreground-950">导航编辑</h1>
         </div>
+        <PublishDraftBanner />
         <EmptyState
           iconClass="ri-link-m"
           title="开始构建你的导航"
@@ -537,7 +558,9 @@ export default function LinksPage() {
   }
 
   return (
-    <div className="-m-4 md:-m-6 flex h-[calc(100vh-7.5rem)]">
+    <div className="-m-4 md:-m-6 flex flex-col h-[calc(100vh-7.5rem)]">
+      <PublishDraftBanner className="mx-4 md:mx-6 mt-3 mb-0" />
+      <div className="flex flex-1 min-h-0">
       {/* ---- Left Panel ---- */}
       <div
         className={cn(
@@ -1064,6 +1087,7 @@ export default function LinksPage() {
         onDelete={handleDeletePanel}
         deleteLabel={panelMode === 'category' ? '删除分类' : '删除站点'}
       />
+      </div>
     </div>
   );
 }

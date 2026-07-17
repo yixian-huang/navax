@@ -159,12 +159,22 @@ export function Badge({
 }
 
 // ---- Publish Status Badge ----
-export function PublishStatusBadge({ hasUnpublishedChanges, publishedAt }: { hasUnpublishedChanges: boolean; publishedAt: string | null }) {
-  if (!publishedAt) {
+export function PublishStatusBadge({
+  hasUnpublishedChanges,
+  publishedAt,
+  published,
+}: {
+  hasUnpublishedChanges: boolean;
+  publishedAt: string | null;
+  /** Optional explicit flag; falls back to Boolean(publishedAt) for backward compatibility */
+  published?: boolean;
+}) {
+  const isPublished = published ?? Boolean(publishedAt);
+  if (!isPublished) {
     return <Badge variant="default">未发布</Badge>;
   }
   if (hasUnpublishedChanges) {
-    return <Badge variant="warning">有未发布更改</Badge>;
+    return <Badge variant="warning">有草稿未上线</Badge>;
   }
-  return <Badge variant="success">已发布</Badge>;
+  return <Badge variant="success">已是最新</Badge>;
 }

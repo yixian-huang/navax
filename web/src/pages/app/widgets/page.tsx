@@ -2,6 +2,8 @@ import { Calendar, Clock, MessageCircle } from 'lucide-react';
 import { useMyPage, useUpdatePageSettings } from '@/hooks/useQueries';
 import { ErrorState, LoadingSkeleton } from '@/components/base/SharedUI';
 import { useToast } from '@/components/base/Toast';
+import PublishDraftBanner from '@/components/feature/PublishDraftBanner';
+import { draftSaveToastMessage } from '@/lib/publish-state';
 
 const displayOptions = [
   { key: 'showClock', label: '时钟', description: '在导航首页显示当前时间', icon: Clock },
@@ -25,7 +27,7 @@ export default function WidgetsPage() {
       ...settings,
       display: { ...settings.display, [key]: !settings.display[key] },
     }, {
-      onSuccess: () => toast('success', '显示设置已保存'),
+      onSuccess: () => toast('success', draftSaveToastMessage(pageQuery.data?.publication)),
       onError: error => toast('error', error.message || '保存失败'),
     });
   };
@@ -36,6 +38,7 @@ export default function WidgetsPage() {
         <h1 className="text-2xl font-bold font-heading text-foreground-950">首页信息</h1>
         <p className="text-sm text-foreground-400 mt-1">控制导航首页的时钟、日期和欢迎词</p>
       </div>
+      <PublishDraftBanner />
       <div className="space-y-3">
         {displayOptions.map(option => {
           const Icon = option.icon;

@@ -5,6 +5,7 @@ import { navigationApi } from '@/api/navigation';
 import type { ExportFormat, ImportFormat, ImportPreview, ImportResult } from '@/api/types';
 import { ErrorState, LoadingSkeleton } from '@/components/base/SharedUI';
 import { useToast } from '@/components/base/Toast';
+import { draftSaveToastMessage } from '@/lib/publish-state';
 
 function createIdempotencyKey(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
@@ -92,8 +93,12 @@ export default function ImportExportPage() {
         expectedRevision: page.draftRevision ?? 0,
       }, idempotencyKeyRef.current || createIdempotencyKey());
       setResult(response.data);
-      await pageQuery.refetch();
-      toast('success', `已导入 ${response.data.sitesCreated} 个站点`);
+      const refreshed = await pageQuery.refetch();
+      const publication = refreshed.data?.publication ?? page.publication;
+      toast(
+        'success',
+        `已导入 ${response.data.sitesCreated} 个站点 · ${draftSaveToastMessage(publication)}`,
+      );
     } catch (cause) {
       toast('error', cause instanceof Error ? cause.message : '导入提交失败');
     } finally {

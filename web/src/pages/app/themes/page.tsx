@@ -10,9 +10,11 @@ import { themeRegistry } from '@/themes/registry';
 import { useToast } from '@/components/base/Toast';
 import { useSaveStatus } from '@/hooks/useSaveStatus';
 import { cn } from '@/lib/utils';
+import { draftSaveToastMessage } from '@/lib/publish-state';
 import type { ThemePackage } from '@/themes/types';
 import { useMyPage, useThemes, useUpdatePageSettings } from '@/hooks/useQueries';
 import { ErrorState, LoadingSkeleton } from '@/components/base/SharedUI';
+import PublishDraftBanner from '@/components/feature/PublishDraftBanner';
 import { assetsApi, getPublicConfig } from '@/api/assets';
 import { ApiError } from '@/api/client';
 
@@ -89,14 +91,15 @@ export default function ThemesPage() {
       setActiveId(id);
       markSaved();
       const pkg = themeRegistry.get(id);
-      toast('success', `主题已切换为「${pkg?.meta.name || id}」`);
+      const name = pkg?.meta.name || id;
+      toast('success', draftSaveToastMessage(page.publication, `主题已写入草稿：「${name}」`));
     } catch (cause) {
       themeRegistry.activate(activeId);
       toast('error', cause instanceof Error ? cause.message : '主题保存失败');
     } finally {
       setPendingId(null);
     }
-  }, [activeId, page?.settings, toast, markSaving, markSaved, updateSettings]);
+  }, [activeId, page?.settings, page?.publication, toast, markSaving, markSaved, updateSettings]);
 
   const persistBackground = useCallback(async (next: BgConfig) => {
     if (!page?.settings) return;
@@ -118,11 +121,11 @@ export default function ThemesPage() {
     setBgConfig(updated);
     try {
       await persistBackground(updated);
-      toast('success', '背景图已更新');
+      toast('success', draftSaveToastMessage(page?.publication));
     } catch (cause) {
       toast('error', cause instanceof Error ? cause.message : '背景图保存失败');
     }
-  }, [bgConfig, persistBackground, toast]);
+  }, [bgConfig, persistBackground, toast, page?.publication]);
 
   const handleRemoveBg = useCallback(async () => {
     const updated = { image: '', opacity: 0.15 };
@@ -130,11 +133,11 @@ export default function ThemesPage() {
     setBgUrlInput('');
     try {
       await persistBackground(updated);
-      toast('info', '背景图已清除');
+      toast('info', draftSaveToastMessage(page?.publication, '背景图已从草稿清除'));
     } catch (cause) {
       toast('error', cause instanceof Error ? cause.message : '背景图清除失败');
     }
-  }, [persistBackground, toast]);
+  }, [persistBackground, toast, page?.publication]);
 
   const handleUploadBg = useCallback(async (file: File) => {
     if (file.size > maxUploadBytes) {
@@ -166,10 +169,14 @@ export default function ThemesPage() {
   }, []);
 
   const handleOpacityCommit = useCallback(() => {
-    void persistBackground(bgConfig).catch(cause => {
-      toast('error', cause instanceof Error ? cause.message : '透明度保存失败');
-    });
-  }, [bgConfig, persistBackground, toast]);
+    void persistBackground(bgConfig)
+      .then(() => {
+        toast('success', draftSaveToastMessage(page?.publication));
+      })
+      .catch(cause => {
+        toast('error', cause instanceof Error ? cause.message : '透明度保存失败');
+      });
+  }, [bgConfig, persistBackground, toast, page?.publication]);
 
   if (isLoading) return <LoadingSkeleton count={4} />;
   if (isError || !page?.settings) {
@@ -247,6 +254,8 @@ export default function ThemesPage() {
           选择导航站的全局主题风格，切换后立即对首页生效 · 共 {themes.length} 套主题
         </p>
       </div>
+
+      <PublishDraftBanner />
 
       {/* Background Image Section */}
       <div className="mb-8">
