@@ -30,7 +30,7 @@ jobs:
       - name: Contract tests
         run: make test-contract
       - name: Embedded production build
-        run: make build VERSION="${GITHUB_SHA::12}" COMMIT="${GITHUB_SHA}" DEPLOYMENT=ci
+        run: make build VERSION="${GITHUB_SHA::12}" COMMIT="${GITHUB_SHA}" DEPLOYMENT=development
       - name: Smoke-test binary
         run: test -x bin/navax
 
@@ -49,7 +49,7 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - name: Embedded production build
-        run: make build VERSION="${GITHUB_SHA::12}" COMMIT="${GITHUB_SHA}" DEPLOYMENT=ci
+        run: make build VERSION="${GITHUB_SHA::12}" COMMIT="${GITHUB_SHA}" DEPLOYMENT=development
       - name: Install Playwright
         run: |
           cd tests/e2e && npm install
