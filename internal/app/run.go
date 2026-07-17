@@ -33,6 +33,7 @@ import (
 	"github.com/yixian-huang/navax/internal/maintenance"
 	"github.com/yixian-huang/navax/internal/navigation"
 	"github.com/yixian-huang/navax/internal/security"
+	seopkg "github.com/yixian-huang/navax/internal/seo"
 	"github.com/yixian-huang/navax/internal/subdomains"
 	"github.com/yixian-huang/navax/internal/webui"
 )
@@ -128,7 +129,8 @@ func Run(ctx context.Context, cfg config.Config, build BuildInfo) error {
 	linkCheckHandler := httpapi.NewLinkCheckHandler(linkcheck.NewService(db))
 	linkPreviewHandler := httpapi.NewLinkPreviewHandler(linkpreview.NewService())
 	directoryAdminHandler := httpapi.NewDirectoryAdminHandler(authService, directoryadmin.NewService(directoryadmin.NewSQLStore(db)))
-	catalogHandler := httpapi.NewCatalogHandler(catalog.NewService(db))
+	catalogService := catalog.NewService(db)
+	catalogHandler := httpapi.NewCatalogHandler(catalogService)
 	analyticsKey, err := security.LoadOrCreateKey(filepath.Join(cfg.DataDir, "analytics.key"), 32)
 	if err != nil {
 		return fmt.Errorf("initialize analytics privacy key: %w", err)
@@ -163,52 +165,42 @@ func Run(ctx context.Context, cfg config.Config, build BuildInfo) error {
 	backgroundHandler := httpapi.NewBackgroundHandler(backgroundService)
 	subdomainService := subdomains.NewService(subdomains.NewSQLStore(db))
 	subdomainHandler := httpapi.NewSubdomainHandler(authService, subdomainService)
+	seoMeta := seopkg.Config{InstanceName: cfg.InstanceName, PublicBaseURL: cfg.PublicBaseURL}
 	webHandler, err := webui.New(webui.Options{ResolveSEO: func(r *http.Request) (webui.SEO, error) {
-		var page navigation.PublishedPage
-		var resolveErr error
-		if strings.HasPrefix(r.URL.Path, "/u/") {
-			page, resolveErr = navigationService.PublicBySlug(r.Context(), strings.TrimPrefix(r.URL.Path, "/u/"))
-		} else if r.URL.Path == "/" {
-			host := r.Host
-			if value, _, splitErr := net.SplitHostPort(r.Host); splitErr == nil {
-				host = value
+		path := r.URL.Path
+		// Published navigation pages: system home, host-mapped subdomain, /u/{slug}.
+		if path == "/" || strings.HasPrefix(path, "/u/") {
+			var page navigation.PublishedPage
+			var resolveErr error
+			if strings.HasPrefix(path, "/u/") {
+				page, resolveErr = navigationService.PublicBySlug(r.Context(), strings.TrimPrefix(path, "/u/"))
+			} else {
+				host := r.Host
+				if value, _, splitErr := net.SplitHostPort(r.Host); splitErr == nil {
+					host = value
+				}
+				page, resolveErr = navigationService.PublicHomeForHost(r.Context(), host)
 			}
-			page, resolveErr = navigationService.PublicHomeForHost(r.Context(), host)
-		} else {
-			return webui.SEO{}, nil
-		}
-		if resolveErr != nil {
-			return webui.SEO{}, resolveErr
-		}
-		canonical := cfg.PublicBaseURL + r.URL.Path
-		if page.Subdomain != nil && r.URL.Path == "/" {
-			scheme := "https://"
-			if strings.HasPrefix(cfg.PublicBaseURL, "http://") {
-				scheme = "http://"
+			if resolveErr != nil {
+				// Fall through to static/noindex shell rather than bare defaults.
+				if static, ok := seoMeta.StaticRoute(path); ok {
+					return static, nil
+				}
+				return webui.SEO{}, resolveErr
 			}
-			canonical = scheme + *page.Subdomain + "/"
+			return seoMeta.FromPublishedPage(page, path, r.Host), nil
 		}
-		robots := "noindex,follow"
-		if page.Visibility == navigation.VisibilityPublic || page.Kind == navigation.PageKindSystem {
-			robots = "index,follow"
+		if static, ok := seoMeta.StaticRoute(path); ok {
+			return static, nil
 		}
-		title := page.Title
-		if strings.TrimSpace(page.SEOTitle) != "" {
-			title = page.SEOTitle
-		}
-		description := page.Description
-		if strings.TrimSpace(page.SEODescription) != "" {
-			description = page.SEODescription
-		}
-		image := page.OGImage
-		if image != "" && strings.HasPrefix(image, "/") {
-			image = strings.TrimRight(cfg.PublicBaseURL, "/") + image
-		}
-		return webui.SEO{Title: title, Description: description, Canonical: canonical, Robots: robots, Image: image}, nil
+		// Unknown SPA paths: keep default index.html metadata.
+		return webui.SEO{}, nil
 	}})
 	if err != nil {
 		return fmt.Errorf("initialize embedded frontend: %w", err)
 	}
+
+	seoHandler := httpapi.NewSEOHandler(catalogService, cfg.PublicBaseURL)
 
 	handler := httpapi.NewRouter(httpapi.RouterOptions{
 		Version: httpapi.VersionInfo{
@@ -219,6 +211,10 @@ func Run(ctx context.Context, cfg config.Config, build BuildInfo) error {
 		TrustedProxies: cfg.TrustedProxies,
 		Ready:          db.PingContext,
 		Web:            webHandler,
+		MountRoot: func(router chi.Router) {
+			router.Get("/robots.txt", seoHandler.Robots)
+			router.Get("/sitemap.xml", seoHandler.Sitemap)
+		},
 		MountAPI: func(router chi.Router) {
 			authHandler.Mount(router)
 			accountHandler.Mount(router)

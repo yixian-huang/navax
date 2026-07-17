@@ -227,6 +227,60 @@ func (s *Service) Discover(ctx context.Context, search, tag, sort string, page, 
 	return Page[DiscoverPage]{Items: items, Page: page, PageSize: pageSize, Total: total}, rows.Err()
 }
 
+// SitemapPublicPage is a minimal public page row for sitemap generation.
+type SitemapPublicPage struct {
+	Slug        string
+	PublishedAt time.Time
+}
+
+// SitemapPublicPages lists personal public pages (slug + last publish time).
+// Caps at 5000 entries to keep response size bounded.
+func (s *Service) SitemapPublicPages(ctx context.Context) ([]SitemapPublicPage, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT pp.slug, s.published_at
+		FROM page_publications pp
+		JOIN navigation_pages p ON p.id = pp.page_id
+		JOIN users u ON u.id = p.owner_id
+		JOIN published_snapshots s ON s.id = pp.current_snapshot_id
+		WHERE p.kind = 'personal'
+		  AND pp.visibility = 'public'
+		  AND pp.current_snapshot_id IS NOT NULL
+		  AND u.status = 'active'
+		ORDER BY s.published_at DESC
+		LIMIT 5000`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]SitemapPublicPage, 0)
+	for rows.Next() {
+		var item SitemapPublicPage
+		var publishedAt string
+		if err := rows.Scan(&item.Slug, &publishedAt); err != nil {
+			return nil, err
+		}
+		item.PublishedAt, err = time.Parse(time.RFC3339Nano, publishedAt)
+		if err != nil {
+			// Tolerate RFC3339 without nanos.
+			if t2, err2 := time.Parse(time.RFC3339, publishedAt); err2 == nil {
+				item.PublishedAt = t2
+			}
+		}
+		if strings.TrimSpace(item.Slug) == "" {
+			continue
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+// DiscoverEnabled reports whether the public discover surface is on.
+func (s *Service) DiscoverEnabled(ctx context.Context) (bool, error) {
+	var enabled bool
+	err := s.db.QueryRowContext(ctx, `SELECT discover_enabled FROM system_settings WHERE id = 1`).Scan(&enabled)
+	return enabled, err
+}
+
 func normalizePagination(page, pageSize int) (int, int) {
 	if page < 1 {
 		page = 1

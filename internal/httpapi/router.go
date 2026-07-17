@@ -25,7 +25,9 @@ type RouterOptions struct {
 	TrustedProxies []netip.Prefix
 	Ready          func(context.Context) error
 	MountAPI       func(chi.Router)
-	Web            http.Handler
+	// MountRoot registers routes on the site root (outside /api/v1), e.g. robots.txt.
+	MountRoot func(chi.Router)
+	Web       http.Handler
 }
 
 func NewRouter(options RouterOptions) http.Handler {
@@ -69,6 +71,10 @@ func NewRouter(options RouterOptions) http.Handler {
 			WriteError(w, r, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "API 请求方法不受支持", nil)
 		})
 	})
+
+	if options.MountRoot != nil {
+		options.MountRoot(router)
+	}
 
 	router.NotFound(func(w http.ResponseWriter, r *http.Request) {
 		if options.Web != nil && (r.Method == http.MethodGet || r.Method == http.MethodHead) {
