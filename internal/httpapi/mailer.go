@@ -85,8 +85,11 @@ func passwordResetMessage(instanceName, to, resetURL string, expiresAt time.Time
 func emailCodeMessage(instanceName, to, code, purpose string) integrations.Message {
 	instanceName = fallbackInstanceName(instanceName)
 	action := "登录"
-	if purpose == "register" {
+	switch purpose {
+	case "register":
 		action = "注册"
+	case "oauth_register":
+		action = "第三方账号注册"
 	}
 	text := fmt.Sprintf("你好，\n\n你正在 %s 进行%s。验证码为：%s\n\n10 分钟内有效。如非本人操作请忽略。",
 		instanceName, action, code)

@@ -63,6 +63,15 @@ export const authApi = {
     return `${base}?invitationToken=${encodeURIComponent(invitationToken)}`;
   },
 
+  completeOAuthRegister: (data: { email: string; code: string; invitationToken?: string }) =>
+    request<ApiResponse<AuthSession>>('/auth/oauth/register/email-code', { method: 'POST', body: data }),
+
+  resendOAuthRegisterCode: (email: string) =>
+    request<ApiResponse<{ message: string; needsInvite?: boolean }>>('/auth/oauth/register/resend', {
+      method: 'POST',
+      body: { email },
+    }),
+
   logout: () =>
     request<ApiResponse<null>>('/auth/logout', { method: 'POST' }),
 

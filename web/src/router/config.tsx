@@ -8,6 +8,7 @@ import AdminShell from "@/components/feature/AdminShell";
 const NotFound = lazy(() => import("@/pages/NotFound"));
 const Home = lazy(() => import("@/pages/home/page"));
 const LoginPage = lazy(() => import("@/pages/login/page"));
+const OAuthCompletePage = lazy(() => import("@/pages/oauth/complete/page"));
 const RegisterPage = lazy(() => import("@/pages/register/page"));
 const ForgotPasswordPage = lazy(() => import("@/pages/forgot-password/page"));
 const ResetPasswordPage = lazy(() => import("@/pages/reset-password/page"));
@@ -48,6 +49,10 @@ const routes: RouteObject[] = [
   {
     path: "/login",
     element: <LoginPage />,
+  },
+  {
+    path: "/oauth/complete",
+    element: <OAuthCompletePage />,
   },
   {
     path: "/register",
