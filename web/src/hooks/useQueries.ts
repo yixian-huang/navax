@@ -137,14 +137,17 @@ export function useSavePageComposition() {
       settings: PageSettings;
     }) => {
       if (!page?.settings) throw new Error('页面设置尚未加载');
+      // Prefer revision from the payload-bearing page when caller passes local edits;
+      // fall back to query cache. Content-order then settings must chain revisions.
       const api = navigationApi.forPage(page.id);
       const orderResponse = await api.replaceContentOrder({
         expectedRevision: page.draftRevision ?? 0,
         categories: input.categories,
       });
+      const nextRevision = orderResponse.data?.draftRevision ?? (page.draftRevision ?? 0) + 1;
       return api.replaceSettings({
         ...input.settings,
-        expectedRevision: orderResponse.data.draftRevision,
+        expectedRevision: nextRevision,
       });
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['navigation', 'page', scope] }),

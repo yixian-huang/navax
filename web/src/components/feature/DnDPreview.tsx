@@ -9,8 +9,14 @@ import { cn } from '@/lib/utils';
 import IconRenderer from '@/components/base/IconRenderer';
 import type { Category, Site } from '@/api/types';
 
-// ---- Density config — structured, no string splitting ----
+// ---- Density config — matches API enum: list | compact | comfortable ----
 const densityConfig = {
+  list: {
+    icon: { container: 'w-7 h-7', font: 'text-xs' },
+    text: 'text-[11px]',
+    padding: 'p-1.5 gap-1',
+    grip: 'h-3',
+  },
   compact: {
     icon: { container: 'w-7 h-7', font: 'text-xs' },
     text: 'text-[10px]',
@@ -21,12 +27,6 @@ const densityConfig = {
     icon: { container: 'w-9 h-9', font: 'text-sm' },
     text: 'text-xs',
     padding: 'p-2 gap-1',
-    grip: 'h-4',
-  },
-  spacious: {
-    icon: { container: 'w-10 h-10', font: 'text-sm' },
-    text: 'text-xs',
-    padding: 'p-3 gap-2',
     grip: 'h-4',
   },
 } as const;
@@ -132,9 +132,9 @@ export function SortableCategoryBlock({
           className={cn(
             'grid gap-2 rounded-lg p-2 min-h-[40px] transition-colors duration-200',
             isOver ? 'bg-primary-50/60 border border-dashed border-primary-200' : 'border border-transparent',
-            density === 'spacious' ? 'gap-3' : '',
+            density === 'comfortable' ? 'gap-3' : '',
           )}
-          style={{ gridTemplateColumns: `repeat(${Math.min(columns, 12)}, minmax(0, 1fr))` }}
+          style={{ gridTemplateColumns: `repeat(${Math.min(columns ?? 4, 8)}, minmax(0, 1fr))` }}
         >
           {category.sites.map(site => (
             <SortableSiteCard

@@ -65,10 +65,11 @@ const viewportWidths: Record<Viewport, string> = {
   mobile: 'max-w-[375px]',
 };
 
-const densityLabels: Record<string, string> = {
+// Must match API Density enum: list | compact | comfortable (not "spacious").
+const densityLabels: Record<Density, string> = {
+  list: '列表',
   compact: '紧凑',
   comfortable: '舒适',
-  spacious: '舒展',
 };
 
 // ============================================================
@@ -506,19 +507,38 @@ export default function LinksPage() {
   );
 
   const handleSaveLayout = useCallback(() => {
-    if (!page) return;
+    if (!page?.settings) return;
+    // Clamp to server-valid layout values before save (API: density enum, columns 1–8).
+    const density = (['list', 'compact', 'comfortable'] as const).includes(page.settings.layout.density as Density)
+      ? page.settings.layout.density
+      : 'comfortable';
+    const columns = Math.min(8, Math.max(1, page.settings.layout.columns || 4));
+    const settings = {
+      ...page.settings,
+      layout: {
+        ...page.settings.layout,
+        density,
+        columns,
+      },
+    };
     markSaving();
     saveComposition.mutate({
-      categories: page.categories.map(category => ({ id: category.id, siteIds: category.sites.map(site => site.id) })),
-      settings: page.settings,
+      categories: page.categories.map(category => ({
+        id: category.id,
+        siteIds: (category.sites ?? []).map(site => site.id),
+      })),
+      settings,
     }, {
       onSuccess: () => {
         markSaved();
         setHasLayoutChanges(false);
         setLocalPage(null);
-        toast('success', draftSaveToastMessage(page.publication));
+        toast('success', draftSaveToastMessage(page.publication, '布局已写入草稿'));
       },
-      onError: () => markError('保存布局失败'),
+      onError: (cause) => {
+        markError('保存布局失败');
+        toast('error', cause instanceof Error ? cause.message : '保存布局失败');
+      },
     });
   }, [page, saveComposition, markSaving, markSaved, markError, toast]);
 
@@ -910,9 +930,10 @@ export default function LinksPage() {
           <div className="space-y-1.5">
             <span className="text-[10px] text-foreground-400">密度</span>
             <div className="flex items-center bg-background-100 rounded-md p-0.5">
-              {(['compact', 'comfortable', 'spacious'] as const).map(d => (
+              {(['list', 'compact', 'comfortable'] as const).map(d => (
                 <button
                   key={d}
+                  type="button"
                   onClick={() => setDensity(d)}
                   className={cn(
                     'flex-1 py-1 rounded text-[10px] font-medium transition-colors duration-150 whitespace-nowrap',
@@ -930,13 +951,15 @@ export default function LinksPage() {
           <div className="space-y-1">
             <div className="flex items-center justify-between">
               <span className="text-[10px] text-foreground-400">列数</span>
-              <span className="text-[10px] font-mono text-foreground-600">{page.settings.layout.columns}</span>
+              <span className="text-[10px] font-mono text-foreground-600">
+                {Math.min(8, Math.max(1, page.settings.layout.columns))}
+              </span>
             </div>
             <input
               type="range"
-              min={4}
-              max={12}
-              value={page.settings.layout.columns}
+              min={1}
+              max={8}
+              value={Math.min(8, Math.max(1, page.settings.layout.columns || 4))}
               onChange={e => setColumns(Number(e.target.value))}
               className="w-full accent-primary-500 h-1"
             />
