@@ -31,6 +31,14 @@ export default function PublishStatusControl() {
   const { state, scope, isLoading } = usePublishUiState('toolbar');
   const { mutate: publishMutation, isPending: publishing } = usePublish();
 
+  if (isLoading) {
+    return (
+      <div className="hidden sm:inline-flex items-center gap-2">
+        <Loader2 className="w-3.5 h-3.5 animate-spin text-foreground-400" />
+      </div>
+    );
+  }
+
   const handlePrimary = () => {
     const intent = resolvePrimaryPublishIntent(state);
     if (intent === 'noop') return;
@@ -59,17 +67,17 @@ export default function PublishStatusControl() {
       <span
         className={cn(
           'text-xs font-medium whitespace-nowrap',
-          isLoading ? 'text-foreground-300' : shortLabelClass(state.id),
+          shortLabelClass(state.id),
         )}
       >
-        {isLoading ? '…' : state.shortLabel}
+        {state.shortLabel}
       </span>
 
       {state.primaryAction !== 'none' && (
         <button
           type="button"
           onClick={handlePrimary}
-          disabled={publishing || state.primaryDisabled}
+          disabled={publishing || isLoading || state.primaryDisabled}
           className="inline-flex items-center gap-1.5 h-7 px-3 rounded-md bg-primary-500 text-background-50 dark:text-foreground-950 text-xs font-medium hover:bg-primary-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors duration-150 whitespace-nowrap"
         >
           {publishing ? (
