@@ -300,6 +300,16 @@ body {
 [data-wallpaper] .site-card-list-domain {
   color: oklch(var(--foreground-700));
 }
+/* Muted description under domain / list secondary — follow wallpaper ink */
+[data-wallpaper] .site-card-desc,
+[data-wallpaper] .site-card-list-desc {
+  color: oklch(var(--foreground-600));
+}
+[data-wallpaper][data-wallpaper-tone="dark"] .site-card-desc,
+[data-wallpaper][data-wallpaper-tone="dark"] .site-card-list-desc {
+  color: var(--wp-ink-muted);
+  text-shadow: var(--wp-shadow);
+}
 
 /* Quiet empty state on public home / wallpaper */
 [data-wallpaper] .empty-quiet-panel {

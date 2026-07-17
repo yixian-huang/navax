@@ -1,9 +1,10 @@
 // ============================================================
 // nav.ax SiteCard — Refined Neutral / Material
 // Shared wrapper with three density views, context menu, visits.
+// Description: compact hidden; comfortable/list one muted line when present.
 // ============================================================
 
-import { useState, useCallback } from 'react';
+import { useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import type { Site, Density } from '@/api/types';
 import { useContextMenu, createSiteContextActions } from '@/components/base/ContextMenu';
@@ -64,6 +65,17 @@ function HighlightText({ text, query }: { text: string; query: string }) {
   );
 }
 
+/** Prefer non-empty description; used for secondary line + native tooltip. */
+function siteDescription(site: Site): string {
+  return (site.description || '').trim();
+}
+
+function tooltipFor(site: Site, domain: string): string {
+  const desc = siteDescription(site);
+  if (desc) return `${site.title} — ${desc}`;
+  return `${site.title} · ${domain}`;
+}
+
 // ============================================================
 // CardWrapper — shared click/keyboard/context-menu behavior
 // ============================================================
@@ -74,6 +86,7 @@ function CardWrapper({
   onDelete,
   children,
   className,
+  title,
 }: {
   site: Site;
   onOpen?: (site: Site) => void;
@@ -81,6 +94,8 @@ function CardWrapper({
   onDelete?: (site: Site) => void;
   children: React.ReactNode;
   className?: string;
+  /** Native browser tooltip (full title + description). */
+  title?: string;
 }) {
   const { handleContextMenu, portal } = useContextMenu();
   const { toast } = useToast();
@@ -125,6 +140,7 @@ function CardWrapper({
         href={site.url}
         target="_blank"
         rel="nofollow noopener noreferrer"
+        title={title}
         onClick={handleClick}
         onKeyDown={handleKeyDown}
         onContextMenu={onContextMenu}
@@ -147,10 +163,14 @@ function CardWrapper({
 export default function SiteCard({ site, density, onOpen, onEdit, onDelete, searchQuery }: SiteCardProps) {
   const domain = getDomain(site.url);
   const q = searchQuery || '';
+  const desc = siteDescription(site);
+  const tip = tooltipFor(site, domain);
 
-  const shared = { site, onOpen, onEdit, onDelete };
+  const shared = { site, onOpen, onEdit, onDelete, title: tip };
 
   if (density === 'list') {
+    // Second line: description preferred, else domain (layout height unchanged).
+    const secondary = desc || domain;
     return (
       <CardWrapper
         {...shared}
@@ -161,8 +181,15 @@ export default function SiteCard({ site, density, onOpen, onEdit, onDelete, sear
           <span className="block text-sm font-medium text-foreground-800 truncate group-hover:text-accent-500 transition-colors duration-200">
             <HighlightText text={site.title} query={q} />
           </span>
-          <span className="block text-[11px] text-foreground-300 truncate font-mono site-card-list-domain">
-            <HighlightText text={domain} query={q} />
+          <span
+            className={cn(
+              'block text-[11px] truncate site-card-list-domain',
+              desc
+                ? 'text-foreground-400 site-card-list-desc'
+                : 'text-foreground-300 font-mono',
+            )}
+          >
+            <HighlightText text={secondary} query={q} />
           </span>
         </span>
         <i className="ri-arrow-right-up-line text-sm text-foreground-200 opacity-0 group-hover:opacity-100 transition-all duration-200 flex-shrink-0" />
@@ -171,6 +198,7 @@ export default function SiteCard({ site, density, onOpen, onEdit, onDelete, sear
   }
 
   if (density === 'compact') {
+    // Keep dense icon grid; description only via native title tooltip.
     return (
       <CardWrapper {...shared} className="material-card flex flex-col items-center gap-2 p-3">
         <Favicon url={site.url} className="w-6 h-6" />
@@ -181,7 +209,7 @@ export default function SiteCard({ site, density, onOpen, onEdit, onDelete, sear
     );
   }
 
-  // Comfortable
+  // Comfortable: domain always; description only when present (no empty row).
   return (
     <CardWrapper {...shared} className="material-card flex flex-col gap-3 p-4">
       <div className="flex items-center justify-between">
@@ -197,6 +225,11 @@ export default function SiteCard({ site, density, onOpen, onEdit, onDelete, sear
         <p className="text-[11px] text-foreground-300 truncate font-mono mt-0.5">
           <HighlightText text={domain} query={q} />
         </p>
+        {desc ? (
+          <p className="site-card-desc text-[11px] text-foreground-400 truncate mt-0.5 leading-snug">
+            <HighlightText text={desc} query={q} />
+          </p>
+        ) : null}
       </div>
     </CardWrapper>
   );
