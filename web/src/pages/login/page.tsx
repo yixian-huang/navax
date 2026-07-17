@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import PublicShell from '@/components/feature/PublicShell';
 import NavaxLogo from '@/components/base/NavaxLogo';
-import { Mail, Lock, Eye, EyeOff, ArrowRight, KeyRound } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, ArrowRight, KeyRound, User } from 'lucide-react';
 import { useToast } from '@/components/base/Toast';
 import { authApi } from '@/api/auth';
 import { getPublicConfig } from '@/api/assets';
@@ -11,7 +11,26 @@ import { cn } from '@/lib/utils';
 
 type Mode = 'password' | 'code';
 
+function oauthToastMessage(code: string | null, registrationMode: string): string | null {
+  switch (code) {
+    case 'denied':
+      return '已取消第三方授权';
+    case 'invite_required':
+      if (registrationMode === 'open') {
+        return '第三方登录失败。若已有账号，请使用同一邮箱的 Google/GitHub 账号。';
+      }
+      return '当前为邀请注册：第三方登录仅支持已绑定账号，或 Google/GitHub 邮箱与站内账号相同；新用户需邀请链接，并在邀请页使用第三方注册。';
+    case 'account_disabled':
+      return '该账号已被禁用，请联系管理员';
+    case 'error':
+      return '第三方登录失败，请重试。若已有账号，请使用相同邮箱的 Google/GitHub 账号；新用户需邀请或公开注册。';
+    default:
+      return null;
+  }
+}
+
 export default function LoginPage() {
+  const [account, setAccount] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
@@ -38,9 +57,9 @@ export default function LoginPage() {
 
   useEffect(() => {
     const oauth = searchParams.get('oauth');
-    if (oauth === 'denied') toast('error', '已取消第三方授权');
-    if (oauth === 'error') toast('error', '第三方登录失败，请重试或使用邮箱登录');
-  }, [searchParams, toast]);
+    const msg = oauthToastMessage(oauth, registrationMode);
+    if (msg) toast('error', msg);
+  }, [searchParams, toast, registrationMode]);
 
   const applySession = (authData: { user: unknown; expiresAt?: string | null }) => {
     queryClient.setQueryData(['auth', 'session'], {
@@ -57,10 +76,10 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      const res = await authApi.login({ email, password });
+      const res = await authApi.login({ account: account.trim(), password });
       applySession(res.data);
     } catch {
-      toast('error', '登录失败，请检查邮箱和密码');
+      toast('error', '登录失败，请检查邮箱/用户名和密码');
       setLoading(false);
     }
   };
@@ -128,16 +147,17 @@ export default function LoginPage() {
           {mode === 'password' ? (
             <form onSubmit={handlePasswordLogin} className="space-y-4">
               <div>
-                <label htmlFor="email" className="block text-sm font-medium text-foreground-700 mb-1.5">邮箱</label>
+                <label htmlFor="account" className="block text-sm font-medium text-foreground-700 mb-1.5">邮箱或用户名</label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground-300" />
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground-300" />
                   <input
-                    id="email"
-                    type="email"
-                    autoComplete="email"
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
+                    id="account"
+                    type="text"
+                    autoComplete="username"
+                    value={account}
+                    onChange={e => setAccount(e.target.value)}
                     required
+                    placeholder="email@example.com 或 username"
                     className="w-full h-11 pl-10 pr-4 rounded-lg bg-background-50 border border-background-200/70 text-sm focus:outline-none focus:border-primary-300"
                   />
                 </div>
@@ -253,6 +273,11 @@ export default function LoginPage() {
                   </a>
                 )}
               </div>
+              {registrationMode !== 'open' && (
+                <p className="mt-3 text-[11px] leading-relaxed text-foreground-400 text-center">
+                  邀请制下：第三方登录需站内已有账号且邮箱一致；新用户请使用邀请链接。
+                </p>
+              )}
             </div>
           )}
 

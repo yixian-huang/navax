@@ -31,7 +31,13 @@ export const authApi = {
     request<ApiResponse<AuthSession>>('/auth/session'),
 
   login: (data: LoginRequest) =>
-    request<ApiResponse<AuthSession>>('/auth/login', { method: 'POST', body: data }),
+    request<ApiResponse<AuthSession>>('/auth/login', {
+      method: 'POST',
+      body: {
+        password: data.password,
+        account: data.account || data.email || data.username || '',
+      },
+    }),
 
   requestEmailCode: (data: {
     email: string;

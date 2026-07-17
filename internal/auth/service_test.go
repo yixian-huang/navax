@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -34,6 +35,14 @@ func (f *fakeStore) UserByEmail(_ context.Context, email string) (User, error) {
 		return User{}, errors.New("not found")
 	}
 	return user, nil
+}
+func (f *fakeStore) UserByUsername(_ context.Context, username string) (User, error) {
+	for _, user := range f.users {
+		if strings.EqualFold(user.Username, username) {
+			return user, nil
+		}
+	}
+	return User{}, errors.New("not found")
 }
 func (f *fakeStore) UserBySessionHash(_ context.Context, hash string, _ time.Time) (Session, error) {
 	session, ok := f.sessions[hash]
@@ -109,6 +118,20 @@ func TestLoginRejectsWrongPasswordAndDisabledUser(t *testing.T) {
 	store.users[user.Email] = user
 	if _, _, err := service.Login(context.Background(), user.Email, "strong password", "test"); !errors.Is(err, ErrAccountDisabled) {
 		t.Fatalf("disabled user error = %v", err)
+	}
+}
+
+func TestLoginAcceptsUsername(t *testing.T) {
+	store := newFakeStore()
+	service := NewService(store, "01234567890123456789012345678901", time.Hour)
+	if _, _, err := service.Bootstrap(context.Background(), "01234567890123456789012345678901", BootstrapInput{
+		Username: "admin", Email: "admin@example.com", Password: "strong password", InstanceName: "nav.ax", PublicBaseURL: "https://nav.ax",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	session, token, err := service.Login(context.Background(), "Admin", "strong password", "test")
+	if err != nil || token == "" || session.User.Username != "admin" {
+		t.Fatalf("username login = %+v token=%q err=%v", session, token, err)
 	}
 }
 

@@ -356,7 +356,10 @@ paths:
           name: error
           schema: { type: string }
       responses:
-        '302': { description: 重定向到 /app 或 /login }
+        '302':
+          description: |
+            成功时重定向到 /app 或 /admin；失败时重定向到 /login?oauth=…
+            （denied | invite_required | account_disabled | error）
 
   /api/v1/me/profile:
     get:
@@ -1825,10 +1828,27 @@ components:
         expiresAt: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
     LoginRequest:
       type: object
-      required: [email, password]
+      required: [password]
       properties:
-        email: { type: string, format: email, maxLength: 254 }
+        account:
+          type: string
+          minLength: 1
+          maxLength: 254
+          description: 邮箱或用户名（推荐）
+        email:
+          type: string
+          minLength: 1
+          maxLength: 254
+          description: 兼容字段；可填邮箱或用户名，等同 account
+        username:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]{3,32}$'
+          description: 兼容字段；用户名登录
         password: { type: string, format: password, minLength: 1, maxLength: 1024 }
+      anyOf:
+        - required: [account]
+        - required: [email]
+        - required: [username]
     RegisterRequest:
       type: object
       required: [username, email, password]

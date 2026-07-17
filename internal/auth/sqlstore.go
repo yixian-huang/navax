@@ -70,6 +70,15 @@ func (s *SQLStore) UserByEmail(ctx context.Context, email string) (User, error) 
 	return user, nil
 }
 
+func (s *SQLStore) UserByUsername(ctx context.Context, username string) (User, error) {
+	row := s.db.QueryRowContext(ctx, userSelect+" WHERE username = ?", username)
+	user, err := scanUser(row)
+	if err != nil {
+		return User{}, err
+	}
+	return user, nil
+}
+
 func (s *SQLStore) UserBySessionHash(ctx context.Context, hash string, now time.Time) (Session, error) {
 	row := s.db.QueryRowContext(ctx, `
 		SELECT s.id, s.expires_at,
