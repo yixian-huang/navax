@@ -115,9 +115,9 @@ export default function LayoutSidebar({
             </div>
           </div>
 
-          {/* Search + density row */}
-          <div className="flex items-center gap-4 mb-6 rise-in" style={{ animationDelay: '40ms' }}>
-            <div className="flex-1">
+          {/* Search + density row — z-20 so dropdowns paint above the sites grid */}
+          <div className="relative z-20 flex items-center gap-4 mb-6 rise-in" style={{ animationDelay: '40ms' }}>
+            <div className="flex-1 min-w-0">
               <SearchBar
                 value={query}
                 onChange={onQueryChange}

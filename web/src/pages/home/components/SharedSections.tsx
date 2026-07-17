@@ -18,8 +18,10 @@ export function SearchSection({
   suggestions?: string[];
   showEngineSelector?: boolean;
 }) {
+  // relative z-20: rise-in uses transform (stacking context). Without z-index,
+  // later sections (SitesSection) paint over search engine / history dropdowns.
   return (
-    <div className="mb-14 md:mb-16 rise-in" style={{ animationDelay: `${delay}ms` }}>
+    <div className="relative z-20 mb-14 md:mb-16 rise-in" style={{ animationDelay: `${delay}ms` }}>
       <SearchBar
         value={query}
         onChange={onQueryChange}

@@ -28,8 +28,8 @@ export default function LayoutBrowseFirst({
 }: LayoutProps) {
   return (
     <div className="mx-auto max-w-4xl px-6 md:px-8 pt-12 md:pt-16 pb-24">
-      {/* Inline compact search at top — secondary priority */}
-      <div className="mb-10 rise-in">
+      {/* Inline compact search at top — z-20 so menus clear the sites section */}
+      <div className="relative z-20 mb-10 rise-in">
         <SearchSection
           query={query} onQueryChange={onQueryChange} engine={engine}
           onEngineChange={onEngineChange} onSearch={onSearch} delay={0}
