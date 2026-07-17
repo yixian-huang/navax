@@ -4,20 +4,40 @@
 // ============================================================
 
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { ArrowLeft, ExternalLink } from 'lucide-react';
-import { useMyPage } from '@/hooks/useQueries';
+import { Link, useNavigate } from 'react-router-dom';
+import { ArrowLeft, ExternalLink, Globe, Loader2 } from 'lucide-react';
+import { useMyPage, usePublish } from '@/hooks/useQueries';
+import { usePublishUiState } from '@/hooks/usePublishUiState';
+import {
+  navigateToVisibilityFix,
+  publishSettingsPath,
+  resolvePrimaryPublishIntent,
+  toastForPublishSuccess,
+} from '@/lib/publish-actions';
 import { ErrorState, LoadingSkeleton } from '@/components/base/SharedUI';
+import { useToast } from '@/components/base/Toast';
 import { request } from '@/api/client';
 import type { ApiResponse, PublishedPage } from '@/api/types';
 import IconRenderer from '@/components/base/IconRenderer';
 
+function isVisibilityRelatedError(message: string): boolean {
+  return /visibility|private|可见性|私密/i.test(message);
+}
+
 export default function PreviewPage() {
+  const navigate = useNavigate();
+  const { toast } = useToast();
   const pageQuery = useMyPage();
+  const {
+    state,
+    scope,
+    slug,
+    publication,
+  } = usePublishUiState('preview');
+  const { mutate: publishMutation, isPending: publishing } = usePublish();
   const [preview, setPreview] = useState<PublishedPage | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const scope = new URLSearchParams(window.location.search).get('scope') === 'system' ? 'system' : 'personal';
 
   useEffect(() => {
     if (!pageQuery.data?.id) return;
@@ -47,35 +67,78 @@ export default function PreviewPage() {
     );
   }
 
+  const isPublished = state.showUnpublish || publication?.published === true;
+  const liveSlug = slug || publication?.slug || preview.slug;
+
+  const handlePrimaryPublish = () => {
+    const intent = resolvePrimaryPublishIntent(state);
+    if (intent === 'noop') return;
+    if (intent === 'redirect_visibility') {
+      navigateToVisibilityFix(navigate, scope);
+      return;
+    }
+
+    const stateBefore = state;
+    publishMutation(undefined, {
+      onSuccess: () => {
+        toast('success', toastForPublishSuccess(stateBefore));
+      },
+      onError: (cause: Error) => {
+        const message = cause.message || '发布失败';
+        toast('error', message);
+        if (isVisibilityRelatedError(message)) {
+          navigateToVisibilityFix(navigate, scope);
+        }
+      },
+    });
+  };
+
   return (
     <div className="max-w-4xl">
       <div className="mb-5 flex items-center justify-between gap-3 flex-wrap">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <Link
-              to={`/app/publish?scope=${scope}`}
+              to={publishSettingsPath(scope)}
               className="inline-flex items-center gap-1 text-xs text-foreground-400 hover:text-foreground-600"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               返回发布
             </Link>
           </div>
-          <h1 className="text-2xl font-bold font-heading text-foreground-950">草稿预览</h1>
+          <h1 className="text-2xl font-bold font-heading text-foreground-950">草稿预览 · 非公开</h1>
           <p className="text-sm text-foreground-400 mt-1">
             这是当前草稿的只读投影，未发布内容不会影响公开页
           </p>
         </div>
-        {preview.slug && (
-          <Link
-            to={`/u/${preview.slug}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="h-9 px-3 rounded-lg border border-background-200 text-sm text-foreground-600 hover:bg-background-100 inline-flex items-center gap-1.5"
-          >
-            <ExternalLink className="w-3.5 h-3.5" />
-            打开已发布页
-          </Link>
-        )}
+        <div className="flex items-center gap-2 flex-wrap">
+          {state.primaryAction !== 'none' && (
+            <button
+              type="button"
+              onClick={handlePrimaryPublish}
+              disabled={publishing || state.primaryDisabled}
+              className="h-9 px-3 rounded-lg bg-primary-500 text-background-50 dark:text-foreground-950 text-sm font-medium hover:bg-primary-600 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1.5 transition-colors duration-150"
+            >
+              {publishing ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Globe className="w-3.5 h-3.5" />
+              )}
+              {publishing ? '发布中…' : state.primaryLabel}
+            </button>
+          )}
+          {isPublished && liveSlug && (
+            <Link
+              to={`/u/${liveSlug}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="h-9 px-3 rounded-lg border border-background-200 text-sm text-foreground-600 hover:bg-background-100 inline-flex items-center gap-1.5"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              打开线上版
+            </Link>
+          )}
+        </div>
       </div>
 
       <div className="rounded-2xl border border-background-200/70 bg-background-50 p-5 md:p-6 space-y-5">
