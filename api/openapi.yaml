@@ -2370,30 +2370,40 @@ components:
         categories: { type: array, items: { $ref: '#/components/schemas/ImportCategory' } }
         totals:
           type: object
-          required: [categories, sites, duplicates, invalid]
+          required: [categories, sites, duplicates, invalid, truncated]
           properties:
             categories: { type: integer, minimum: 0 }
             sites: { type: integer, minimum: 0 }
             duplicates: { type: integer, minimum: 0 }
             invalid: { type: integer, minimum: 0 }
+            truncated:
+              type: integer
+              minimum: 0
+              description: Sites whose title was clamped to the max length during preview.
     ImportCategory:
       type: object
-      required: [sourceId, name, enabled, sites]
+      required: [sourceId, name, enabled, truncated, sites]
       properties:
         sourceId: { type: string }
         name: { type: string }
         enabled: { type: boolean }
+        truncated:
+          type: boolean
+          description: True when the category name was clamped to the max length.
         sites:
           type: array
           items:
             type: object
-            required: [sourceId, title, url, duplicate, valid, enabled]
+            required: [sourceId, title, url, duplicate, valid, truncated, enabled]
             properties:
               sourceId: { type: string }
               title: { type: string }
               url: { type: string }
               duplicate: { type: boolean }
               valid: { type: boolean }
+              truncated:
+                type: boolean
+                description: True when the site title was clamped to the max length (empty-title hostname fallback is not truncation).
               enabled:
                 type: boolean
                 description: Proposed draft enabled state for this preview item (bookmarks default false; JSON follows file).

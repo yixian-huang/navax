@@ -207,12 +207,13 @@ export default function ImportExportPage() {
 
         {preview && (
           <div className="space-y-4 border-t border-background-100 pt-4">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
               {[
                 ['分类', preview.totals.categories],
                 ['站点', preview.totals.sites],
                 ['重复', preview.totals.duplicates],
                 ['无效', preview.totals.invalid],
+                ['已截断', preview.totals.truncated],
               ].map(([label, value]) => (
                 <div key={label} className="rounded-lg bg-background-50 p-3">
                   <div className="text-lg font-semibold text-foreground-900">{value}</div>
@@ -224,7 +225,14 @@ export default function ImportExportPage() {
             <div className="max-h-80 overflow-y-auto rounded-lg border border-background-200/70 divide-y divide-background-100">
               {preview.categories.map(category => (
                 <div key={category.sourceId} className="p-3">
-                  <div className="text-sm font-medium text-foreground-800 mb-2">{category.name}</div>
+                  <div className="text-sm font-medium text-foreground-800 mb-2 flex items-center gap-2 min-w-0">
+                    <span className="truncate">{category.name}</span>
+                    {category.truncated && (
+                      <span className="shrink-0 text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-100 px-1.5 py-0.5 rounded">
+                        分类名已截断
+                      </span>
+                    )}
+                  </div>
                   <div className="space-y-1.5">
                     {category.sites.map(site => {
                       const selectable = site.valid && !site.duplicate;
@@ -241,8 +249,11 @@ export default function ImportExportPage() {
                             <span className="block text-foreground-700 truncate">{site.title}</span>
                             <span className="block text-foreground-400 truncate">{site.url}</span>
                           </span>
-                          {site.duplicate && <span className="text-accent-600">重复</span>}
-                          {!site.valid && <span className="text-red-500">{site.error || '无效'}</span>}
+                          <span className="shrink-0 flex flex-col items-end gap-0.5">
+                            {site.truncated && <span className="text-amber-600">已截断</span>}
+                            {site.duplicate && <span className="text-accent-600">重复</span>}
+                            {!site.valid && <span className="text-red-500">{site.error || '无效'}</span>}
+                          </span>
                         </label>
                       );
                     })}
