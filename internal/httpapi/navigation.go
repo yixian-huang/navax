@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/yixian-huang/navax/internal/idempotency"
@@ -446,7 +447,7 @@ func (h *NavigationHandler) writeError(w http.ResponseWriter, r *http.Request, e
 	case errors.Is(err, navigation.ErrConflict), errors.Is(err, navigation.ErrInvalidOrder), errors.Is(err, navigation.ErrUncategorized):
 		WriteError(w, r, http.StatusConflict, "CONFLICT", "导航内容发生冲突", nil)
 	case errors.Is(err, navigation.ErrValidation):
-		WriteError(w, r, http.StatusUnprocessableEntity, "VALIDATION_FAILED", err.Error(), nil)
+		WriteError(w, r, http.StatusUnprocessableEntity, "VALIDATION_FAILED", navigationValidationMessage(err), nil)
 	default:
 		WriteError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "导航操作失败", nil)
 	}
@@ -458,4 +459,16 @@ func queryInt(r *http.Request, name string, fallback int) int {
 		return fallback
 	}
 	return value
+}
+
+// navigationValidationMessage prefers the Chinese detail after the sentinel prefix.
+func navigationValidationMessage(err error) string {
+	if err == nil {
+		return "导航数据校验失败"
+	}
+	text := err.Error()
+	if rest, ok := strings.CutPrefix(text, navigation.ErrValidation.Error()+": "); ok && strings.TrimSpace(rest) != "" {
+		return rest
+	}
+	return text
 }

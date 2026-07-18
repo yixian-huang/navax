@@ -252,17 +252,17 @@ export default function SiteTable({
                       </a>
                     </td>
                     <td className="px-2 py-2.5 align-top hidden sm:table-cell">
-                      <span
-                        className={cn(
-                          'inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium border',
-                          isHidden
-                            ? 'bg-background-100 text-foreground-500 border-background-200'
-                            : 'bg-emerald-50 text-emerald-700 border-emerald-100',
-                        )}
-                      >
-                        {isHidden ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-                        {isHidden ? '隐藏' : '上架'}
-                      </span>
+                      {isHidden ? (
+                        <span
+                          className="inline-flex items-center gap-1 text-[10px] text-foreground-400"
+                          title="隐藏：发布后访客不可见"
+                        >
+                          <EyeOff className="w-3.5 h-3.5" />
+                          隐藏
+                        </span>
+                      ) : (
+                        <span className="sr-only">上架</span>
+                      )}
                     </td>
                     <td className="px-2 py-2.5 align-top hidden lg:table-cell">
                       <span className="inline-flex items-center gap-1 max-w-full px-1.5 py-0.5 rounded text-[10px] text-foreground-500 bg-background-100">
@@ -276,12 +276,7 @@ export default function SiteTable({
                           <button
                             type="button"
                             onClick={() => onToggleEnabled(site)}
-                            className={cn(
-                              'w-7 h-7 flex items-center justify-center rounded transition-colors duration-150',
-                              isHidden
-                                ? 'text-foreground-400 hover:text-emerald-600 hover:bg-emerald-50'
-                                : 'text-emerald-600 hover:text-foreground-500 hover:bg-background-100',
-                            )}
+                            className="w-7 h-7 flex items-center justify-center rounded transition-colors duration-150 text-foreground-300 hover:text-foreground-600 hover:bg-background-100"
                             aria-label={isHidden ? `上架 ${site.title}` : `隐藏 ${site.title}`}
                             title={isHidden ? '上架（需发布后生效）' : '隐藏（需发布后生效）'}
                           >

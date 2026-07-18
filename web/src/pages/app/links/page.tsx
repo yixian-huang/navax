@@ -260,7 +260,8 @@ export default function LinksPage() {
 
   // Sensors
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    // Slightly longer distance avoids accidental drags when clicking action icons.
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
@@ -503,6 +504,17 @@ export default function LinksPage() {
       },
     );
   }, [page, updateSite, markSaving, markSaved, markError, toast]);
+
+  const sitePreviewActions = useMemo(() => ({
+    onEdit: (site: Site) => {
+      setPanelMode('site');
+      setPanelTitle('编辑站点');
+      setEditingItem({ id: site.id, type: 'site' });
+      setPanelOpen(true);
+    },
+    onDelete: (site: Site) => setDeleteTarget({ type: 'site', id: site.id, name: site.title }),
+    onToggleEnabled: (site: Site) => { void handleToggleSiteEnabled(site); },
+  }), [handleToggleSiteEnabled]);
 
   const handleToggleCategoryEnabled = useCallback(async (cat: Category) => {
     if (!page) return;
@@ -789,7 +801,7 @@ export default function LinksPage() {
   const showPreview = editorFocus === 'preview' || editorFocus === 'both';
 
   return (
-    <div className="-m-4 md:-m-6 flex flex-col h-[calc(100vh-7.5rem)]">
+    <div className="-m-4 md:-m-6 flex flex-col h-[calc(100dvh-7.5rem)] min-h-0 overflow-hidden">
       {/* Focus tabs — critical when managing thousands of links */}
       <div className="flex-shrink-0 border-b border-background-200/70 bg-background-50 px-3 py-2 flex items-center gap-2 flex-wrap">
         <span className="text-[11px] text-foreground-400 mr-1">工作区</span>
@@ -820,11 +832,11 @@ export default function LinksPage() {
           站点多时建议用「链接管理」+ 表格视图
         </span>
       </div>
-      <div className="flex flex-1 min-h-0">
+      <div className="flex flex-1 min-h-0 overflow-hidden">
       {/* ---- Left Panel ---- */}
       <div
         className={cn(
-          'flex-shrink-0 border-r border-background-200/70 bg-white flex flex-col transition-all duration-200 overflow-hidden',
+          'flex-shrink-0 border-r border-background-200/70 bg-white flex flex-col min-h-0 transition-all duration-200 overflow-hidden',
           !showManage && 'w-0 border-0',
           showManage && editorFocus === 'manage' && 'w-full border-0',
           showManage && editorFocus === 'both' && (leftOpen ? 'w-80 xl:w-[360px]' : 'w-0'),
@@ -1021,7 +1033,7 @@ export default function LinksPage() {
                   {cat.name}
                 </span>
                 {cat.enabled === false && (
-                  <span className="text-[10px] text-foreground-400 px-1.5 py-0.5 rounded bg-background-100">已隐藏</span>
+                  <EyeOff className="w-3.5 h-3.5 text-foreground-400 flex-shrink-0" aria-label="分类已隐藏" />
                 )}
                 <Badge>{cat.sites.length}</Badge>
                 <ChevronRight
@@ -1123,25 +1135,18 @@ export default function LinksPage() {
                             {site.url.replace(/^https?:\/\//, '').replace(/^www\./, '')}
                           </a>
                         </div>
-                        {site.enabled === false ? (
-                          <span className="flex-shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-background-100 text-foreground-500 text-[10px] font-medium border border-background-200">
-                            <EyeOff className="w-3 h-3" />
-                            隐藏
-                          </span>
-                        ) : (
-                          <span className="flex-shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-medium border border-emerald-100">
-                            <Eye className="w-3 h-3" />
-                            上架
+                        {site.enabled === false && (
+                          <span
+                            className="flex-shrink-0 text-foreground-400"
+                            title="隐藏：发布后访客不可见"
+                            aria-label="已隐藏"
+                          >
+                            <EyeOff className="w-3.5 h-3.5" />
                           </span>
                         )}
                         <button
                           onClick={() => void handleToggleSiteEnabled(site)}
-                          className={cn(
-                            'w-6 h-6 flex items-center justify-center rounded opacity-0 group-hover:opacity-100 transition-all duration-150 flex-shrink-0',
-                            site.enabled === false
-                              ? 'text-foreground-400 hover:text-emerald-600 hover:bg-emerald-50'
-                              : 'text-emerald-600 hover:text-foreground-500 hover:bg-background-100',
-                          )}
+                          className="w-6 h-6 flex items-center justify-center rounded opacity-0 group-hover:opacity-100 transition-all duration-150 flex-shrink-0 text-foreground-300 hover:text-foreground-600 hover:bg-background-100"
                           aria-label={site.enabled === false ? `上架 ${site.title}` : `隐藏 ${site.title}`}
                           title={site.enabled === false ? '上架（需发布后生效）' : '隐藏（需发布后生效）'}
                         >
@@ -1291,42 +1296,43 @@ export default function LinksPage() {
 
       {/* ---- Right Panel: Live Preview ---- */}
       <div className={cn(
-        'flex-1 flex flex-col bg-background-50 min-w-0',
+        'flex-1 flex flex-col bg-background-50 min-w-0 min-h-0 overflow-hidden',
         !showPreview && 'hidden',
       )}>
-        {/* Preview toolbar */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-background-200/70 bg-white">
-          <div className="flex items-center gap-2">
+        {/* Preview toolbar — save status lives here so no extra banner grows the page */}
+        <div className="flex-shrink-0 flex items-center justify-between gap-2 px-4 py-2.5 border-b border-background-200/70 bg-white">
+          <div className="flex items-center gap-2 min-w-0">
             {!leftOpen && showManage && (
               <button
                 onClick={() => setLeftOpen(true)}
-                className="w-7 h-7 flex items-center justify-center rounded-lg text-foreground-400 hover:bg-background-100 transition-colors duration-150"
+                className="w-7 h-7 flex items-center justify-center rounded-lg text-foreground-400 hover:bg-background-100 transition-colors duration-150 flex-shrink-0"
                 aria-label="打开面板"
               >
                 <PanelLeft className="w-4 h-4" />
               </button>
             )}
-            <h2 className="text-sm font-semibold text-foreground-700">实时预览</h2>
-            {(layoutSaveState === 'dirty' || layoutSaveState === 'saving' || layoutSaveState === 'error' || layoutSaveState === 'saved') && (
-              <span
-                className={cn(
-                  'hidden sm:inline-flex items-center gap-1 h-6 px-2 rounded-full text-[10px] font-medium',
-                  layoutSaveState === 'dirty' && 'bg-accent-50 text-accent-700',
-                  layoutSaveState === 'saving' && 'bg-background-100 text-foreground-600',
-                  layoutSaveState === 'saved' && 'bg-primary-50 text-primary-700',
-                  layoutSaveState === 'error' && 'bg-red-50 text-red-600',
-                )}
-              >
-                {layoutSaveState === 'saving' && <Loader2 className="w-3 h-3 animate-spin" />}
-                {layoutSaveState === 'saved' && <Check className="w-3 h-3" />}
-                {layoutSaveState === 'dirty' && '布局已改 · 即将保存'}
-                {layoutSaveState === 'saving' && '正在保存草稿…'}
-                {layoutSaveState === 'saved' && '草稿已更新'}
-                {layoutSaveState === 'error' && '保存失败'}
-              </span>
-            )}
+            <h2 className="text-sm font-semibold text-foreground-700 flex-shrink-0">实时预览</h2>
+            <span
+              className={cn(
+                'hidden sm:inline-flex items-center gap-1 h-6 px-2 rounded-full text-[10px] font-medium truncate max-w-[14rem]',
+                layoutSaveState === 'dirty' && 'bg-accent-50 text-accent-700',
+                layoutSaveState === 'saving' && 'bg-background-100 text-foreground-600',
+                layoutSaveState === 'saved' && 'bg-primary-50 text-primary-700',
+                layoutSaveState === 'error' && 'bg-red-50 text-red-600',
+                layoutSaveState === 'idle' && 'bg-background-50 text-foreground-400',
+              )}
+              title="拖拽与布局改动会自动保存到草稿"
+            >
+              {layoutSaveState === 'saving' && <Loader2 className="w-3 h-3 animate-spin flex-shrink-0" />}
+              {layoutSaveState === 'saved' && <Check className="w-3 h-3 flex-shrink-0" />}
+              {layoutSaveState === 'dirty' && '布局已改 · 自动保存中'}
+              {layoutSaveState === 'saving' && '正在保存…'}
+              {layoutSaveState === 'saved' && '草稿已更新'}
+              {layoutSaveState === 'error' && '保存失败'}
+              {layoutSaveState === 'idle' && '拖拽可改布局'}
+            </span>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 flex-shrink-0">
             {(layoutSaveState === 'dirty' || layoutSaveState === 'error') && (
               <button
                 type="button"
@@ -1359,44 +1365,8 @@ export default function LinksPage() {
           </div>
         </div>
 
-        {/* Sticky save strip when dirty — sits where the user is dragging */}
-        {(layoutSaveState === 'dirty' || layoutSaveState === 'saving' || layoutSaveState === 'error') && (
-          <div
-            className={cn(
-              'flex items-center justify-between gap-3 px-4 py-2 border-b text-xs',
-              layoutSaveState === 'error'
-                ? 'bg-red-50 border-red-100 text-red-700'
-                : 'bg-accent-50/80 border-accent-100/80 text-accent-800',
-            )}
-          >
-            <span className="min-w-0">
-              {layoutSaveState === 'saving' && '正在把布局写入草稿…'}
-              {layoutSaveState === 'dirty' && '预览中的拖拽与布局调整会自动保存到草稿，无需回到左侧。'}
-              {layoutSaveState === 'error' && '自动保存失败，可点右侧按钮重试。'}
-            </span>
-            <button
-              type="button"
-              onClick={handleSaveLayout}
-              disabled={layoutSaveState === 'saving'}
-              className={cn(
-                'h-7 px-3 rounded-md text-[11px] font-medium inline-flex items-center gap-1 flex-shrink-0 whitespace-nowrap',
-                layoutSaveState === 'saving'
-                  ? 'bg-background-200 text-foreground-400 cursor-wait'
-                  : 'bg-primary-500 text-background-50 hover:bg-primary-600',
-              )}
-            >
-              {layoutSaveState === 'saving' ? (
-                <Loader2 className="w-3 h-3 animate-spin" />
-              ) : (
-                <Save className="w-3 h-3" />
-              )}
-              {layoutSaveState === 'saving' ? '保存中' : '立即保存'}
-            </button>
-          </div>
-        )}
-
-        {/* Preview content */}
-        <div className="flex-1 overflow-y-auto p-4 md:p-6">
+        {/* Preview content — only this region scrolls */}
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 md:p-6">
           <DndContext
             sensors={sensors}
             collisionDetection={collisionDetection}
@@ -1443,16 +1413,7 @@ export default function LinksPage() {
                         columns={page.settings.layout.columns}
                         isOver={overCategoryId === cat.id}
                         defaultCollapsed={cat.sites.length > 24}
-                        siteActions={{
-                          onEdit: site => {
-                            setPanelMode('site');
-                            setPanelTitle('编辑站点');
-                            setEditingItem({ id: site.id, type: 'site' });
-                            setPanelOpen(true);
-                          },
-                          onDelete: site => setDeleteTarget({ type: 'site', id: site.id, name: site.title }),
-                          onToggleEnabled: site => { void handleToggleSiteEnabled(site); },
-                        }}
+                        siteActions={sitePreviewActions}
                       />
                     ))}
                   </div>
