@@ -71,6 +71,13 @@ export default function SiteTable({
   };
 
   const enabledCount = sites.filter(s => s.enabled !== false).length;
+  const siteCountByCategory = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const site of sites) {
+      map.set(site.categoryId, (map.get(site.categoryId) ?? 0) + 1);
+    }
+    return map;
+  }, [sites]);
 
   return (
     <div className="flex flex-col h-full min-w-0">
@@ -86,6 +93,45 @@ export default function SiteTable({
             className="w-full h-8 pl-8 pr-3 rounded-md bg-background-50 border border-background-200/70 text-xs text-foreground-900 focus:outline-none focus:border-primary-300 transition-all duration-150"
           />
         </div>
+        {categories.length > 0 && (
+          <div className="flex flex-wrap gap-1" role="group" aria-label="分类快捷筛选">
+            <button
+              type="button"
+              onClick={() => setCategoryFilter('all')}
+              className={cn(
+                'h-6 px-2 rounded-full text-[10px] font-medium border transition-colors',
+                categoryFilter === 'all'
+                  ? 'bg-primary-500 text-background-50 border-primary-500'
+                  : 'bg-background-50 text-foreground-600 border-background-200 hover:border-primary-300',
+              )}
+            >
+              全部 {sites.length}
+            </button>
+            {categories.map(cat => {
+              const count = siteCountByCategory.get(cat.id) ?? 0;
+              const active = categoryFilter === cat.id;
+              return (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => setCategoryFilter(cat.id)}
+                  className={cn(
+                    'h-6 max-w-full px-2 rounded-full text-[10px] font-medium border transition-colors truncate',
+                    active
+                      ? 'bg-primary-500 text-background-50 border-primary-500'
+                      : 'bg-background-50 text-foreground-600 border-background-200 hover:border-primary-300',
+                  )}
+                  title={count === 0 ? `${cat.name}（空分类）` : `${cat.name}（${count}）`}
+                >
+                  {cat.name}
+                  <span className={cn('ml-1 tabular-nums', active ? 'opacity-80' : 'text-foreground-400')}>
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
         <div className="flex items-center gap-2 flex-wrap">
           <select
             value={categoryFilter}
