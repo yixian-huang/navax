@@ -29,7 +29,8 @@ test.describe('用户工作台', () => {
     await page.getByRole('button', { name: '新建分类' }).click();
     await page.getByPlaceholder('例如：开发工具').fill('我的书签');
     await page.getByRole('button', { name: '创建' }).click();
-    await expect(page.getByText('我的书签').first()).toBeVisible();
+    // Table view exposes categories as visible filter chips (not only <option> text).
+    await expect(page.getByRole('button', { name: /我的书签/ }).first()).toBeVisible();
 
     // 快速添加：填 URL，在「更多选项」里手动命名，避免依赖线上抓取结果。
     await page.getByRole('button', { name: '添加站点' }).first().click();
@@ -38,7 +39,8 @@ test.describe('用户工作台', () => {
     await page.getByPlaceholder('留空则用自动识别').fill('IETF');
     await page.getByRole('combobox').selectOption({ label: '我的书签' });
     await page.getByRole('button', { name: '添加', exact: true }).click();
-    await expect(page.getByText('IETF').first()).toBeVisible();
+    await expect(page.getByRole('link', { name: /ietf\.org/i }).first()).toBeVisible();
+    await expect(page.getByText('IETF', { exact: true }).first()).toBeVisible();
   });
 
   test('发布导航页并公开可见', async ({ page }) => {
