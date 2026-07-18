@@ -31,6 +31,27 @@ Use focused Conventional Commit subjects, for example `feat: add signed instance
 
 `main` is protected: direct pushes are rejected for everyone, admins included. Push your work to a branch, open a PR (`gh pr create`), and enable auto-merge (`gh pr merge --auto --rebase`); it merges once the `verify`, `e2e`, and `container` checks pass with the branch up to date. Run the merge gates locally before pushing.
 
+## Agent shipping workflow (commit / PR / production)
+
+Agents **should not** invent commits or open PRs for unfinished work. Once the requested change is complete, verified, and the user asks to ship (or uses phrases like 提交、合并、上线、发布、部署生产、ship、merge、deploy), do the full path without asking again for each step:
+
+1. **Branch** — If on `main` with local changes, create a focused branch (`fix/…`, `feat/…`). Never commit directly on `main`.
+2. **Verify** — Run the merge gates that apply (`make check`, `go test -race ./...`; contract/e2e/build when the change touches those surfaces). Fix failures before committing.
+3. **Commit** — Stage only related files; Conventional Commit subject in English; body in complete sentences when useful. Do not amend published commits unless explicitly asked.
+4. **PR + auto-merge** — `git push -u origin HEAD`, `gh pr create` (summary + test plan), then `gh pr merge --auto --rebase`. Wait for CI green and merge; do not force-push `main`.
+5. **Production deploy** — Official `nav.ax` CD is automatic: after merge to `main`, the `deploy-production` job runs when `verify` / `e2e` / `container` are green (see `deploy/README.md`). No separate manual deploy step unless CI/CD failed or the user asks for an out-of-band release (`npc deploy navax production --ref main --wait`).
+6. **Report** — Reply with the PR URL, merge status, and whether production CD was triggered or needs attention.
+
+Still require an **explicit user request** before:
+
+- Force-push, hard reset, or rewriting shared history
+- Deleting branches/tags or destructive remote ops beyond the normal PR head cleanup
+- Changing GitHub secrets, protected-branch rules, or production env vars
+- Manual production deploy when auto-CD was not requested and the user only asked for a local fix
+- Committing secrets or `.env` files
+
+If the user only asks to implement/fix something and does **not** mention shipping, leave changes uncommitted (or commit only if they later ask). Prefer one ship path end-to-end over stopping after “code done” when they already said 提交合并/部署.
+
 ## Security & Agent Instructions
 
 Keep secrets out of source and browser storage; sessions use HttpOnly cookies. Validate authorization server-side and preserve SSRF, upload, origin, and rate-limit protections. All user-facing agent responses must be written in Chinese.

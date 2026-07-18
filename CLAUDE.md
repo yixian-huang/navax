@@ -64,6 +64,8 @@ nav.ax is a personalized navigation-site service: a single Go 1.25 process serve
 
 `main` is protected: direct pushes are rejected, admins included. All changes go through a PR whose `verify`, `e2e`, and `container` checks pass, with the branch up to date with `main`. Work on a branch, push it, then `gh pr create` and `gh pr merge --auto --rebase` — the PR merges automatically once CI is green (the head branch is auto-deleted). Run `make check` and `go test -race ./...` locally before pushing; never force-push `main`.
 
+When the user asks to 提交 / 合并 / 部署生产 / ship, complete the full shipping path (branch → verify → commit → PR → auto-merge). Official production CD runs automatically after `main` CI is green (`deploy-production`); do not require a separate deploy confirmation unless auto-CD failed or they request a manual `npc deploy`. See AGENTS.md 「Agent shipping workflow」 for gates that still need explicit approval.
+
 ## Conventions
 
 - Conventional Commit subjects, e.g. `feat: add signed instance backups`.
