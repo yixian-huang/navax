@@ -5,6 +5,7 @@
 // ============================================================
 
 import { cn } from '@/lib/utils';
+import { resolveSiteIcon } from '@/lib/linkUtils';
 
 type IconType = 'emoji' | 'image' | 'remix' | 'fallback';
 
@@ -28,6 +29,8 @@ export function detectIconType(icon: string): IconType {
 
 interface IconRendererProps {
   icon: string;
+  /** When icon is empty (e.g. imported bookmarks), derive favicon from this URL. */
+  url?: string;
   className?: string;
   /** Container size in Tailwind classes, e.g. "w-6 h-6" */
   containerClassName?: string;
@@ -37,8 +40,9 @@ interface IconRendererProps {
   size?: number;
 }
 
-export default function IconRenderer({ icon, className, containerClassName, alt, size }: IconRendererProps) {
-  const type = detectIconType(icon);
+export default function IconRenderer({ icon, url, className, containerClassName, alt, size }: IconRendererProps) {
+  const resolved = resolveSiteIcon(icon, url);
+  const type = detectIconType(resolved);
   const defaultContainer = containerClassName || '';
   // Prefer explicit size so remote favicons never blow out layout.
   const boxStyle = size
@@ -58,7 +62,7 @@ export default function IconRenderer({ icon, className, containerClassName, alt,
           style={boxStyle}
         >
           <img
-            src={icon.trim()}
+            src={resolved}
             alt={alt || 'icon'}
             width={size || 16}
             height={size || 16}
@@ -92,7 +96,7 @@ export default function IconRenderer({ icon, className, containerClassName, alt,
             role="img"
             aria-label={alt || 'icon'}
           >
-            {icon.trim()}
+            {resolved}
           </span>
         </span>
       );
@@ -106,7 +110,7 @@ export default function IconRenderer({ icon, className, containerClassName, alt,
           style={boxStyle}
         >
           <i
-            className={cn(icon.trim() || 'ri-link', className)}
+            className={cn(resolved || 'ri-link', className)}
             style={size ? { fontSize: size } : undefined}
           />
         </span>

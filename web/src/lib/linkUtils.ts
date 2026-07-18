@@ -96,8 +96,24 @@ export function isPlausibleUrl(input: string): boolean {
   }
 }
 
-function faviconForDomain(domain: string): string {
+/** Public favicon helper used by list/preview when site.icon is empty (e.g. bookmark import). */
+export function faviconUrlForDomain(domain: string): string {
   return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`;
+}
+
+function faviconForDomain(domain: string): string {
+  return faviconUrlForDomain(domain);
+}
+
+/**
+ * Prefer stored icon; if empty (common after bookmark import), derive a favicon from the site URL.
+ */
+export function resolveSiteIcon(icon: string | undefined | null, url?: string | null): string {
+  const trimmed = (icon ?? '').trim();
+  if (trimmed) return trimmed;
+  const domain = url ? extractDomain(url) : '';
+  if (domain) return faviconUrlForDomain(domain);
+  return 'ri-link';
 }
 
 /**

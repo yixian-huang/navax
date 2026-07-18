@@ -309,7 +309,7 @@ func loadIdempotentResult(ctx context.Context, tx *sql.Tx, scope, key, actorID s
 		return ImportResult{}, false, nil
 	}
 	if !storedActor.Valid || storedActor.String != actorID || !bytes.Equal(storedHash, requestHash) {
-		return ImportResult{}, false, fmt.Errorf("%w: idempotency key was used for a different request", ErrConflict)
+		return ImportResult{}, false, fmt.Errorf("%w: 幂等键已被用于不同的导入请求，请刷新后重试", ErrConflict)
 	}
 	var result ImportResult
 	if err := json.Unmarshal([]byte(responseJSON), &result); err != nil {
@@ -408,7 +408,7 @@ func applyImport(ctx context.Context, tx *sql.Tx, pageID, mode string, selected 
 		categoryID, exists := categories[categoryKey]
 		if !exists {
 			if categoryCount >= maxCategories {
-				return result, fmt.Errorf("%w: category limit reached", ErrConflict)
+				return result, fmt.Errorf("%w: 分类数量已达上限（当前 %d 个，最多 %d 个），请减少导入分类或在系统设置中提高「每页最大分类」", ErrConflict, categoryCount, maxCategories)
 			}
 			categoryID, err = identity.New("cat")
 			if err != nil {
@@ -432,7 +432,7 @@ func applyImport(ctx context.Context, tx *sql.Tx, pageID, mode string, selected 
 			result.CategoriesCreated++
 		}
 		if siteCount >= maxSites {
-			return result, fmt.Errorf("%w: site limit reached", ErrConflict)
+			return result, fmt.Errorf("%w: 站点数量已达上限（当前 %d 个，最多 %d 个），请减少导入站点或在系统设置中提高「每页最大站点」", ErrConflict, siteCount, maxSites)
 		}
 		siteID, err := identity.New("site")
 		if err != nil {

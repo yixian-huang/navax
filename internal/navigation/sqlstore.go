@@ -127,7 +127,7 @@ func (s *SQLStore) CreateCategory(ctx context.Context, actor Actor, pageID strin
 			return fmt.Errorf("count navigation categories: %w", err)
 		}
 		if count >= maximum {
-			return fmt.Errorf("%w: category limit reached", ErrConflict)
+			return fmt.Errorf("%w: 分类数量已达上限（当前 %d 个，最多 %d 个）", ErrConflict, count, maximum)
 		}
 		enabled := 1
 		if !category.Enabled {
@@ -273,7 +273,7 @@ func (s *SQLStore) CreateSite(ctx context.Context, actor Actor, pageID string, s
 			return fmt.Errorf("count navigation sites: %w", err)
 		}
 		if count >= maximum {
-			return fmt.Errorf("%w: site limit reached", ErrConflict)
+			return fmt.Errorf("%w: 站点数量已达上限（当前 %d 个，最多 %d 个）", ErrConflict, count, maximum)
 		}
 		enabled := 1
 		if !site.Enabled {
