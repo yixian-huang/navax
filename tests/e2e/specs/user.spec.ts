@@ -37,7 +37,8 @@ test.describe('用户工作台', () => {
     await page.getByPlaceholder(/粘贴或输入 URL/).fill('https://www.ietf.org');
     await page.getByRole('button', { name: /更多选项/ }).click();
     await page.getByPlaceholder('留空则用自动识别').fill('IETF');
-    await page.getByRole('combobox').selectOption({ label: '我的书签' });
+    // Links table also has filter <select>s; scope to the add-site form.
+    await page.locator('form').getByRole('combobox').selectOption({ label: '我的书签' });
     await page.getByRole('button', { name: '添加', exact: true }).click();
     await expect(page.getByRole('link', { name: /ietf\.org/i }).first()).toBeVisible();
     await expect(page.getByText('IETF', { exact: true }).first()).toBeVisible();
