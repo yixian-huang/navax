@@ -129,7 +129,11 @@ export default function ImportExportPage() {
         `已导入 ${response.data.sitesCreated} 个站点${hiddenNote} · ${draftSaveToastMessage(publication)}`,
       );
     } catch (cause) {
-      toast('error', cause instanceof Error ? cause.message : '导入提交失败');
+      const message = cause instanceof Error ? cause.message : '导入提交失败';
+      const detail = cause && typeof cause === 'object' && 'detail' in cause
+        ? String((cause as { detail?: string }).detail || '')
+        : '';
+      toast('error', detail && detail !== message ? `${message}：${detail}` : message);
     } finally {
       setCommitting(false);
     }

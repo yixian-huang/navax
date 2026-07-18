@@ -964,6 +964,7 @@ export default function LinksPage() {
         {viewMode === 'table' ? (
           <SiteTable
             sites={flatSites}
+            categories={(page?.categories ?? []).map(c => ({ id: c.id, name: c.name }))}
             selectedIds={selectedSiteIds}
             onToggleSelect={handleToggleSelect}
             onToggleSelectAll={handleSelectAllVisible}
@@ -1093,30 +1094,58 @@ export default function LinksPage() {
                         >
                           {isSiteSelected && <i className="ri-check-line text-[10px] text-background-50" />}
                         </button>
-                        <div className="w-6 h-6 rounded bg-background-100 flex items-center justify-center flex-shrink-0">
-                          <IconRenderer icon={site.icon} className="text-[10px] text-foreground-500" />
+                        <div className={cn(
+                          'w-6 h-6 rounded flex items-center justify-center flex-shrink-0',
+                          site.enabled === false ? 'bg-background-100 opacity-70' : 'bg-background-100',
+                        )}>
+                          <IconRenderer icon={site.icon} url={site.url} size={14} alt={site.title} />
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className={cn(
-                            'text-xs font-medium truncate',
-                            site.enabled === false ? 'text-foreground-400' : 'text-foreground-800',
+                            'text-xs font-medium break-words leading-snug',
+                            site.enabled === false ? 'text-foreground-500' : 'text-foreground-800',
                           )}>
                             {site.title}
-                            {site.enabled === false && (
-                              <span className="ml-1 text-[10px] text-foreground-400">· 已隐藏</span>
-                            )}
                           </div>
-                          <div className="text-[10px] text-foreground-400 truncate">
-                            {site.url.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0]}
-                          </div>
+                          {site.description ? (
+                            <div className="text-[10px] text-foreground-400 line-clamp-1 break-words">
+                              {site.description}
+                            </div>
+                          ) : null}
+                          <a
+                            href={site.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[10px] text-primary-600 hover:underline font-mono truncate block"
+                            title={site.url}
+                            onClick={e => e.stopPropagation()}
+                          >
+                            {site.url.replace(/^https?:\/\//, '').replace(/^www\./, '')}
+                          </a>
                         </div>
+                        {site.enabled === false ? (
+                          <span className="flex-shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-background-100 text-foreground-500 text-[10px] font-medium border border-background-200">
+                            <EyeOff className="w-3 h-3" />
+                            隐藏
+                          </span>
+                        ) : (
+                          <span className="flex-shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-medium border border-emerald-100">
+                            <Eye className="w-3 h-3" />
+                            上架
+                          </span>
+                        )}
                         <button
                           onClick={() => void handleToggleSiteEnabled(site)}
-                          className="w-6 h-6 flex items-center justify-center rounded text-foreground-300 opacity-0 group-hover:opacity-100 hover:text-primary-500 hover:bg-primary-50 transition-all duration-150 flex-shrink-0"
+                          className={cn(
+                            'w-6 h-6 flex items-center justify-center rounded opacity-0 group-hover:opacity-100 transition-all duration-150 flex-shrink-0',
+                            site.enabled === false
+                              ? 'text-foreground-400 hover:text-emerald-600 hover:bg-emerald-50'
+                              : 'text-emerald-600 hover:text-foreground-500 hover:bg-background-100',
+                          )}
                           aria-label={site.enabled === false ? `上架 ${site.title}` : `隐藏 ${site.title}`}
                           title={site.enabled === false ? '上架（需发布后生效）' : '隐藏（需发布后生效）'}
                         >
-                          {site.enabled === false ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                          {site.enabled === false ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
                         </button>
                         <button
                           onClick={() => {
@@ -1413,6 +1442,17 @@ export default function LinksPage() {
                         density={page.settings.layout.density}
                         columns={page.settings.layout.columns}
                         isOver={overCategoryId === cat.id}
+                        defaultCollapsed={cat.sites.length > 24}
+                        siteActions={{
+                          onEdit: site => {
+                            setPanelMode('site');
+                            setPanelTitle('编辑站点');
+                            setEditingItem({ id: site.id, type: 'site' });
+                            setPanelOpen(true);
+                          },
+                          onDelete: site => setDeleteTarget({ type: 'site', id: site.id, name: site.title }),
+                          onToggleEnabled: site => { void handleToggleSiteEnabled(site); },
+                        }}
                       />
                     ))}
                   </div>

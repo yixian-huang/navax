@@ -2,8 +2,8 @@
 // nav.ax SiteTable — compact table view for batch link management
 // ============================================================
 
-import { useState } from 'react';
-import { Edit2, Trash2, Search, Eye, EyeOff } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Edit2, Trash2, Search, Eye, EyeOff, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Site } from '@/api/types';
 import IconRenderer from '@/components/base/IconRenderer';
@@ -15,6 +15,8 @@ export interface FlatSite extends Site {
 
 export interface SiteTableProps {
   sites: FlatSite[];
+  /** Category options for the filter dropdown (id + name). */
+  categories?: Array<{ id: string; name: string }>;
   selectedIds: Set<string>;
   onToggleSelect: (id: string) => void;
   onToggleSelectAll: () => void;
@@ -25,6 +27,7 @@ export interface SiteTableProps {
 
 export default function SiteTable({
   sites,
+  categories = [],
   selectedIds,
   onToggleSelect,
   onToggleSelectAll,
@@ -33,64 +36,99 @@ export default function SiteTable({
   onToggleEnabled,
 }: SiteTableProps) {
   const [filter, setFilter] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [visibilityFilter, setVisibilityFilter] = useState<'all' | 'enabled' | 'hidden'>('all');
 
-  const filtered = filter
-    ? sites.filter(
-        s =>
-          s.title.toLowerCase().includes(filter.toLowerCase()) ||
-          s.url.toLowerCase().includes(filter.toLowerCase()) ||
-          s.categoryName.toLowerCase().includes(filter.toLowerCase()),
-      )
-    : sites;
+  const filtered = useMemo(() => {
+    const q = filter.trim().toLowerCase();
+    return sites.filter(s => {
+      if (categoryFilter !== 'all' && s.categoryId !== categoryFilter) return false;
+      if (visibilityFilter === 'enabled' && s.enabled === false) return false;
+      if (visibilityFilter === 'hidden' && s.enabled !== false) return false;
+      if (!q) return true;
+      return (
+        s.title.toLowerCase().includes(q) ||
+        s.url.toLowerCase().includes(q) ||
+        s.categoryName.toLowerCase().includes(q) ||
+        (s.description ? s.description.toLowerCase().includes(q) : false)
+      );
+    });
+  }, [sites, filter, categoryFilter, visibilityFilter]);
 
   const allFilteredSelected = filtered.length > 0 && filtered.every(s => selectedIds.has(s.id));
   const someFilteredSelected = filtered.some(s => selectedIds.has(s.id)) && !allFilteredSelected;
 
   const handleSelectAllToggle = () => {
-    // Toggle select/deselect for filtered items
     if (allFilteredSelected) {
-      // Deselect all filtered
       filtered.forEach(s => {
         if (selectedIds.has(s.id)) onToggleSelect(s.id);
       });
     } else {
-      // Select all filtered that aren't already selected
       filtered.forEach(s => {
         if (!selectedIds.has(s.id)) onToggleSelect(s.id);
       });
     }
   };
 
+  const enabledCount = sites.filter(s => s.enabled !== false).length;
+
   return (
-    <div className="flex flex-col h-full">
-      {/* Search in table */}
-      <div className="px-4 py-3 border-b border-background-100">
+    <div className="flex flex-col h-full min-w-0">
+      {/* Search + filters */}
+      <div className="px-3 py-2.5 border-b border-background-100 space-y-2">
         <div className="relative">
           <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-foreground-300" />
           <input
             type="text"
             value={filter}
             onChange={e => setFilter(e.target.value)}
-            placeholder="搜索标题、域名或分类..."
+            placeholder="搜索标题、描述、域名或分类..."
             className="w-full h-8 pl-8 pr-3 rounded-md bg-background-50 border border-background-200/70 text-xs text-foreground-900 focus:outline-none focus:border-primary-300 transition-all duration-150"
           />
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <select
+            value={categoryFilter}
+            onChange={e => setCategoryFilter(e.target.value)}
+            className="h-7 min-w-0 flex-1 max-w-[11rem] px-2 rounded-md bg-background-50 border border-background-200/70 text-[11px] text-foreground-700 focus:outline-none focus:border-primary-300"
+            aria-label="按分类筛选"
+          >
+            <option value="all">全部分类</option>
+            {categories.map(cat => (
+              <option key={cat.id} value={cat.id}>{cat.name}</option>
+            ))}
+          </select>
+          <select
+            value={visibilityFilter}
+            onChange={e => setVisibilityFilter(e.target.value as typeof visibilityFilter)}
+            className="h-7 px-2 rounded-md bg-background-50 border border-background-200/70 text-[11px] text-foreground-700 focus:outline-none focus:border-primary-300"
+            aria-label="按可见性筛选"
+          >
+            <option value="all">全部状态</option>
+            <option value="enabled">仅上架</option>
+            <option value="hidden">仅隐藏</option>
+          </select>
         </div>
       </div>
 
       {/* Table body */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto overflow-x-auto min-w-0">
         {filtered.length === 0 ? (
           <div className="py-10 text-center text-xs text-foreground-400">
-            {filter ? `没有匹配「${filter}」的结果` : '暂无站点'}
+            {filter || categoryFilter !== 'all' || visibilityFilter !== 'all'
+              ? '没有匹配当前筛选的结果'
+              : '暂无站点'}
           </div>
         ) : (
-          <table className="w-full">
+          <table className="w-full table-fixed min-w-[28rem]">
             <thead className="sticky top-0 z-10">
               <tr className="border-b border-background-200/70 bg-background-50">
                 <th className="w-8 px-2 py-2">
                   <button
+                    type="button"
                     onClick={handleSelectAllToggle}
                     className="w-4 h-4 rounded border border-background-300 flex items-center justify-center hover:border-primary-400 transition-colors duration-150"
+                    aria-label={allFilteredSelected ? '取消全选' : '全选当前筛选'}
                   >
                     {allFilteredSelected ? (
                       <i className="ri-check-line text-[10px] text-primary-500" />
@@ -99,28 +137,32 @@ export default function SiteTable({
                     ) : null}
                   </button>
                 </th>
-                <th className="text-left px-2 py-2 text-[10px] font-medium text-foreground-400 w-8" />
-                <th className="text-left px-0 py-2 text-[10px] font-medium text-foreground-400">站点</th>
-                <th className="text-left px-2 py-2 text-[10px] font-medium text-foreground-400 hidden xl:table-cell">分类</th>
-                <th className="w-16 px-2 py-2 text-[10px] font-medium text-foreground-400 text-right" />
+                <th className="w-9 px-1 py-2 text-[10px] font-medium text-foreground-400 text-left" />
+                <th className="text-left px-2 py-2 text-[10px] font-medium text-foreground-400">站点</th>
+                <th className="text-left px-2 py-2 text-[10px] font-medium text-foreground-400 w-[5.5rem] hidden sm:table-cell">状态</th>
+                <th className="text-left px-2 py-2 text-[10px] font-medium text-foreground-400 w-24 hidden lg:table-cell">分类</th>
+                <th className="w-[5.5rem] px-2 py-2 text-[10px] font-medium text-foreground-400 text-right">操作</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map(site => {
                 const isSelected = selectedIds.has(site.id);
+                const isHidden = site.enabled === false;
                 return (
                   <tr
                     key={site.id}
                     className={cn(
                       'border-b border-background-100 last:border-b-0 hover:bg-background-50/70 transition-colors duration-150',
                       isSelected && 'bg-primary-50/40',
+                      isHidden && 'bg-background-50/80',
                     )}
                   >
-                    <td className="px-2 py-2">
+                    <td className="px-2 py-2.5 align-top">
                       <button
+                        type="button"
                         onClick={() => onToggleSelect(site.id)}
                         className={cn(
-                          'w-4 h-4 rounded border flex items-center justify-center transition-all duration-150',
+                          'w-4 h-4 rounded border flex items-center justify-center transition-all duration-150 mt-0.5',
                           isSelected
                             ? 'bg-primary-500 border-primary-500'
                             : 'border-background-300 hover:border-primary-400',
@@ -129,56 +171,92 @@ export default function SiteTable({
                         {isSelected && <i className="ri-check-line text-[10px] text-background-50" />}
                       </button>
                     </td>
-                    <td className="px-0 py-2">
-                      <div className="w-6 h-6 rounded-md bg-background-100 flex items-center justify-center">
-                        <IconRenderer icon={site.icon} className="text-[10px] text-foreground-500" />
+                    <td className="px-1 py-2.5 align-top">
+                      <div className={cn(
+                        'w-7 h-7 rounded-md flex items-center justify-center',
+                        isHidden ? 'bg-background-100 opacity-70' : 'bg-background-100',
+                      )}>
+                        <IconRenderer icon={site.icon} url={site.url} size={16} alt={site.title} />
                       </div>
                     </td>
-                    <td className="px-0 py-2 min-w-0">
+                    <td className="px-2 py-2.5 min-w-0 align-top">
                       <div className={cn(
-                        'text-xs font-medium truncate max-w-[140px]',
-                        site.enabled === false ? 'text-foreground-400' : 'text-foreground-800',
+                        'text-xs font-medium break-words leading-snug',
+                        isHidden ? 'text-foreground-500' : 'text-foreground-800',
                       )}>
                         {site.title}
-                        {site.enabled === false && (
-                          <span className="ml-1 text-[10px] text-foreground-400">隐藏</span>
-                        )}
                       </div>
-                      <div className="text-[10px] text-foreground-400 truncate max-w-[140px] font-mono">
-                        {site.url.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0]}
-                      </div>
+                      {site.description ? (
+                        <div className="text-[10px] text-foreground-400 mt-0.5 line-clamp-2 break-words leading-snug">
+                          {site.description}
+                        </div>
+                      ) : null}
+                      <a
+                        href={site.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-0.5 inline-flex items-center gap-0.5 max-w-full text-[10px] font-mono text-primary-600 hover:text-primary-700 hover:underline break-all"
+                        title={site.url}
+                        onClick={e => e.stopPropagation()}
+                      >
+                        <span className="truncate">
+                          {site.url.replace(/^https?:\/\//, '').replace(/^www\./, '')}
+                        </span>
+                        <ExternalLink className="w-2.5 h-2.5 flex-shrink-0 opacity-70" />
+                      </a>
                     </td>
-                    <td className="px-2 py-2 hidden xl:table-cell">
-                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-foreground-500 bg-background-100">
-                        <i className={cn(site.categoryIcon, 'text-[9px]')} />
-                        {site.categoryName}
+                    <td className="px-2 py-2.5 align-top hidden sm:table-cell">
+                      <span
+                        className={cn(
+                          'inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium border',
+                          isHidden
+                            ? 'bg-background-100 text-foreground-500 border-background-200'
+                            : 'bg-emerald-50 text-emerald-700 border-emerald-100',
+                        )}
+                      >
+                        {isHidden ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                        {isHidden ? '隐藏' : '上架'}
                       </span>
                     </td>
-                    <td className="px-2 py-2 text-right">
+                    <td className="px-2 py-2.5 align-top hidden lg:table-cell">
+                      <span className="inline-flex items-center gap-1 max-w-full px-1.5 py-0.5 rounded text-[10px] text-foreground-500 bg-background-100">
+                        <IconRenderer icon={site.categoryIcon} className="text-[9px]" size={10} />
+                        <span className="truncate">{site.categoryName}</span>
+                      </span>
+                    </td>
+                    <td className="px-2 py-2.5 text-right align-top">
                       <div className="flex items-center justify-end gap-0.5">
                         {onToggleEnabled && (
                           <button
+                            type="button"
                             onClick={() => onToggleEnabled(site)}
-                            className="w-6 h-6 flex items-center justify-center rounded text-foreground-300 hover:text-primary-500 hover:bg-primary-50 transition-colors duration-150"
-                            aria-label={site.enabled === false ? `上架 ${site.title}` : `隐藏 ${site.title}`}
-                            title={site.enabled === false ? '上架（需发布后生效）' : '隐藏（需发布后生效）'}
+                            className={cn(
+                              'w-7 h-7 flex items-center justify-center rounded transition-colors duration-150',
+                              isHidden
+                                ? 'text-foreground-400 hover:text-emerald-600 hover:bg-emerald-50'
+                                : 'text-emerald-600 hover:text-foreground-500 hover:bg-background-100',
+                            )}
+                            aria-label={isHidden ? `上架 ${site.title}` : `隐藏 ${site.title}`}
+                            title={isHidden ? '上架（需发布后生效）' : '隐藏（需发布后生效）'}
                           >
-                            {site.enabled === false ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                            {isHidden ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
                           </button>
                         )}
                         <button
+                          type="button"
                           onClick={() => onEdit(site)}
-                          className="w-6 h-6 flex items-center justify-center rounded text-foreground-300 hover:text-primary-500 hover:bg-primary-50 transition-colors duration-150"
+                          className="w-7 h-7 flex items-center justify-center rounded text-foreground-300 hover:text-primary-500 hover:bg-primary-50 transition-colors duration-150"
                           aria-label={`编辑 ${site.title}`}
                         >
-                          <Edit2 className="w-3 h-3" />
+                          <Edit2 className="w-3.5 h-3.5" />
                         </button>
                         <button
+                          type="button"
                           onClick={() => onDelete(site)}
-                          className="w-6 h-6 flex items-center justify-center rounded text-foreground-300 hover:text-red-500 hover:bg-red-50 transition-colors duration-150"
+                          className="w-7 h-7 flex items-center justify-center rounded text-foreground-300 hover:text-red-500 hover:bg-red-50 transition-colors duration-150"
                           aria-label={`删除 ${site.title}`}
                         >
-                          <Trash2 className="w-3 h-3" />
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </td>
@@ -191,11 +269,12 @@ export default function SiteTable({
       </div>
 
       {/* Footer */}
-      <div className="border-t border-background-100 px-4 py-2 flex items-center justify-between">
+      <div className="border-t border-background-100 px-3 py-2 flex items-center justify-between gap-2">
         <span className="text-[10px] text-foreground-400">
-          上架 {sites.filter(s => s.enabled !== false).length}/{sites.length}
+          上架 {enabledCount}/{sites.length}
+          {sites.length - enabledCount > 0 ? ` · 隐藏 ${sites.length - enabledCount}` : ''}
         </span>
-        {filter && (
+        {(filter || categoryFilter !== 'all' || visibilityFilter !== 'all') && (
           <span className="text-[10px] text-foreground-400">
             显示 {filtered.length} 个
           </span>

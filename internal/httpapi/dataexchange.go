@@ -112,7 +112,8 @@ func (h *DataExchangeHandler) writeError(w http.ResponseWriter, r *http.Request,
 	case errors.Is(err, navigation.ErrPrecondition):
 		WriteError(w, r, http.StatusConflict, "DRAFT_REVISION_MISMATCH", "草稿版本已变化，请刷新后重新预览", nil)
 	case errors.Is(err, dataexchange.ErrConflict), errors.Is(err, navigation.ErrConflict):
-		WriteError(w, r, http.StatusConflict, "IMPORT_CONFLICT", "导入内容发生冲突", err)
+		// Prefer the Chinese detail from the service as the user-facing message.
+		WriteError(w, r, http.StatusConflict, "IMPORT_CONFLICT", importConflictMessage(err), nil)
 	case errors.Is(err, dataexchange.ErrValidation), errors.Is(err, navigation.ErrValidation):
 		WriteError(w, r, http.StatusUnprocessableEntity, "VALIDATION_FAILED", err.Error(), nil)
 	case errors.Is(err, navigation.ErrForbidden):
@@ -122,4 +123,27 @@ func (h *DataExchangeHandler) writeError(w http.ResponseWriter, r *http.Request,
 	default:
 		WriteError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "导入或导出操作失败", nil)
 	}
+}
+
+// importConflictMessage extracts a short Chinese explanation from wrapped conflict errors.
+func importConflictMessage(err error) string {
+	if err == nil {
+		return "导入内容发生冲突"
+	}
+	text := err.Error()
+	for _, prefix := range []string{
+		dataexchange.ErrConflict.Error() + ": ",
+		navigation.ErrConflict.Error() + ": ",
+	} {
+		if rest, ok := strings.CutPrefix(text, prefix); ok && strings.TrimSpace(rest) != "" {
+			return rest
+		}
+	}
+	// Fallback when only the sentinel is returned.
+	if errors.Is(err, dataexchange.ErrConflict) || errors.Is(err, navigation.ErrConflict) {
+		if text != dataexchange.ErrConflict.Error() && text != navigation.ErrConflict.Error() {
+			return text
+		}
+	}
+	return "导入内容发生冲突"
 }
