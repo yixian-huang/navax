@@ -124,8 +124,20 @@ instances.
 - `internal/` — domain logic, HTTP, SQLite, operations, and embedded web UI
 - `migrations/` — SQLite migrations applied automatically at startup
 - `web/` — React/Vite frontend
-- `api/openapi.yaml` — the HTTP API contract
-- `docs/` — requirements and architecture notes (Chinese)
+- `api/openapi.yaml` — the HTTP API contract (single source of truth for endpoints)
+- `docs/` — requirements, architecture, and deployment notes (Chinese; see below)
+- `deploy/` — native binary install and official production CD notes
+
+## Documentation
+
+| Doc | Contents |
+| --- | --- |
+| [docs/requirements.md](docs/requirements.md) | Product scope and acceptance (authoritative; Chinese) |
+| [docs/architecture.md](docs/architecture.md) | Module boundaries, data, and security invariants |
+| [docs/deployment.md](docs/deployment.md) | Self-hosting: DNS, TLS, reverse proxy, env vars |
+| [deploy/README.md](deploy/README.md) | systemd install, upgrades, official CI→NoPanel CD |
+| [docs/design-background-media-library.md](docs/design-background-media-library.md) | Background media library design note |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Dev commands, merge gates, architecture boundaries (Chinese) |
 
 ## Contributing
 
