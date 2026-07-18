@@ -2,6 +2,8 @@
 
 nav.ax 自身只监听明文 HTTP（默认 `:8080`），**生产环境必须挂在一个负责 TLS 终止的反向代理之后**。本文以官方域名 **`nav.ax`** 为例，给出可直接照抄的服务器选型、域名/DNS、反代配置、通配子域名与 TLS，以及进程守护方案。自托管者把 `nav.ax` 换成自己的域名即可。
 
+官方 `nav.ax` 实例的 **CI 门禁后自动 CD** 见 [`deploy/README.md`](../deploy/README.md)「生产自动 CD」：`main` 合并且 `verify` / `e2e` / `container` 全绿后，GitHub Actions 调用 NoPanel deploy hook，在 Alpha VPS 构建制品并在 VIP Cloud 上 `activate-artifact.sh` 热切换。
+
 ## 1. 服务器选型
 
 nav.ax 是**单个静态 Go 二进制 + 内嵌前端 + SQLite（WAL）**，纯 Go、无 CGO、无外部数据库/Redis/队列依赖，资源占用很低。
