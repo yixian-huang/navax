@@ -216,13 +216,20 @@ func (s *Service) BatchSetSitesEnabled(ctx context.Context, actor Actor, pageID 
 	return s.store.BatchSetSitesEnabled(ctx, actor, pageID, input, s.now().UTC())
 }
 
+// Content-order payload ceilings match system_settings CHECK bounds
+// (max_categories_per_page ≤ 500, max_sites_per_page ≤ 10000, per-category reorder batch ≤ 1000).
+const (
+	maxContentOrderCategories       = 500
+	maxContentOrderSitesPerCategory = 1000
+)
+
 func (s *Service) ReplaceContentOrder(ctx context.Context, actor Actor, pageID string, expectedRevision int, order []CategoryOrder) (int, error) {
-	if len(order) > 50 {
-		return 0, validation("categories", "must not exceed 50")
+	if len(order) > maxContentOrderCategories {
+		return 0, fmt.Errorf("%w: 分类数量不能超过 %d（当前提交 %d 个）", ErrValidation, maxContentOrderCategories, len(order))
 	}
 	for _, category := range order {
-		if len(category.SiteIDs) > 1000 {
-			return 0, validation("siteIds", "must not exceed 1000")
+		if len(category.SiteIDs) > maxContentOrderSitesPerCategory {
+			return 0, fmt.Errorf("%w: 单个分类下的站点不能超过 %d", ErrValidation, maxContentOrderSitesPerCategory)
 		}
 	}
 	return s.store.ReplaceContentOrder(ctx, actor, pageID, expectedRevision, order, s.now().UTC())

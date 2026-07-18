@@ -2193,7 +2193,8 @@ components:
         expectedRevision: { type: integer, minimum: 0 }
         categories:
           type: array
-          maxItems: 50
+          # Align with system_settings.max_categories_per_page upper bound (500).
+          maxItems: 500
           items:
             type: object
             required: [id, siteIds]

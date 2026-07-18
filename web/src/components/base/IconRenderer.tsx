@@ -67,6 +67,7 @@ export default function IconRenderer({ icon, url, className, containerClassName,
             width={size || 16}
             height={size || 16}
             decoding="async"
+            loading="lazy"
             className={cn(
               'block max-w-full max-h-full w-full h-full object-contain',
               className,
