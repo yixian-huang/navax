@@ -16,6 +16,20 @@ function inferFormat(file: File): ImportFormat {
   return /\.html?$/i.test(file.name) ? 'bookmarks-html' : 'navax-json';
 }
 
+const IMPORT_SITES_ENABLED_KEY = 'navax.import.sitesEnabled';
+
+function readRememberedImportSitesEnabled(): boolean {
+  try {
+    const raw = localStorage.getItem(IMPORT_SITES_ENABLED_KEY);
+    if (raw === 'true') return true;
+    if (raw === 'false') return false;
+  } catch {
+    /* ignore */
+  }
+  // 8-C default: import as hidden
+  return false;
+}
+
 export default function ImportExportPage() {
   const pageQuery = useMyPage();
   const { toast } = useToast();
@@ -26,6 +40,7 @@ export default function ImportExportPage() {
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const [selectedSiteIds, setSelectedSiteIds] = useState<Set<string>>(new Set());
   const [mode, setMode] = useState<'merge' | 'replace'>('merge');
+  const [sitesEnabled, setSitesEnabled] = useState(readRememberedImportSitesEnabled);
   const [previewing, setPreviewing] = useState(false);
   const [committing, setCommitting] = useState(false);
   const [exporting, setExporting] = useState<ExportFormat | null>(null);
@@ -86,18 +101,32 @@ export default function ImportExportPage() {
     if (!preview || selectedSiteIds.size === 0) return;
     setCommitting(true);
     try {
-      const response = await pageApi.commitImport({
+      // Bookmarks: always send sitesEnabled (UI choice). JSON: omit so file values apply.
+      const commitBody = {
         importToken: preview.importToken,
         mode,
         selectedSiteIds: [...selectedSiteIds],
         expectedRevision: page.draftRevision ?? 0,
-      }, idempotencyKeyRef.current || createIdempotencyKey());
+        ...(format === 'bookmarks-html' ? { sitesEnabled } : {}),
+      };
+      if (format === 'bookmarks-html') {
+        try {
+          localStorage.setItem(IMPORT_SITES_ENABLED_KEY, String(sitesEnabled));
+        } catch {
+          /* ignore */
+        }
+      }
+      const response = await pageApi.commitImport(
+        commitBody,
+        idempotencyKeyRef.current || createIdempotencyKey(),
+      );
       setResult(response.data);
       const refreshed = await pageQuery.refetch();
       const publication = refreshed.data?.publication ?? page.publication;
+      const hiddenNote = format === 'bookmarks-html' && !sitesEnabled ? '（默认隐藏，可在链接管理中上架）' : '';
       toast(
         'success',
-        `已导入 ${response.data.sitesCreated} 个站点 · ${draftSaveToastMessage(publication)}`,
+        `已导入 ${response.data.sitesCreated} 个站点${hiddenNote} · ${draftSaveToastMessage(publication)}`,
       );
     } catch (cause) {
       toast('error', cause instanceof Error ? cause.message : '导入提交失败');
@@ -222,7 +251,7 @@ export default function ImportExportPage() {
               ))}
             </div>
 
-            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-wrap">
               <label className="text-xs text-foreground-500">
                 导入模式
                 <select
@@ -234,6 +263,22 @@ export default function ImportExportPage() {
                   <option value="replace">替换现有数据</option>
                 </select>
               </label>
+              {format === 'bookmarks-html' && (
+                <label className="text-xs text-foreground-500 inline-flex items-center gap-2">
+                  导入后状态
+                  <select
+                    value={sitesEnabled ? 'enabled' : 'hidden'}
+                    onChange={event => setSitesEnabled(event.target.value === 'enabled')}
+                    className="h-9 px-3 rounded-lg border border-background-200 bg-background-50 text-sm"
+                  >
+                    <option value="hidden">隐藏（推荐精品站）</option>
+                    <option value="enabled">直接上架</option>
+                  </select>
+                </label>
+              )}
+              {format === 'navax-json' && (
+                <span className="text-xs text-foreground-400">JSON 将按文件中的 enabled 还原</span>
+              )}
               {mode === 'replace' && (
                 <span className="inline-flex items-center gap-1 text-xs text-red-500">
                   <AlertTriangle className="w-3.5 h-3.5" />现有分类和站点将被替换

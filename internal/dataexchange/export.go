@@ -37,8 +37,12 @@ func (s *Service) Export(ctx context.Context, actor navigation.Actor, pageID, fo
 }
 
 func renderBookmarksHTML(page navigation.Page, exportedAt time.Time) string {
+	// Bookmarks HTML only exports currently-enabled navigation (9.2-A).
 	byCategory := make(map[string][]navigation.Site, len(page.Categories))
 	for _, site := range page.Sites {
+		if !site.Enabled {
+			continue
+		}
 		byCategory[site.CategoryID] = append(byCategory[site.CategoryID], site)
 	}
 	var output strings.Builder
@@ -52,10 +56,17 @@ func renderBookmarksHTML(page navigation.Page, exportedAt time.Time) string {
 	output.WriteString(html.EscapeString(page.Title))
 	output.WriteString("</H1>\n<DL><p>\n")
 	for _, category := range page.Categories {
+		if !category.Enabled {
+			continue
+		}
+		sites := byCategory[category.ID]
+		if len(sites) == 0 {
+			continue
+		}
 		output.WriteString("    <DT><H3>")
 		output.WriteString(html.EscapeString(category.Name))
 		output.WriteString("</H3>\n    <DL><p>\n")
-		for _, site := range byCategory[category.ID] {
+		for _, site := range sites {
 			output.WriteString("        <DT><A HREF=\"")
 			output.WriteString(html.EscapeString(site.URL))
 			output.WriteString("\">")

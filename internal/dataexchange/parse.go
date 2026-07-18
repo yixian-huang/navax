@@ -12,6 +12,7 @@ import (
 type parsedCategory struct {
 	SourceID string
 	Name     string
+	Enabled  bool
 	Sites    []parsedSite
 }
 
@@ -19,6 +20,7 @@ type parsedSite struct {
 	SourceID string
 	Title    string
 	URL      string
+	Enabled  bool
 }
 
 var (
@@ -59,7 +61,8 @@ func parseBookmarksHTML(content string) ([]parsedCategory, error) {
 		}
 		index := len(categories)
 		categories = append(categories, parsedCategory{
-			SourceID: fmt.Sprintf("category-%06d", index+1), Name: name, Sites: make([]parsedSite, 0),
+			// Bookmark folders default to enabled; sites default hidden (curated import).
+			SourceID: fmt.Sprintf("category-%06d", index+1), Name: name, Enabled: true, Sites: make([]parsedSite, 0),
 		})
 		categoryIndex[key] = index
 		return index
@@ -108,6 +111,7 @@ func parseBookmarksHTML(content string) ([]parsedCategory, error) {
 			categories[index].Sites = append(categories[index].Sites, parsedSite{
 				SourceID: fmt.Sprintf("site-%06d", siteNumber),
 				Title:    cleanHTMLText(match[2]), URL: stdhtml.UnescapeString(strings.TrimSpace(rawURL)),
+				Enabled: false, // 7-C / 8-C: bookmarks import defaults to hidden
 			})
 		}
 
@@ -140,14 +144,16 @@ func parseNavaxJSON(content []byte) ([]parsedCategory, error) {
 		Version int    `json:"version"`
 		Page    struct {
 			Categories []struct {
-				ID   string `json:"id"`
-				Name string `json:"name"`
+				ID      string `json:"id"`
+				Name    string `json:"name"`
+				Enabled *bool  `json:"enabled"`
 			} `json:"categories"`
 			Sites []struct {
 				ID         string `json:"id"`
 				CategoryID string `json:"categoryId"`
 				Title      string `json:"title"`
 				URL        string `json:"url"`
+				Enabled    *bool  `json:"enabled"`
 			} `json:"sites"`
 		} `json:"page"`
 	}
@@ -165,7 +171,13 @@ func parseNavaxJSON(content []byte) ([]parsedCategory, error) {
 	for index, source := range document.Page.Categories {
 		sourceID := uniqueSourceID(source.ID, fmt.Sprintf("category-%06d", index+1), usedCategoryIDs)
 		byID[source.ID] = len(categories)
-		categories = append(categories, parsedCategory{SourceID: sourceID, Name: strings.TrimSpace(source.Name), Sites: make([]parsedSite, 0)})
+		enabled := true
+		if source.Enabled != nil {
+			enabled = *source.Enabled
+		}
+		categories = append(categories, parsedCategory{
+			SourceID: sourceID, Name: strings.TrimSpace(source.Name), Enabled: enabled, Sites: make([]parsedSite, 0),
+		})
 	}
 	uncategorized := -1
 	usedSiteIDs := make(map[string]struct{})
@@ -176,14 +188,18 @@ func parseNavaxJSON(content []byte) ([]parsedCategory, error) {
 				uncategorized = len(categories)
 				categories = append(categories, parsedCategory{
 					SourceID: uniqueSourceID("uncategorized", fmt.Sprintf("category-%06d", len(categories)+1), usedCategoryIDs),
-					Name:     "未分类", Sites: make([]parsedSite, 0),
+					Name:     "未分类", Enabled: true, Sites: make([]parsedSite, 0),
 				})
 			}
 			categoryIndex = uncategorized
 		}
 		sourceID := uniqueSourceID(source.ID, fmt.Sprintf("site-%06d", index+1), usedSiteIDs)
+		enabled := true
+		if source.Enabled != nil {
+			enabled = *source.Enabled
+		}
 		categories[categoryIndex].Sites = append(categories[categoryIndex].Sites, parsedSite{
-			SourceID: sourceID, Title: strings.TrimSpace(source.Title), URL: strings.TrimSpace(source.URL),
+			SourceID: sourceID, Title: strings.TrimSpace(source.Title), URL: strings.TrimSpace(source.URL), Enabled: enabled,
 		})
 	}
 	return categories, nil

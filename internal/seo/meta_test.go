@@ -57,8 +57,8 @@ func TestFromPublishedPageSystem(t *testing.T) {
 		Visibility: navigation.VisibilityPublic,
 		OGImage:    "/api/v1/assets/background/x.jpg",
 		Categories: []navigation.PublicCategory{{
-			Category: navigation.Category{Name: "开发"},
-			Sites: []navigation.Site{
+			Name: "开发",
+			Sites: []navigation.PublicSite{
 				{Title: "GitHub", URL: "https://github.com"},
 				{Title: "Figma", URL: "https://figma.com"},
 			},

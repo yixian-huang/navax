@@ -578,6 +578,24 @@ paths:
         '201': { $ref: '#/components/responses/SiteResponse' }
         '401': { $ref: '#/components/responses/ErrorResponse' }
         '422': { $ref: '#/components/responses/ErrorResponse' }
+  /api/v1/pages/{pageId}/sites/batch-enabled:
+    parameters:
+      - $ref: '#/components/parameters/PageId'
+    post:
+      tags: [Pages]
+      operationId: batchSetSitesEnabled
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BatchSitesEnabledRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/RevisionResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+        '412': { $ref: '#/components/responses/ErrorResponse' }
+        '422': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/pages/{pageId}/sites/{siteId}:
     parameters:
       - $ref: '#/components/parameters/PageId'
@@ -1995,16 +2013,31 @@ components:
     LayoutTemplate: { type: string, enum: [full, search-focus, browse-first, sidebar] }
     Category:
       type: object
-      required: [id, pageId, name, icon, sortOrder, createdAt, updatedAt]
+      required: [id, pageId, name, icon, sortOrder, enabled, createdAt, updatedAt]
       properties:
         id: { $ref: '#/components/schemas/Id' }
         pageId: { $ref: '#/components/schemas/Id' }
         name: { type: string }
         icon: { type: string }
         sortOrder: { type: integer, minimum: 0 }
+        enabled: { type: boolean, description: Draft visibility; false keeps the row but omits it from publish/preview projection. }
         createdAt: { $ref: '#/components/schemas/Timestamp' }
         updatedAt: { $ref: '#/components/schemas/Timestamp' }
     Site:
+      type: object
+      required: [id, categoryId, title, url, icon, description, sortOrder, enabled, createdAt, updatedAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        categoryId: { $ref: '#/components/schemas/Id' }
+        title: { type: string }
+        url: { type: string, format: uri }
+        icon: { type: string }
+        description: { type: string }
+        sortOrder: { type: integer, minimum: 0 }
+        enabled: { type: boolean, description: Draft visibility; false keeps the row but omits it from publish/preview projection. }
+        createdAt: { $ref: '#/components/schemas/Timestamp' }
+        updatedAt: { $ref: '#/components/schemas/Timestamp' }
+    PublicSite:
       type: object
       required: [id, categoryId, title, url, icon, description, sortOrder, createdAt, updatedAt]
       properties:
@@ -2018,23 +2051,30 @@ components:
         createdAt: { $ref: '#/components/schemas/Timestamp' }
         updatedAt: { $ref: '#/components/schemas/Timestamp' }
     PublicCategory:
-      allOf:
-        - $ref: '#/components/schemas/Category'
-        - type: object
-          required: [sites]
-          properties:
-            sites: { type: array, items: { $ref: '#/components/schemas/Site' } }
+      type: object
+      required: [id, pageId, name, icon, sortOrder, createdAt, updatedAt, sites]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        pageId: { $ref: '#/components/schemas/Id' }
+        name: { type: string }
+        icon: { type: string }
+        sortOrder: { type: integer, minimum: 0 }
+        createdAt: { $ref: '#/components/schemas/Timestamp' }
+        updatedAt: { $ref: '#/components/schemas/Timestamp' }
+        sites: { type: array, items: { $ref: '#/components/schemas/PublicSite' } }
     CategoryInput:
       type: object
       required: [name]
       properties:
         name: { type: string, minLength: 1, maxLength: 60 }
         icon: { type: string, maxLength: 256, default: '' }
+        enabled: { type: boolean, default: true }
     CategoryPatch:
       type: object
       properties:
         name: { type: string, minLength: 1, maxLength: 60 }
         icon: { type: string, maxLength: 256 }
+        enabled: { type: boolean }
       minProperties: 1
     SiteInput:
       type: object
@@ -2045,6 +2085,7 @@ components:
         url: { type: string, format: uri, pattern: '^https?://' }
         icon: { type: string, maxLength: 2048, default: '' }
         description: { type: string, maxLength: 300, default: '' }
+        enabled: { type: boolean, default: true }
     SitePatch:
       type: object
       properties:
@@ -2053,7 +2094,15 @@ components:
         url: { type: string, format: uri, pattern: '^https?://' }
         icon: { type: string, maxLength: 2048 }
         description: { type: string, maxLength: 300 }
+        enabled: { type: boolean }
       minProperties: 1
+    BatchSitesEnabledRequest:
+      type: object
+      required: [siteIds, enabled, expectedRevision]
+      properties:
+        siteIds: { type: array, minItems: 1, maxItems: 200, uniqueItems: true, items: { $ref: '#/components/schemas/Id' } }
+        enabled: { type: boolean }
+        expectedRevision: { type: integer, minimum: 0 }
     PageSettings:
       type: object
       required: [layout, appearance, search, display, preferences]
@@ -2329,21 +2378,25 @@ components:
             invalid: { type: integer, minimum: 0 }
     ImportCategory:
       type: object
-      required: [sourceId, name, sites]
+      required: [sourceId, name, enabled, sites]
       properties:
         sourceId: { type: string }
         name: { type: string }
+        enabled: { type: boolean }
         sites:
           type: array
           items:
             type: object
-            required: [sourceId, title, url, duplicate, valid]
+            required: [sourceId, title, url, duplicate, valid, enabled]
             properties:
               sourceId: { type: string }
               title: { type: string }
               url: { type: string }
               duplicate: { type: boolean }
               valid: { type: boolean }
+              enabled:
+                type: boolean
+                description: Proposed draft enabled state for this preview item (bookmarks default false; JSON follows file).
               error: { type: string }
     ImportCommitRequest:
       type: object
@@ -2353,6 +2406,9 @@ components:
         mode: { type: string, enum: [merge, replace] }
         selectedSiteIds: { type: array, uniqueItems: true, items: { type: string } }
         expectedRevision: { type: integer, minimum: 0 }
+        sitesEnabled:
+          type: boolean
+          description: When set, overrides every selected site's enabled state on commit (used by bookmark import UI).
     ImportResult:
       type: object
       required: [categoriesCreated, sitesCreated, duplicatesSkipped, invalidSkipped, draftRevision]

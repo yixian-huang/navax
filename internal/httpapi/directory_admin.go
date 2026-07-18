@@ -272,7 +272,7 @@ func adminLinkData(item directoryadmin.AdminLink) map[string]any {
 		"id": item.ID, "categoryId": item.CategoryID, "categoryName": item.CategoryName,
 		"ownerId": item.OwnerID, "ownerName": item.OwnerName,
 		"title": item.Title, "url": item.URL, "icon": item.Icon,
-		"description": item.Description, "sortOrder": item.SortOrder,
+		"description": item.Description, "sortOrder": item.SortOrder, "enabled": item.Enabled,
 		"createdAt": item.CreatedAt, "updatedAt": item.UpdatedAt,
 	}
 }

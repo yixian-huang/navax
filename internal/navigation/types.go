@@ -110,6 +110,7 @@ type Category struct {
 	Name            string    `json:"name"`
 	Icon            string    `json:"icon"`
 	SortOrder       int       `json:"sortOrder"`
+	Enabled         bool      `json:"enabled"`
 	IsUncategorized bool      `json:"-"`
 	CreatedAt       time.Time `json:"createdAt"`
 	UpdatedAt       time.Time `json:"updatedAt"`
@@ -124,6 +125,7 @@ type Site struct {
 	Icon        string    `json:"icon"`
 	Description string    `json:"description"`
 	SortOrder   int       `json:"sortOrder"`
+	Enabled     bool      `json:"enabled"`
 	CreatedAt   time.Time `json:"createdAt"`
 	UpdatedAt   time.Time `json:"updatedAt"`
 }
@@ -170,9 +172,30 @@ type PublishedOwner struct {
 	Visible   bool   `json:"visible"`
 }
 
+// PublicSite is the published projection of a site. It intentionally omits
+// draft-only fields such as enabled.
+type PublicSite struct {
+	ID          string    `json:"id"`
+	CategoryID  string    `json:"categoryId"`
+	Title       string    `json:"title"`
+	URL         string    `json:"url"`
+	Icon        string    `json:"icon"`
+	Description string    `json:"description"`
+	SortOrder   int       `json:"sortOrder"`
+	CreatedAt   time.Time `json:"createdAt"`
+	UpdatedAt   time.Time `json:"updatedAt"`
+}
+
+// PublicCategory is the published projection of a category (no enabled field).
 type PublicCategory struct {
-	Category
-	Sites []Site `json:"sites"`
+	ID        string       `json:"id"`
+	PageID    string       `json:"pageId"`
+	Name      string       `json:"name"`
+	Icon      string       `json:"icon"`
+	SortOrder int          `json:"sortOrder"`
+	CreatedAt time.Time    `json:"createdAt"`
+	UpdatedAt time.Time    `json:"updatedAt"`
+	Sites     []PublicSite `json:"sites"`
 }
 
 // PublishedPage is the complete immutable public payload stored in a snapshot.
@@ -202,13 +225,15 @@ type PagePatch struct {
 }
 
 type CategoryInput struct {
-	Name string
-	Icon string
+	Name    string
+	Icon    string
+	Enabled *bool
 }
 
 type CategoryPatch struct {
-	Name *string
-	Icon *string
+	Name    *string
+	Icon    *string
+	Enabled *bool
 }
 
 type SiteInput struct {
@@ -217,6 +242,7 @@ type SiteInput struct {
 	URL         string
 	Icon        string
 	Description string
+	Enabled     *bool
 }
 
 type SitePatch struct {
@@ -225,11 +251,19 @@ type SitePatch struct {
 	URL         *string
 	Icon        *string
 	Description *string
+	Enabled     *bool
 }
 
 type CategoryOrder struct {
 	ID      string
 	SiteIDs []string
+}
+
+// BatchSitesEnabledInput sets enabled on many draft sites in one revision bump.
+type BatchSitesEnabledInput struct {
+	SiteIDs          []string
+	Enabled          bool
+	ExpectedRevision int
 }
 
 type PublicationSettingsInput struct {

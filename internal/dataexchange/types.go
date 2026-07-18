@@ -41,6 +41,7 @@ type PreviewTotals struct {
 type ImportCategory struct {
 	SourceID string       `json:"sourceId"`
 	Name     string       `json:"name"`
+	Enabled  bool         `json:"enabled"`
 	Sites    []ImportSite `json:"sites"`
 }
 
@@ -50,7 +51,10 @@ type ImportSite struct {
 	URL       string `json:"url"`
 	Duplicate bool   `json:"duplicate"`
 	Valid     bool   `json:"valid"`
-	Error     string `json:"error,omitempty"`
+	// Enabled is the proposed draft state for this preview item.
+	// Bookmarks HTML defaults to false; nav.ax JSON follows the file (missing → true).
+	Enabled bool   `json:"enabled"`
+	Error   string `json:"error,omitempty"`
 }
 
 type CommitInput struct {
@@ -58,6 +62,8 @@ type CommitInput struct {
 	Mode             string   `json:"mode"`
 	SelectedSiteIDs  []string `json:"selectedSiteIds"`
 	ExpectedRevision int      `json:"expectedRevision"`
+	// SitesEnabled when non-nil overrides every selected site's enabled on commit.
+	SitesEnabled *bool `json:"sitesEnabled"`
 }
 
 type ImportResult struct {

@@ -276,7 +276,7 @@ func (s *SQLStore) Links(ctx context.Context, filter LinkFilter) (Page[AdminLink
 	arguments = append(arguments, filter.PageSize, (filter.Page-1)*filter.PageSize)
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT s.id, s.page_id, s.category_id, c.name, u.id, u.username,
-		       s.title, s.url, s.icon, s.description, s.sort_order, s.created_at, s.updated_at`+
+		       s.title, s.url, s.icon, s.description, s.sort_order, s.enabled, s.created_at, s.updated_at`+
 		joins+where+` ORDER BY s.updated_at DESC, s.id LIMIT ? OFFSET ?`, arguments...)
 	if err != nil {
 		return Page[AdminLink]{}, err
@@ -367,13 +367,15 @@ func scanSite(row rowScanner) (Site, error) {
 func scanAdminLink(row rowScanner) (AdminLink, error) {
 	var item AdminLink
 	var ownerID, ownerName sql.NullString
+	var enabled int
 	var createdAt, updatedAt string
 	if err := row.Scan(
 		&item.ID, &item.PageID, &item.CategoryID, &item.CategoryName, &ownerID, &ownerName,
-		&item.Title, &item.URL, &item.Icon, &item.Description, &item.SortOrder, &createdAt, &updatedAt,
+		&item.Title, &item.URL, &item.Icon, &item.Description, &item.SortOrder, &enabled, &createdAt, &updatedAt,
 	); err != nil {
 		return AdminLink{}, err
 	}
+	item.Enabled = enabled != 0
 	if ownerID.Valid {
 		item.OwnerID = ownerID.String
 		item.OwnerName = ownerName.String

@@ -95,14 +95,24 @@ func buildPreview(parsed []parsedCategory, existingURLs map[string]struct{}) ([]
 		seen[value] = struct{}{}
 	}
 	for _, sourceCategory := range parsed {
-		category := ImportCategory{SourceID: sourceCategory.SourceID, Name: strings.TrimSpace(sourceCategory.Name), Sites: make([]ImportSite, 0, len(sourceCategory.Sites))}
+		category := ImportCategory{
+			SourceID: sourceCategory.SourceID,
+			Name:     strings.TrimSpace(sourceCategory.Name),
+			Enabled:  sourceCategory.Enabled,
+			Sites:    make([]ImportSite, 0, len(sourceCategory.Sites)),
+		}
 		categoryError := ""
 		if category.Name == "" || len(category.Name) > 60 {
 			categoryError = "分类名称长度必须为 1-60 个字符"
 		}
 		for _, sourceSite := range sourceCategory.Sites {
 			totals.Sites++
-			site := ImportSite{SourceID: sourceSite.SourceID, Title: strings.TrimSpace(sourceSite.Title), URL: strings.TrimSpace(sourceSite.URL)}
+			site := ImportSite{
+				SourceID: sourceSite.SourceID,
+				Title:    strings.TrimSpace(sourceSite.Title),
+				URL:      strings.TrimSpace(sourceSite.URL),
+				Enabled:  sourceSite.Enabled,
+			}
 			if categoryError != "" {
 				site.Error = categoryError
 			} else if site.Title == "" || len(site.Title) > 100 {
@@ -170,6 +180,11 @@ func (s *Service) Commit(ctx context.Context, actor navigation.Actor, pageID, id
 		selected, err := selectSites(payload, input.SelectedSiteIDs)
 		if err != nil {
 			return err
+		}
+		if input.SitesEnabled != nil {
+			for index := range selected {
+				selected[index].Site.Enabled = *input.SitesEnabled
+			}
 		}
 		result, err = applyImport(ctx, tx, pageID, input.Mode, selected, currentRevision, now)
 		if err != nil {
@@ -293,15 +308,18 @@ func loadPreviewPayload(ctx context.Context, tx *sql.Tx, actor navigation.Actor,
 }
 
 type selectedSite struct {
-	CategoryName string
-	Site         ImportSite
+	CategoryName    string
+	CategoryEnabled bool
+	Site            ImportSite
 }
 
 func selectSites(payload previewPayload, selectedIDs []string) ([]selectedSite, error) {
 	available := make(map[string]selectedSite)
 	for _, category := range payload.Categories {
 		for _, site := range category.Sites {
-			available[site.SourceID] = selectedSite{CategoryName: category.Name, Site: site}
+			available[site.SourceID] = selectedSite{
+				CategoryName: category.Name, CategoryEnabled: category.Enabled, Site: site,
+			}
 		}
 	}
 	selected := make([]selectedSite, 0, len(selectedIDs))
@@ -362,10 +380,14 @@ func applyImport(ctx context.Context, tx *sql.Tx, pageID, mode string, selected 
 			if err != nil {
 				return result, err
 			}
+			categoryEnabled := 1
+			if !item.CategoryEnabled {
+				categoryEnabled = 0
+			}
 			_, err = tx.ExecContext(ctx, `
-				INSERT INTO categories(id, page_id, name, icon, sort_order, is_uncategorized, created_at, updated_at)
-				VALUES (?, ?, ?, '', ?, 0, ?, ?)`,
-				categoryID, pageID, strings.TrimSpace(item.CategoryName), categorySort, dbTime(now), dbTime(now),
+				INSERT INTO categories(id, page_id, name, icon, sort_order, is_uncategorized, enabled, created_at, updated_at)
+				VALUES (?, ?, ?, '', ?, 0, ?, ?, ?)`,
+				categoryID, pageID, strings.TrimSpace(item.CategoryName), categorySort, categoryEnabled, dbTime(now), dbTime(now),
 			)
 			if err != nil {
 				return result, fmt.Errorf("create imported category: %w", err)
@@ -388,10 +410,14 @@ func applyImport(ctx context.Context, tx *sql.Tx, pageID, mode string, selected 
 				return result, fmt.Errorf("read imported site order: %w", err)
 			}
 		}
+		siteEnabled := 0
+		if item.Site.Enabled {
+			siteEnabled = 1
+		}
 		_, err = tx.ExecContext(ctx, `
-			INSERT INTO sites(id, page_id, category_id, title, url, icon, description, sort_order, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, '', '', ?, ?, ?)`,
-			siteID, pageID, categoryID, item.Site.Title, item.Site.URL, sortOrder, dbTime(now), dbTime(now),
+			INSERT INTO sites(id, page_id, category_id, title, url, icon, description, sort_order, enabled, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, '', '', ?, ?, ?, ?)`,
+			siteID, pageID, categoryID, item.Site.Title, item.Site.URL, sortOrder, siteEnabled, dbTime(now), dbTime(now),
 		)
 		if err != nil {
 			return result, fmt.Errorf("create imported site: %w", err)

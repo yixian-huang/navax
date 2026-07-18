@@ -3,9 +3,9 @@
 // ============================================================
 
 import { useState } from 'react';
-import { Edit2, Trash2, Search } from 'lucide-react';
+import { Edit2, Trash2, Search, Eye, EyeOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { Site, Category } from '@/api/types';
+import type { Site } from '@/api/types';
 import IconRenderer from '@/components/base/IconRenderer';
 
 export interface FlatSite extends Site {
@@ -20,6 +20,7 @@ export interface SiteTableProps {
   onToggleSelectAll: () => void;
   onEdit: (site: Site) => void;
   onDelete: (site: Site) => void;
+  onToggleEnabled?: (site: Site) => void;
 }
 
 export default function SiteTable({
@@ -29,6 +30,7 @@ export default function SiteTable({
   onToggleSelectAll,
   onEdit,
   onDelete,
+  onToggleEnabled,
 }: SiteTableProps) {
   const [filter, setFilter] = useState('');
 
@@ -133,8 +135,14 @@ export default function SiteTable({
                       </div>
                     </td>
                     <td className="px-0 py-2 min-w-0">
-                      <div className="text-xs font-medium text-foreground-800 truncate max-w-[140px]">
+                      <div className={cn(
+                        'text-xs font-medium truncate max-w-[140px]',
+                        site.enabled === false ? 'text-foreground-400' : 'text-foreground-800',
+                      )}>
                         {site.title}
+                        {site.enabled === false && (
+                          <span className="ml-1 text-[10px] text-foreground-400">隐藏</span>
+                        )}
                       </div>
                       <div className="text-[10px] text-foreground-400 truncate max-w-[140px] font-mono">
                         {site.url.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0]}
@@ -148,6 +156,16 @@ export default function SiteTable({
                     </td>
                     <td className="px-2 py-2 text-right">
                       <div className="flex items-center justify-end gap-0.5">
+                        {onToggleEnabled && (
+                          <button
+                            onClick={() => onToggleEnabled(site)}
+                            className="w-6 h-6 flex items-center justify-center rounded text-foreground-300 hover:text-primary-500 hover:bg-primary-50 transition-colors duration-150"
+                            aria-label={site.enabled === false ? `上架 ${site.title}` : `隐藏 ${site.title}`}
+                            title={site.enabled === false ? '上架（需发布后生效）' : '隐藏（需发布后生效）'}
+                          >
+                            {site.enabled === false ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                          </button>
+                        )}
                         <button
                           onClick={() => onEdit(site)}
                           className="w-6 h-6 flex items-center justify-center rounded text-foreground-300 hover:text-primary-500 hover:bg-primary-50 transition-colors duration-150"
@@ -175,7 +193,7 @@ export default function SiteTable({
       {/* Footer */}
       <div className="border-t border-background-100 px-4 py-2 flex items-center justify-between">
         <span className="text-[10px] text-foreground-400">
-          共 {sites.length} 个站点
+          上架 {sites.filter(s => s.enabled !== false).length}/{sites.length}
         </span>
         {filter && (
           <span className="text-[10px] text-foreground-400">
