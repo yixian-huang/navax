@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import {
   GripVertical, Clock, CalendarDays, ChevronRight, ExternalLink, Edit2, Trash2, Eye, EyeOff,
 } from 'lucide-react';
@@ -15,19 +15,19 @@ import type { Category, Site } from '@/api/types';
 // ---- Density config — matches API enum: list | compact | comfortable ----
 const densityConfig = {
   list: {
-    icon: { container: 'w-7 h-7', font: 'text-xs' },
+    icon: { container: 'w-10 h-10', font: 'text-base', px: 22 },
     text: 'text-[11px]',
     padding: 'p-1.5 gap-1',
   },
   compact: {
-    icon: { container: 'w-7 h-7', font: 'text-xs' },
+    icon: { container: 'w-9 h-9', font: 'text-sm', px: 20 },
     text: 'text-[10px]',
-    padding: 'p-1 gap-0.5',
+    padding: 'p-1.5 gap-1',
   },
   comfortable: {
-    icon: { container: 'w-9 h-9', font: 'text-sm' },
+    icon: { container: 'w-12 h-12', font: 'text-lg', px: 28 },
     text: 'text-xs',
-    padding: 'p-2 gap-1',
+    padding: 'p-2 gap-1.5',
   },
 } as const;
 
@@ -89,7 +89,7 @@ export const SortableSiteCard = memo(function SortableSiteCard({
           icon={site.icon}
           url={site.url}
           className={cn('text-foreground-500', cfg.icon.font)}
-          size={density === 'comfortable' ? 18 : 14}
+          size={cfg.icon.px}
           alt={site.title}
         />
         {isHidden && (
@@ -180,7 +180,7 @@ export const SortableSiteCard = memo(function SortableSiteCard({
 
 // ---- SortableCategoryBlock ----
 export const SortableCategoryBlock = memo(function SortableCategoryBlock({
-  category, density, columns, isOver, defaultCollapsed = false, siteActions,
+  category, density, columns, isOver, defaultCollapsed = false, siteActions, forceExpand = false,
 }: {
   category: Category;
   density: string;
@@ -189,6 +189,8 @@ export const SortableCategoryBlock = memo(function SortableCategoryBlock({
   /** Start collapsed when a category has many sites (large imports). */
   defaultCollapsed?: boolean;
   siteActions?: SitePreviewActions;
+  /** When true (e.g. left panel focused this category), expand for scroll-into-view. */
+  forceExpand?: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: category.id,
@@ -196,6 +198,10 @@ export const SortableCategoryBlock = memo(function SortableCategoryBlock({
     animateLayoutChanges: () => false,
   });
   const [collapsed, setCollapsed] = useState(() => defaultCollapsed || category.sites.length > 24);
+
+  useEffect(() => {
+    if (forceExpand) setCollapsed(false);
+  }, [forceExpand]);
 
   const style = {
     transform: CSS.Translate.toString(transform),
@@ -215,11 +221,13 @@ export const SortableCategoryBlock = memo(function SortableCategoryBlock({
   return (
     <div
       ref={setNodeRef}
+      id={`preview-cat-${category.id}`}
       style={style}
       className={cn(
-        'mb-3 rounded-lg',
+        'mb-3 rounded-lg scroll-mt-3',
         isDragging && 'z-40',
         isOver && 'ring-2 ring-primary-300/80 bg-primary-50/20',
+        forceExpand && 'ring-1 ring-primary-200/70',
       )}
       data-category-id={category.id}
     >

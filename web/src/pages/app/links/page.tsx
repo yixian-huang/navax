@@ -139,6 +139,9 @@ export default function LinksPage() {
   const [hasLayoutChanges, setHasLayoutChanges] = useState(false);
   const [layoutSaveState, setLayoutSaveState] = useState<'idle' | 'dirty' | 'saving' | 'saved' | 'error'>('idle');
   const [overCategoryId, setOverCategoryId] = useState<string | null>(null);
+  /** Category focused from the left panel — preview expands + scrolls to it. */
+  const [previewFocusCatId, setPreviewFocusCatId] = useState<string | null>(null);
+  const previewScrollRef = useRef<HTMLDivElement>(null);
 
   const page = useMemo(() => localPage || pageData, [localPage, pageData]);
   const homeLayout = page?.settings?.layout.template ?? 'full';
@@ -515,6 +518,27 @@ export default function LinksPage() {
     onDelete: (site: Site) => setDeleteTarget({ type: 'site', id: site.id, name: site.title }),
     onToggleEnabled: (site: Site) => { void handleToggleSiteEnabled(site); },
   }), [handleToggleSiteEnabled]);
+
+  const scrollPreviewToCategory = useCallback((categoryId: string) => {
+    setPreviewFocusCatId(categoryId);
+    setExpandedCat(categoryId);
+    // Expand first, then scroll after layout paints.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const el = document.getElementById(`preview-cat-${categoryId}`);
+        if (!el) return;
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    });
+  }, []);
+
+  const focusCategoryFromManage = useCallback((categoryId: string) => {
+    setExpandedCat(categoryId);
+    // Scroll live preview when it is visible (preview-only or split).
+    if (editorFocus === 'preview' || editorFocus === 'both') {
+      scrollPreviewToCategory(categoryId);
+    }
+  }, [editorFocus, scrollPreviewToCategory]);
 
   const handleToggleCategoryEnabled = useCallback(async (cat: Category) => {
     if (!page) return;
@@ -938,36 +962,37 @@ export default function LinksPage() {
                   type="text"
                   value={filter}
                   onChange={e => setFilter(e.target.value)}
-                  placeholder="搜索站点..."
+                  placeholder="搜索标题、描述、域名或分类..."
                   className="w-full h-8 pl-8 pr-3 rounded-md bg-background-50 border border-background-200/70 text-xs text-foreground-900 focus:outline-none focus:border-primary-300 transition-all duration-150"
                 />
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 <button
                   onClick={() => setShowAddCat(true)}
-                  className="flex-1 h-8 rounded-lg bg-white border border-background-200/70 text-xs text-foreground-600 hover:bg-background-100 transition-colors duration-150 flex items-center justify-center gap-1.5 whitespace-nowrap"
+                  className="flex-1 min-w-0 h-8 rounded-lg bg-white border border-background-200/70 text-[11px] text-foreground-600 hover:bg-background-100 transition-colors duration-150 flex items-center justify-center gap-1 whitespace-nowrap px-1.5"
                 >
-                  <Plus className="w-3.5 h-3.5" />
-                  新建分类
+                  <Plus className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span className="truncate">新建分类</span>
                 </button>
                 <button
                   onClick={() => {
                     setAddSiteCatId(expandedCat || categories[0]?.id || '');
                     setShowAddSite(true);
                   }}
-                  className="flex-1 h-8 rounded-lg bg-primary-500 text-background-50 dark:text-foreground-950 text-xs font-medium hover:bg-primary-600 transition-colors duration-150 flex items-center justify-center gap-1.5 whitespace-nowrap"
+                  className="flex-1 min-w-0 h-8 rounded-lg bg-primary-500 text-background-50 dark:text-foreground-950 text-[11px] font-medium hover:bg-primary-600 transition-colors duration-150 flex items-center justify-center gap-1 whitespace-nowrap px-1.5"
                 >
-                  <Plus className="w-3.5 h-3.5" />
-                  添加站点
+                  <Plus className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span className="truncate">添加站点</span>
+                </button>
+                <button
+                  onClick={() => setBatchCheckerOpen(true)}
+                  className="flex-1 min-w-0 h-8 rounded-lg bg-background-50 border border-background-200/70 text-[11px] text-foreground-600 hover:bg-background-100 hover:text-foreground-700 transition-colors duration-150 flex items-center justify-center gap-1 whitespace-nowrap px-1.5"
+                  title="批量链接检测"
+                >
+                  <Link2 className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span className="truncate">链接检测</span>
                 </button>
               </div>
-              <button
-                onClick={() => setBatchCheckerOpen(true)}
-                className="w-full h-7 rounded-lg bg-background-50 border border-background-200/70 text-[10px] text-foreground-500 hover:bg-background-100 hover:text-foreground-700 transition-colors duration-150 flex items-center justify-center gap-1.5 whitespace-nowrap"
-              >
-                <Link2 className="w-3 h-3" />
-                批量链接检测
-              </button>
             </>
           )}
         </div>
@@ -977,6 +1002,7 @@ export default function LinksPage() {
           <SiteTable
             sites={flatSites}
             categories={(page?.categories ?? []).map(c => ({ id: c.id, name: c.name }))}
+            searchQuery={filter}
             selectedIds={selectedSiteIds}
             onToggleSelect={handleToggleSelect}
             onToggleSelectAll={handleSelectAllVisible}
@@ -990,13 +1016,21 @@ export default function LinksPage() {
               setDeleteTarget({ type: 'site', id: site.id, name: site.title })
             }
             onToggleEnabled={site => void handleToggleSiteEnabled(site)}
+            onCategorySelect={id => {
+              if (id !== 'all') focusCategoryFromManage(id);
+            }}
           />
         ) : (
           <div className="flex-1 overflow-y-auto">
           {filtered.map(cat => (
             <div key={cat.id} className="border-b border-background-100 last:border-b-0">
               <button
-                onClick={() => setExpandedCat(expandedCat === cat.id ? null : cat.id)}
+                onClick={() => {
+                  const next = expandedCat === cat.id ? null : cat.id;
+                  setExpandedCat(next);
+                  if (next) focusCategoryFromManage(next);
+                  else setPreviewFocusCatId(null);
+                }}
                 className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-background-50 transition-colors duration-150 text-left"
               >
                 {/* Category select all checkbox */}
@@ -1366,7 +1400,7 @@ export default function LinksPage() {
         </div>
 
         {/* Preview content — only this region scrolls */}
-        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 md:p-6">
+        <div ref={previewScrollRef} className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 md:p-6">
           <DndContext
             sensors={sensors}
             collisionDetection={collisionDetection}
@@ -1414,6 +1448,7 @@ export default function LinksPage() {
                         isOver={overCategoryId === cat.id}
                         defaultCollapsed={cat.sites.length > 24}
                         siteActions={sitePreviewActions}
+                        forceExpand={previewFocusCatId === cat.id}
                       />
                     ))}
                   </div>

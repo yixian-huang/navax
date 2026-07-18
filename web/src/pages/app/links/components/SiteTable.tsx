@@ -3,7 +3,7 @@
 // ============================================================
 
 import { useMemo, useState } from 'react';
-import { Edit2, Trash2, Search, Eye, EyeOff, ExternalLink } from 'lucide-react';
+import { Edit2, Trash2, Eye, EyeOff, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Site } from '@/api/types';
 import IconRenderer from '@/components/base/IconRenderer';
@@ -17,30 +17,35 @@ export interface SiteTableProps {
   sites: FlatSite[];
   /** Category options for the filter dropdown (id + name). */
   categories?: Array<{ id: string; name: string }>;
+  /** Shared search query from the parent toolbar (avoids a second search box). */
+  searchQuery?: string;
   selectedIds: Set<string>;
   onToggleSelect: (id: string) => void;
   onToggleSelectAll: () => void;
   onEdit: (site: Site) => void;
   onDelete: (site: Site) => void;
   onToggleEnabled?: (site: Site) => void;
+  /** Fired when a category chip is chosen (used to scroll the live preview). */
+  onCategorySelect?: (categoryId: string | 'all') => void;
 }
 
 export default function SiteTable({
   sites,
   categories = [],
+  searchQuery = '',
   selectedIds,
   onToggleSelect,
   onToggleSelectAll,
   onEdit,
   onDelete,
   onToggleEnabled,
+  onCategorySelect,
 }: SiteTableProps) {
-  const [filter, setFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [visibilityFilter, setVisibilityFilter] = useState<'all' | 'enabled' | 'hidden'>('all');
 
   const filtered = useMemo(() => {
-    const q = filter.trim().toLowerCase();
+    const q = searchQuery.trim().toLowerCase();
     return sites.filter(s => {
       if (categoryFilter !== 'all' && s.categoryId !== categoryFilter) return false;
       if (visibilityFilter === 'enabled' && s.enabled === false) return false;
@@ -53,7 +58,7 @@ export default function SiteTable({
         (s.description ? s.description.toLowerCase().includes(q) : false)
       );
     });
-  }, [sites, filter, categoryFilter, visibilityFilter]);
+  }, [sites, searchQuery, categoryFilter, visibilityFilter]);
 
   const allFilteredSelected = filtered.length > 0 && filtered.every(s => selectedIds.has(s.id));
   const someFilteredSelected = filtered.some(s => selectedIds.has(s.id)) && !allFilteredSelected;
@@ -79,25 +84,20 @@ export default function SiteTable({
     return map;
   }, [sites]);
 
+  const selectCategory = (id: string) => {
+    setCategoryFilter(id);
+    onCategorySelect?.(id === 'all' ? 'all' : id);
+  };
+
   return (
     <div className="flex flex-col h-full min-w-0">
-      {/* Search + filters */}
-      <div className="px-3 py-2.5 border-b border-background-100 space-y-2">
-        <div className="relative">
-          <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-foreground-300" />
-          <input
-            type="text"
-            value={filter}
-            onChange={e => setFilter(e.target.value)}
-            placeholder="搜索标题、描述、域名或分类..."
-            className="w-full h-8 pl-8 pr-3 rounded-md bg-background-50 border border-background-200/70 text-xs text-foreground-900 focus:outline-none focus:border-primary-300 transition-all duration-150"
-          />
-        </div>
+      {/* Filters only — search lives in the parent toolbar */}
+      <div className="px-3 py-2 border-b border-background-100 space-y-2">
         {categories.length > 0 && (
           <div className="flex flex-wrap gap-1" role="group" aria-label="分类快捷筛选">
             <button
               type="button"
-              onClick={() => setCategoryFilter('all')}
+              onClick={() => selectCategory('all')}
               className={cn(
                 'h-6 px-2 rounded-full text-[10px] font-medium border transition-colors',
                 categoryFilter === 'all'
@@ -114,7 +114,7 @@ export default function SiteTable({
                 <button
                   key={cat.id}
                   type="button"
-                  onClick={() => setCategoryFilter(cat.id)}
+                  onClick={() => selectCategory(cat.id)}
                   className={cn(
                     'h-6 max-w-full px-2 rounded-full text-[10px] font-medium border transition-colors truncate',
                     active
@@ -135,7 +135,7 @@ export default function SiteTable({
         <div className="flex items-center gap-2 flex-wrap">
           <select
             value={categoryFilter}
-            onChange={e => setCategoryFilter(e.target.value)}
+            onChange={e => selectCategory(e.target.value)}
             className="h-7 min-w-0 flex-1 max-w-[11rem] px-2 rounded-md bg-background-50 border border-background-200/70 text-[11px] text-foreground-700 focus:outline-none focus:border-primary-300"
             aria-label="按分类筛选"
           >
@@ -161,7 +161,7 @@ export default function SiteTable({
       <div className="flex-1 overflow-y-auto overflow-x-auto min-w-0">
         {filtered.length === 0 ? (
           <div className="py-10 text-center text-xs text-foreground-400">
-            {filter || categoryFilter !== 'all' || visibilityFilter !== 'all'
+            {searchQuery || categoryFilter !== 'all' || visibilityFilter !== 'all'
               ? '没有匹配当前筛选的结果'
               : '暂无站点'}
           </div>
@@ -315,7 +315,7 @@ export default function SiteTable({
           上架 {enabledCount}/{sites.length}
           {sites.length - enabledCount > 0 ? ` · 隐藏 ${sites.length - enabledCount}` : ''}
         </span>
-        {(filter || categoryFilter !== 'all' || visibilityFilter !== 'all') && (
+        {(searchQuery || categoryFilter !== 'all' || visibilityFilter !== 'all') && (
           <span className="text-[10px] text-foreground-400">
             显示 {filtered.length} 个
           </span>
