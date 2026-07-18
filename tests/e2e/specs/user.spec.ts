@@ -58,7 +58,11 @@ test.describe('用户工作台', () => {
     const slug = (await publication.json()).data.publication.slug;
 
     await page.goto(`/u/${slug}`);
-    await page.getByRole('tab', { name: /我的书签/ }).click();
+    // 公开页仅在有 2+ 个非空分类时显示 tab；单分类时直接展示站点。
+    const tab = page.getByRole('tab', { name: /我的书签/ });
+    if (await tab.count()) {
+      await tab.click();
+    }
     await expect(page.getByText('IETF').first()).toBeVisible();
   });
 

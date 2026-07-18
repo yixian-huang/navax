@@ -5,7 +5,8 @@ test.describe('游客', () => {
   test('公开首页展示已发布的系统内容', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByRole('link', { name: '登录' })).toBeVisible();
-    // 站点按分类 tab 展示，切到目标分类后断言站点可见
+    // 非空分类 ≥2 时渲染 tab；切到目标分类后断言站点可见
+    await expect(page.getByRole('tab', { name: /精选工具/ })).toBeVisible();
     await page.getByRole('tab', { name: /精选工具/ }).click();
     await expect(page.getByText('Example 官网')).toBeVisible();
   });

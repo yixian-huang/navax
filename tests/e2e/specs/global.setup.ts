@@ -38,6 +38,20 @@ setup('初始化实例并准备账号', async ({ request: adminAPI, baseURL }) =
   });
   expect(site.status(), await site.text()).toBe(201);
 
+  // 再加一个有站点的分类，确保发布投影里至少 2 个非空分类。
+  // 公开页 CategoryTabs 仅在 categories.length > 1 时渲染（空「未分类」已不再进入快照）。
+  const category2 = await adminAPI.post(`/api/v1/pages/${systemPageId}/categories`, {
+    headers: origin,
+    data: { name: '学习资源', icon: 'ri-book-line' },
+  });
+  expect(category2.status(), await category2.text()).toBe(201);
+  const category2Id = (await category2.json()).data.id;
+  const site2 = await adminAPI.post(`/api/v1/pages/${systemPageId}/sites`, {
+    headers: origin,
+    data: { categoryId: category2Id, title: 'MDN', url: 'https://developer.mozilla.org' },
+  });
+  expect(site2.status(), await site2.text()).toBe(201);
+
   const publication = await (await adminAPI.get(`/api/v1/pages/${systemPageId}/publication`)).json();
   const visibility = await adminAPI.put(`/api/v1/pages/${systemPageId}/publication`, {
     headers: origin,
