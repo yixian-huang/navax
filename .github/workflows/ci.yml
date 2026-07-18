@@ -96,3 +96,82 @@ jobs:
       - name: Stop smoke-test container
         if: always()
         run: docker rm -f navax-ci >/dev/null 2>&1 || true
+
+  # Production CD: after all gates pass on main, trigger NoPanel artifact deploy
+  # (build on Alpha VPS → transfer → activate-artifact.sh on VIP Cloud).
+  deploy-production:
+    needs: [verify, e2e, container]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    environment: production
+    permissions:
+      contents: read
+    steps:
+      - name: Trigger NoPanel production deploy
+        env:
+          NPC_API_KEY: ${{ secrets.NPC_API_KEY }}
+          GIT_REF: ${{ github.sha }}
+          DEPLOY_HOOK_URL: https://ops.nopanel.dev/api/v1/deploy-hooks/ddaf0219-d11b-466f-9188-5429118c072d/production
+        run: |
+          set -euo pipefail
+          if [ -z "${NPC_API_KEY:-}" ]; then
+            echo "::error::GitHub secret NPC_API_KEY is not set. Mint a NoPanel API key and add it as a repository secret."
+            exit 1
+          fi
+          echo "Triggering deploy for gitRef=${GIT_REF}"
+          response="$(curl -fsS -X POST "$DEPLOY_HOOK_URL" \
+            -H "X-API-Key: ${NPC_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -H "Accept: application/json" \
+            -d "{\"gitRef\":\"${GIT_REF}\"}")"
+          echo "$response" | tee /tmp/deploy-hook.json
+          deployment_id="$(python3 - <<'PY'
+import json, sys
+raw = open("/tmp/deploy-hook.json").read()
+data = json.loads(raw)
+# tolerate {data:{id}} or {id} or {deploymentId}
+if isinstance(data, dict):
+    if isinstance(data.get("data"), dict) and data["data"].get("id"):
+        print(data["data"]["id"]); sys.exit(0)
+    for key in ("id", "deploymentId", "deployment_id"):
+        if data.get(key):
+            print(data[key]); sys.exit(0)
+print("", end="")
+PY
+)"
+          if [ -z "$deployment_id" ]; then
+            echo "::error::Deploy hook did not return a deployment id: $response"
+            exit 1
+          fi
+          echo "deployment_id=${deployment_id}"
+          echo "DEPLOYMENT_ID=${deployment_id}" >> "$GITHUB_ENV"
+
+      - name: Wait for deployment success
+        env:
+          NPC_API_KEY: ${{ secrets.NPC_API_KEY }}
+        run: |
+          set -euo pipefail
+          deadline=$((SECONDS + 1800))
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            body="$(curl -fsS "https://ops.nopanel.dev/api/v1/deployments/${DEPLOYMENT_ID}" \
+              -H "X-API-Key: ${NPC_API_KEY}" \
+              -H "Accept: application/json")"
+            status="$(printf '%s' "$body" | python3 -c 'import json,sys; d=json.load(sys.stdin); d=d.get("data",d) if isinstance(d,dict) else {}; print(d.get("status") or "")')"
+            step="$(printf '%s' "$body" | python3 -c 'import json,sys; d=json.load(sys.stdin); d=d.get("data",d) if isinstance(d,dict) else {}; print(d.get("currentStep") or d.get("currentPhase") or "")')"
+            echo "status=${status} step=${step}"
+            case "$status" in
+              success|succeeded|healthy|done)
+                echo "Deploy succeeded"
+                exit 0
+                ;;
+              failed|error|cancelled|canceled|rolled_back|rollback_failed)
+                echo "::error::Deploy failed with status=${status}"
+                printf '%s\n' "$body" | python3 -m json.tool || printf '%s\n' "$body"
+                exit 1
+                ;;
+            esac
+            sleep 10
+          done
+          echo "::error::Timed out waiting for deployment ${DEPLOYMENT_ID}"
+          exit 1

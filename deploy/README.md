@@ -41,3 +41,35 @@ bash install-navax.sh /root/navax
 ## 升级
 
 替换 `/opt/navax/bin/navax` 后 `systemctl restart navax`。原生二进制的签名自更新在退出后由 systemd（`Restart=always`）自动拉起。
+
+## 生产自动 CD（官方 nav.ax）
+
+官方生产（VIP Cloud `/opt/navax` + systemd）经 **NoPanel artifact** 流水线发布：
+
+1. **构建机** Alpha VPS：`bash deploy/build-artifact.sh` → 产物 `bin/navax` + `activate-artifact.sh`
+2. **传输** 到生产机
+3. **激活** `activate-artifact.sh`：换二进制 → `systemctl restart navax` → 探 `http://127.0.0.1:8090/readyz` → 失败回滚
+
+### 触发方式
+
+| 方式 | 何时 | 说明 |
+|------|------|------|
+| **GitHub Actions（默认）** | `main` 上 push 且 CI 三门禁（verify / e2e / container）全绿 | 见 `.github/workflows/ci.yml` 的 `deploy-production` job |
+| **手动 CLI** | 任意时刻 | `npc deploy navax production --ref main --wait` |
+| **Deploy hook** | 任意 git ref | `POST https://ops.nopanel.dev/api/v1/deploy-hooks/<project>/production` + `{"gitRef":"<sha|branch|tag>"}` |
+
+### 仓库 Secret
+
+在 GitHub → Settings → Secrets → Actions 配置：
+
+- `NPC_API_KEY`：NoPanel API Key（需 `deployments:write`、`environments:read`、`projects:read`）
+
+未配置时 `deploy-production` 会失败并提示，避免静默跳过。
+
+### 本地一键发布当前 main
+
+```bash
+npc deploy navax production --ref main --wait
+```
+
+构建机磁盘紧张时先清理 Docker build cache（Alpha VPS），否则 `build-artifact.sh` 在可用空间 <1GiB 时会拒绝构建。
