@@ -94,8 +94,20 @@ docker compose ps
 - `internal/`：业务、HTTP、SQLite、运维和内嵌 Web
 - `migrations/`：启动时自动执行的 SQLite 迁移
 - `web/`：React/Vite 前端
-- `api/openapi.yaml`：HTTP API 契约
-- `docs/`：需求与架构说明
+- `api/openapi.yaml`：HTTP API 契约（接口唯一契约来源）
+- `docs/`：需求、架构与部署（中文，见下）
+- `deploy/`：原生二进制安装与官方生产 CD 说明
+
+## 文档
+
+| 文档 | 内容 |
+| --- | --- |
+| [docs/requirements.md](docs/requirements.md) | 产品范围与验收（权威） |
+| [docs/architecture.md](docs/architecture.md) | 模块边界、数据与安全不变量 |
+| [docs/deployment.md](docs/deployment.md) | 自托管：DNS、TLS、反代、环境变量 |
+| [deploy/README.md](deploy/README.md) | systemd 安装、升级、官方 CI→NoPanel CD |
+| [docs/design-background-media-library.md](docs/design-background-media-library.md) | 背景媒体库专项设计 |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | 开发命令、合并门槛、架构边界 |
 
 ## 贡献
 
