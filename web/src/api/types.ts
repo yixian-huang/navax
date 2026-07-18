@@ -704,6 +704,8 @@ export interface ImportPreviewSite {
   url: string;
   duplicate: boolean;
   valid: boolean;
+  /** True when the site title was clamped to the max length during preview. */
+  truncated: boolean;
   enabled: boolean;
   error?: string;
 }
@@ -712,6 +714,8 @@ export interface ImportPreviewCategory {
   sourceId: string;
   name: string;
   enabled: boolean;
+  /** True when the category name was clamped to the max length. */
+  truncated: boolean;
   sites: ImportPreviewSite[];
 }
 
@@ -724,6 +728,8 @@ export interface ImportPreview {
     sites: number;
     duplicates: number;
     invalid: number;
+    /** Sites whose title was clamped during preview. */
+    truncated: number;
   };
 }
 

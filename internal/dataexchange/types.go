@@ -36,13 +36,17 @@ type PreviewTotals struct {
 	Sites      int `json:"sites"`
 	Duplicates int `json:"duplicates"`
 	Invalid    int `json:"invalid"`
+	// Truncated counts sites whose title was clamped to the max length during preview.
+	Truncated int `json:"truncated"`
 }
 
 type ImportCategory struct {
-	SourceID string       `json:"sourceId"`
-	Name     string       `json:"name"`
-	Enabled  bool         `json:"enabled"`
-	Sites    []ImportSite `json:"sites"`
+	SourceID string `json:"sourceId"`
+	Name     string `json:"name"`
+	Enabled  bool   `json:"enabled"`
+	// Truncated is true when the category name was clamped to the max length.
+	Truncated bool         `json:"truncated"`
+	Sites     []ImportSite `json:"sites"`
 }
 
 type ImportSite struct {
@@ -51,6 +55,9 @@ type ImportSite struct {
 	URL       string `json:"url"`
 	Duplicate bool   `json:"duplicate"`
 	Valid     bool   `json:"valid"`
+	// Truncated is true when the site title was clamped to the max length.
+	// Empty-title hostname fallback does not set this flag.
+	Truncated bool `json:"truncated"`
 	// Enabled is the proposed draft state for this preview item.
 	// Bookmarks HTML defaults to false; nav.ax JSON follows the file (missing → true).
 	Enabled bool   `json:"enabled"`

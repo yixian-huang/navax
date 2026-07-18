@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/yixian-huang/navax/internal/identity"
 )
@@ -61,14 +62,14 @@ func (s *Service) UpdatePage(ctx context.Context, actor Actor, pageID string, pa
 	}
 	if patch.Title != nil {
 		v := strings.TrimSpace(*patch.Title)
-		if len(v) < 1 || len(v) > 100 {
+		if utf8.RuneCountInString(v) < 1 || utf8.RuneCountInString(v) > 100 {
 			return Page{}, validation("title", "length must be between 1 and 100")
 		}
 		patch.Title = &v
 	}
 	if patch.Description != nil {
 		v := strings.TrimSpace(*patch.Description)
-		if len(v) > 300 {
+		if utf8.RuneCountInString(v) > 300 {
 			return Page{}, validation("description", "length must not exceed 300")
 		}
 		patch.Description = &v
@@ -83,7 +84,7 @@ func (s *Service) Categories(ctx context.Context, actor Actor, pageID string) ([
 func (s *Service) CreateCategory(ctx context.Context, actor Actor, pageID string, input CategoryInput) (Category, error) {
 	input.Name = strings.TrimSpace(input.Name)
 	input.Icon = strings.TrimSpace(input.Icon)
-	if len(input.Name) < 1 || len(input.Name) > 60 {
+	if utf8.RuneCountInString(input.Name) < 1 || utf8.RuneCountInString(input.Name) > 60 {
 		return Category{}, validation("name", "length must be between 1 and 60")
 	}
 	if len(input.Icon) > 256 {
@@ -106,7 +107,7 @@ func (s *Service) UpdateCategory(ctx context.Context, actor Actor, pageID, categ
 	}
 	if patch.Name != nil {
 		v := strings.TrimSpace(*patch.Name)
-		if len(v) < 1 || len(v) > 60 {
+		if utf8.RuneCountInString(v) < 1 || utf8.RuneCountInString(v) > 60 {
 			return Category{}, validation("name", "length must be between 1 and 60")
 		}
 		patch.Name = &v
@@ -164,7 +165,7 @@ func (s *Service) UpdateSite(ctx context.Context, actor Actor, pageID, siteID st
 	}
 	if patch.Title != nil {
 		v := strings.TrimSpace(*patch.Title)
-		if len(v) < 1 || len(v) > 100 {
+		if utf8.RuneCountInString(v) < 1 || utf8.RuneCountInString(v) > 100 {
 			return Site{}, validation("title", "length must be between 1 and 100")
 		}
 		patch.Title = &v
@@ -185,7 +186,7 @@ func (s *Service) UpdateSite(ctx context.Context, actor Actor, pageID, siteID st
 	}
 	if patch.Description != nil {
 		v := strings.TrimSpace(*patch.Description)
-		if len(v) > 300 {
+		if utf8.RuneCountInString(v) > 300 {
 			return Site{}, validation("description", "length must not exceed 300")
 		}
 		patch.Description = &v
@@ -347,7 +348,8 @@ func cleanSiteInput(input SiteInput) (SiteInput, error) {
 	input.Title = strings.TrimSpace(input.Title)
 	input.Icon = strings.TrimSpace(input.Icon)
 	input.Description = strings.TrimSpace(input.Description)
-	if input.CategoryID == "" || len(input.Title) < 1 || len(input.Title) > 100 {
+	titleRunes := utf8.RuneCountInString(input.Title)
+	if input.CategoryID == "" || titleRunes < 1 || titleRunes > 100 {
 		return SiteInput{}, validation("site", "category and a title of at most 100 characters are required")
 	}
 	var err error
@@ -355,7 +357,7 @@ func cleanSiteInput(input SiteInput) (SiteInput, error) {
 	if err != nil {
 		return SiteInput{}, err
 	}
-	if len(input.Icon) > 2048 || len(input.Description) > 300 {
+	if len(input.Icon) > 2048 || utf8.RuneCountInString(input.Description) > 300 {
 		return SiteInput{}, validation("site", "icon or description is too long")
 	}
 	return input, nil

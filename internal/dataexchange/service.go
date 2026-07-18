@@ -8,8 +8,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/yixian-huang/navax/internal/database"
 	"github.com/yixian-huang/navax/internal/identity"
@@ -18,8 +20,10 @@ import (
 )
 
 const (
-	defaultPreviewTTL     = 15 * time.Minute
-	defaultIdempotencyTTL = 24 * time.Hour
+	defaultPreviewTTL          = 15 * time.Minute
+	defaultIdempotencyTTL      = 24 * time.Hour
+	maxImportCategoryNameRunes = 60
+	maxImportSiteTitleRunes    = 100
 )
 
 type Service struct {
@@ -95,15 +99,13 @@ func buildPreview(parsed []parsedCategory, existingURLs map[string]struct{}) ([]
 		seen[value] = struct{}{}
 	}
 	for _, sourceCategory := range parsed {
+		name, nameTruncated := normalizeImportCategoryName(sourceCategory.Name)
 		category := ImportCategory{
-			SourceID: sourceCategory.SourceID,
-			Name:     strings.TrimSpace(sourceCategory.Name),
-			Enabled:  sourceCategory.Enabled,
-			Sites:    make([]ImportSite, 0, len(sourceCategory.Sites)),
-		}
-		categoryError := ""
-		if category.Name == "" || len(category.Name) > 60 {
-			categoryError = "分类名称长度必须为 1-60 个字符"
+			SourceID:  sourceCategory.SourceID,
+			Name:      name,
+			Enabled:   sourceCategory.Enabled,
+			Truncated: nameTruncated,
+			Sites:     make([]ImportSite, 0, len(sourceCategory.Sites)),
 		}
 		for _, sourceSite := range sourceCategory.Sites {
 			totals.Sites++
@@ -113,23 +115,21 @@ func buildPreview(parsed []parsedCategory, existingURLs map[string]struct{}) ([]
 				URL:      strings.TrimSpace(sourceSite.URL),
 				Enabled:  sourceSite.Enabled,
 			}
-			if categoryError != "" {
-				site.Error = categoryError
-			} else if site.Title == "" || len(site.Title) > 100 {
-				site.Error = "站点标题长度必须为 1-100 个字符"
+			cleaned, err := cleanHTTPURL(site.URL)
+			if err != nil {
+				site.Error = err.Error()
 			} else {
-				cleaned, err := cleanHTTPURL(site.URL)
-				if err != nil {
-					site.Error = err.Error()
+				site.URL = cleaned
+				site.Title, site.Truncated = normalizeImportSiteTitle(site.Title, cleaned)
+				site.Valid = true
+				if site.Truncated {
+					totals.Truncated++
+				}
+				if _, duplicate := seen[cleaned]; duplicate {
+					site.Duplicate = true
+					totals.Duplicates++
 				} else {
-					site.URL = cleaned
-					site.Valid = true
-					if _, duplicate := seen[cleaned]; duplicate {
-						site.Duplicate = true
-						totals.Duplicates++
-					} else {
-						seen[cleaned] = struct{}{}
-					}
+					seen[cleaned] = struct{}{}
 				}
 			}
 			if !site.Valid {
@@ -140,6 +140,40 @@ func buildPreview(parsed []parsedCategory, existingURLs map[string]struct{}) ([]
 		categories = append(categories, category)
 	}
 	return categories, totals
+}
+
+// normalizeImportCategoryName soft-repairs bookmark/JSON category labels so long
+// folder names do not fail the whole import batch. truncated is true only when
+// the label was clamped for length (empty → 未分类 is not truncation).
+func normalizeImportCategoryName(name string) (normalized string, truncated bool) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "未分类", false
+	}
+	return clampRunes(name, maxImportCategoryNameRunes)
+}
+
+// normalizeImportSiteTitle soft-repairs titles for import: empty → hostname,
+// then clamp to the same rune limit as CreateSite. truncated is true only when
+// the final title was clamped for length (hostname fallback alone is not).
+func normalizeImportSiteTitle(title, cleanedURL string) (normalized string, truncated bool) {
+	title = strings.TrimSpace(title)
+	if title == "" {
+		if parsed, err := url.Parse(cleanedURL); err == nil {
+			title = strings.TrimSpace(parsed.Hostname())
+		}
+	}
+	if title == "" {
+		title = "未命名站点"
+	}
+	return clampRunes(title, maxImportSiteTitleRunes)
+}
+
+func clampRunes(value string, max int) (string, bool) {
+	if max <= 0 || utf8.RuneCountInString(value) <= max {
+		return value, false
+	}
+	return string([]rune(value)[:max]), true
 }
 
 func (s *Service) Commit(ctx context.Context, actor navigation.Actor, pageID, idempotencyKey string, input CommitInput) (ImportResult, error) {

@@ -44,7 +44,7 @@ func TestPreviewAndMergeCommitAreIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if preview.Totals != (PreviewTotals{Categories: 1, Sites: 4, Duplicates: 2, Invalid: 1}) {
+	if preview.Totals != (PreviewTotals{Categories: 1, Sites: 4, Duplicates: 2, Invalid: 1, Truncated: 0}) {
 		t.Fatalf("unexpected totals: %+v", preview.Totals)
 	}
 	if preview.ExpiresAt != testNow.Add(defaultPreviewTTL) {
@@ -198,6 +198,117 @@ func TestExpiredPreviewCannotCommit(t *testing.T) {
 	}
 	assertIntQuery(t, db, 1, "SELECT COUNT(*) FROM sites WHERE page_id = ?", testPageID)
 	assertIntQuery(t, db, 0, "SELECT draft_revision FROM navigation_pages WHERE id = ?", testPageID)
+}
+
+func TestBuildPreviewSoftNormalizesTitlesAndCategoryNames(t *testing.T) {
+	longChineseTitle := strings.Repeat("测", 120)
+	longASCIITitle := strings.Repeat("a", 150)
+	longCategory := strings.Repeat("分", 80)
+	parsed := []parsedCategory{{
+		SourceID: "category-1",
+		Name:     longCategory,
+		Enabled:  true,
+		Sites: []parsedSite{
+			{SourceID: "site-long-zh", Title: longChineseTitle, URL: "https://zh.example/docs", Enabled: false},
+			{SourceID: "site-long-en", Title: longASCIITitle, URL: "https://en.example/docs", Enabled: false},
+			{SourceID: "site-empty", Title: "   ", URL: "https://github.com/navax", Enabled: false},
+			{SourceID: "site-bad-url", Title: longChineseTitle, URL: "javascript:alert(1)", Enabled: false},
+			{SourceID: "site-ok", Title: "正常标题", URL: "https://ok.example/", Enabled: false},
+		},
+	}, {
+		SourceID: "category-empty",
+		Name:     "  ",
+		Enabled:  true,
+		Sites: []parsedSite{
+			{SourceID: "site-empty-cat", Title: "站点", URL: "https://empty-cat.example/", Enabled: false},
+		},
+	}}
+
+	categories, totals := buildPreview(parsed, map[string]struct{}{"https://ok.example/": {}})
+	// long zh + long en titles are truncated; empty/fallback and bad URL are not.
+	if totals != (PreviewTotals{Categories: 2, Sites: 6, Duplicates: 1, Invalid: 1, Truncated: 2}) {
+		t.Fatalf("unexpected totals: %+v", totals)
+	}
+	if got := categories[0].Name; got != strings.Repeat("分", maxImportCategoryNameRunes) || !categories[0].Truncated {
+		t.Fatalf("category name = %q truncated=%v, want clamped with flag", got, categories[0].Truncated)
+	}
+	if categories[1].Name != "未分类" || categories[1].Truncated {
+		t.Fatalf("empty category name = %q truncated=%v, want 未分类 without truncation", categories[1].Name, categories[1].Truncated)
+	}
+
+	zh := categories[0].Sites[0]
+	if !zh.Valid || zh.Error != "" || !zh.Truncated {
+		t.Fatalf("long Chinese title should be valid and truncated: %+v", zh)
+	}
+	if got := zh.Title; got != strings.Repeat("测", maxImportSiteTitleRunes) {
+		t.Fatalf("Chinese title = %q (runes=%d), want clamped to %d", got, len([]rune(got)), maxImportSiteTitleRunes)
+	}
+
+	en := categories[0].Sites[1]
+	if !en.Valid || !en.Truncated || en.Title != strings.Repeat("a", maxImportSiteTitleRunes) {
+		t.Fatalf("ASCII title not clamped/flagged: %+v", en)
+	}
+
+	empty := categories[0].Sites[2]
+	if !empty.Valid || empty.Truncated || empty.Title != "github.com" {
+		t.Fatalf("empty title should fall back to hostname without truncated flag: %+v", empty)
+	}
+
+	bad := categories[0].Sites[3]
+	if bad.Valid || bad.Truncated || bad.Error == "" {
+		t.Fatalf("invalid URL should remain invalid and not truncated: %+v", bad)
+	}
+
+	dup := categories[0].Sites[4]
+	if !dup.Valid || !dup.Duplicate || dup.Truncated {
+		t.Fatalf("existing URL should be duplicate without truncation: %+v", dup)
+	}
+}
+
+func TestPreviewLongTitleBookmarksAreImportable(t *testing.T) {
+	db := openTestDB(t)
+	seedPage(t, db, true)
+	service := NewService(db)
+	service.now = func() time.Time { return testNow }
+
+	longTitle := strings.Repeat("书", 130)
+	content := []byte(`<!DOCTYPE NETSCAPE-Bookmark-file-1>
+<DL><p>
+  <DT><H3>` + strings.Repeat("夹", 90) + `</H3>
+  <DL><p>
+    <DT><A HREF="https://long-title.example/path">` + longTitle + `</A>
+    <DT><A HREF="https://no-title.example/"></A>
+  </DL><p>
+</DL><p>`)
+	preview, err := service.Preview(context.Background(), testActor(), testPageID, FormatBookmarksHTML, content)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preview.Totals.Invalid != 0 || preview.Totals.Sites != 2 || preview.Totals.Truncated != 1 {
+		t.Fatalf("unexpected preview totals: %+v", preview.Totals)
+	}
+	if got := preview.Categories[0].Name; got != strings.Repeat("夹", maxImportCategoryNameRunes) || !preview.Categories[0].Truncated {
+		t.Fatalf("folder name not clamped/flagged: name=%q truncated=%v", got, preview.Categories[0].Truncated)
+	}
+	if got := preview.Categories[0].Sites[0].Title; got != strings.Repeat("书", maxImportSiteTitleRunes) || !preview.Categories[0].Sites[0].Truncated {
+		t.Fatalf("site title not clamped/flagged: title=%q truncated=%v", got, preview.Categories[0].Sites[0].Truncated)
+	}
+	if got := preview.Categories[0].Sites[1].Title; got != "no-title.example" || preview.Categories[0].Sites[1].Truncated {
+		t.Fatalf("empty anchor text fallback = title=%q truncated=%v", got, preview.Categories[0].Sites[1].Truncated)
+	}
+
+	result, err := service.Commit(context.Background(), testActor(), testPageID, "long-title-key-0001", CommitInput{
+		ImportToken: preview.ImportToken, Mode: ModeMerge,
+		SelectedSiteIDs: previewSiteIDs(preview), ExpectedRevision: 0,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.SitesCreated != 2 || result.InvalidSkipped != 0 {
+		t.Fatalf("unexpected commit result: %+v", result)
+	}
+	assertIntQuery(t, db, 1, "SELECT COUNT(*) FROM sites WHERE page_id = ? AND title = ?", testPageID, strings.Repeat("书", maxImportSiteTitleRunes))
+	assertIntQuery(t, db, 1, "SELECT COUNT(*) FROM sites WHERE page_id = ? AND title = 'no-title.example'", testPageID)
 }
 
 func TestEmptyNavaxReplaceClearsPageAtomically(t *testing.T) {
