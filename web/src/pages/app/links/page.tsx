@@ -8,7 +8,9 @@ import {
   Plus, Edit2, Trash2, ChevronRight, Search, Save,
   Monitor, Tablet, Smartphone,
   PanelLeftClose, PanelLeft, Layout, List, Grid3X3, X, Link2, Loader2, Check,
+  Eye, EyeOff,
 } from 'lucide-react';
+import { navigationApi } from '@/api/navigation';
 import {
   DndContext,
   closestCenter,
@@ -461,11 +463,78 @@ export default function LinksPage() {
     }
   }, [selectedSiteIds, deleteSite, markSaving, markSaved, markError, toast, page?.publication]);
 
+  const handleBatchSetEnabled = useCallback(async (enabled: boolean) => {
+    const ids = Array.from(selectedSiteIds);
+    if (ids.length === 0 || !page) return;
+    markSaving();
+    try {
+      await navigationApi.forPage(page.id).batchSetSitesEnabled({
+        siteIds: ids,
+        enabled,
+        expectedRevision: page.draftRevision ?? 0,
+      });
+      setSelectedSiteIds(new Set());
+      await refetch();
+      markSaved();
+      toast(
+        'success',
+        `${enabled ? '已上架' : '已隐藏'} ${ids.length} 个站点 · ${draftSaveToastMessage(page.publication)}`,
+      );
+    } catch (cause) {
+      markError(cause instanceof Error ? cause.message : '批量更新失败');
+    }
+  }, [selectedSiteIds, page, markSaving, markSaved, markError, toast, refetch]);
+
+  const handleToggleSiteEnabled = useCallback(async (site: Site) => {
+    if (!page) return;
+    const next = !(site.enabled ?? true);
+    markSaving();
+    updateSite.mutate(
+      { id: site.id, data: { enabled: next } },
+      {
+        onSuccess: () => {
+          markSaved();
+          toast(
+            'success',
+            `${next ? '已上架' : '已隐藏'}「${site.title}」· ${draftSaveToastMessage(page.publication)}`,
+          );
+        },
+        onError: (error: Error) => markError(error.message || '更新失败'),
+      },
+    );
+  }, [page, updateSite, markSaving, markSaved, markError, toast]);
+
+  const handleToggleCategoryEnabled = useCallback(async (cat: Category) => {
+    if (!page) return;
+    const next = !(cat.enabled ?? true);
+    markSaving();
+    updateCategory.mutate(
+      { id: cat.id, data: { enabled: next } },
+      {
+        onSuccess: () => {
+          markSaved();
+          toast(
+            'success',
+            `${next ? '已显示分类' : '已隐藏分类'}「${cat.name}」· ${draftSaveToastMessage(page.publication)}`,
+          );
+        },
+        onError: (error: Error) => markError(error.message || '更新失败'),
+      },
+    );
+  }, [page, updateCategory, markSaving, markSaved, markError, toast]);
+
+  const siteStats = useMemo(() => {
+    const sites = page?.categories.flatMap(c => c.sites) ?? [];
+    const total = sites.length;
+    const enabled = sites.filter(s => s.enabled !== false).length;
+    return { total, enabled, hidden: total - enabled };
+  }, [page?.categories]);
+
   // Derive managed links for batch checker
   const managedLinks = useMemo(() => {
     if (!page?.categories) return [];
     return page.categories.flatMap(cat =>
-      cat.sites.map(s => ({ id: s.id, title: s.title, url: s.url }))
+      cat.sites.map(s => ({ id: s.id, title: s.title, url: s.url, enabled: s.enabled !== false }))
     );
   }, [page?.categories]);
 
@@ -763,8 +832,12 @@ export default function LinksPage() {
       >
         {/* Left Panel Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-background-100">
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2 min-w-0">
             <h2 className="text-sm font-semibold text-foreground-700">链接管理</h2>
+            <span className="text-[10px] text-foreground-400 truncate" title="上架数 / 草稿总数（隐藏也占配额）">
+              上架 {siteStats.enabled}/{siteStats.total}
+              {siteStats.hidden > 0 ? ` · 隐藏 ${siteStats.hidden}` : ''}
+            </span>
           </div>
           <div className="flex items-center gap-1">
             {/* View mode toggle */}
@@ -822,6 +895,20 @@ export default function LinksPage() {
                 className="text-[10px] text-foreground-400 hover:text-foreground-600 whitespace-nowrap"
               >
                 取消
+              </button>
+              <button
+                onClick={() => void handleBatchSetEnabled(true)}
+                className="h-6 px-2 rounded text-[10px] font-medium bg-white border border-primary-200 text-primary-700 hover:bg-primary-50 transition-colors duration-150 flex items-center gap-1 whitespace-nowrap"
+              >
+                <Eye className="w-3 h-3" />
+                上架
+              </button>
+              <button
+                onClick={() => void handleBatchSetEnabled(false)}
+                className="h-6 px-2 rounded text-[10px] font-medium bg-white border border-background-200 text-foreground-600 hover:bg-background-100 transition-colors duration-150 flex items-center gap-1 whitespace-nowrap"
+              >
+                <EyeOff className="w-3 h-3" />
+                隐藏
               </button>
               <button
                 onClick={() => setBatchDeleteOpen(true)}
@@ -889,6 +976,7 @@ export default function LinksPage() {
             onDelete={(site) =>
               setDeleteTarget({ type: 'site', id: site.id, name: site.title })
             }
+            onToggleEnabled={site => void handleToggleSiteEnabled(site)}
           />
         ) : (
           <div className="flex-1 overflow-y-auto">
@@ -925,9 +1013,15 @@ export default function LinksPage() {
                 <div className="w-6 h-6 rounded-md bg-background-100 flex items-center justify-center flex-shrink-0">
                   <IconRenderer icon={cat.icon} className="text-xs text-primary-500" />
                 </div>
-                <span className="flex-1 text-xs font-medium text-foreground-900 truncate">
+                <span className={cn(
+                  'flex-1 text-xs font-medium truncate',
+                  cat.enabled === false ? 'text-foreground-400' : 'text-foreground-900',
+                )}>
                   {cat.name}
                 </span>
+                {cat.enabled === false && (
+                  <span className="text-[10px] text-foreground-400 px-1.5 py-0.5 rounded bg-background-100">已隐藏</span>
+                )}
                 <Badge>{cat.sites.length}</Badge>
                 <ChevronRight
                   className={cn(
@@ -935,6 +1029,17 @@ export default function LinksPage() {
                     expandedCat === cat.id && 'rotate-90',
                   )}
                 />
+                <button
+                  onClick={e => {
+                    e.stopPropagation();
+                    void handleToggleCategoryEnabled(cat);
+                  }}
+                  className="w-6 h-6 flex items-center justify-center rounded text-foreground-300 hover:text-primary-500 hover:bg-primary-50 transition-colors duration-150"
+                  aria-label={cat.enabled === false ? `显示分类 ${cat.name}` : `隐藏分类 ${cat.name}`}
+                  title={cat.enabled === false ? '显示分类（需发布后生效）' : '隐藏分类（需发布后生效）'}
+                >
+                  {cat.enabled === false ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                </button>
                 <button
                   onClick={e => {
                     e.stopPropagation();
@@ -992,13 +1097,27 @@ export default function LinksPage() {
                           <IconRenderer icon={site.icon} className="text-[10px] text-foreground-500" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="text-xs font-medium text-foreground-800 truncate">
+                          <div className={cn(
+                            'text-xs font-medium truncate',
+                            site.enabled === false ? 'text-foreground-400' : 'text-foreground-800',
+                          )}>
                             {site.title}
+                            {site.enabled === false && (
+                              <span className="ml-1 text-[10px] text-foreground-400">· 已隐藏</span>
+                            )}
                           </div>
                           <div className="text-[10px] text-foreground-400 truncate">
                             {site.url.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0]}
                           </div>
                         </div>
+                        <button
+                          onClick={() => void handleToggleSiteEnabled(site)}
+                          className="w-6 h-6 flex items-center justify-center rounded text-foreground-300 opacity-0 group-hover:opacity-100 hover:text-primary-500 hover:bg-primary-50 transition-all duration-150 flex-shrink-0"
+                          aria-label={site.enabled === false ? `上架 ${site.title}` : `隐藏 ${site.title}`}
+                          title={site.enabled === false ? '上架（需发布后生效）' : '隐藏（需发布后生效）'}
+                        >
+                          {site.enabled === false ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                        </button>
                         <button
                           onClick={() => {
                             setPanelMode('site');

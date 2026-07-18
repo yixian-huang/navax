@@ -50,7 +50,8 @@ func TestNavigationDraftPublicationIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PublicBySlug() error = %v", err)
 	}
-	if published.Title != "owner-one 的导航" || len(published.Categories) != 2 || published.Categories[1].Sites[0].ID != site.ID {
+	// Empty categories (e.g. uncategorized with no sites) are omitted from the public projection.
+	if published.Title != "owner-one 的导航" || len(published.Categories) != 1 || published.Categories[0].Sites[0].ID != site.ID {
 		t.Fatalf("published payload = %#v", published)
 	}
 	firstSnapshotID := published.SnapshotID
@@ -122,6 +123,112 @@ func TestNavigationDraftPublicationIsolation(t *testing.T) {
 	if snapshotCount != 2 {
 		t.Fatalf("snapshot count = %d, want 2", snapshotCount)
 	}
+}
+
+func TestNavigationEnabledPublishProjection(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	db, service := testNavigationService(t)
+	owner := insertTestPersonalPage(t, db, "user_enabled_one", "enabled-one", "page_enabled_one", "category_enabled_uncat", "enabled-one")
+	page, err := service.CurrentPage(ctx, owner, PageKindPersonal)
+	if err != nil {
+		t.Fatalf("CurrentPage() error = %v", err)
+	}
+	category, err := service.CreateCategory(ctx, owner, page.ID, CategoryInput{Name: "工具"})
+	if err != nil {
+		t.Fatalf("CreateCategory() error = %v", err)
+	}
+	visible, err := service.CreateSite(ctx, owner, page.ID, SiteInput{
+		CategoryID: category.ID, Title: "Visible", URL: "https://visible.example",
+	})
+	if err != nil {
+		t.Fatalf("CreateSite visible error = %v", err)
+	}
+	hidden, err := service.CreateSite(ctx, owner, page.ID, SiteInput{
+		CategoryID: category.ID, Title: "Hidden", URL: "https://hidden.example",
+	})
+	if err != nil {
+		t.Fatalf("CreateSite hidden error = %v", err)
+	}
+	page, err = service.PageDraft(ctx, owner, page.ID)
+	if err != nil {
+		t.Fatalf("PageDraft() error = %v", err)
+	}
+	if _, err := service.UpdateSite(ctx, owner, page.ID, hidden.ID, SitePatch{Enabled: boolPointer(false)}); err != nil {
+		t.Fatalf("hide site error = %v", err)
+	}
+	page, err = service.PageDraft(ctx, owner, page.ID)
+	if err != nil {
+		t.Fatalf("PageDraft after hide error = %v", err)
+	}
+	// Draft still lists both sites; only the hidden one is disabled.
+	if len(page.Sites) != 2 {
+		t.Fatalf("draft sites = %d, want 2", len(page.Sites))
+	}
+	if _, err := service.Publish(ctx, owner, page.ID, page.DraftRevision, "https://nav.ax"); err != nil {
+		t.Fatalf("Publish() error = %v", err)
+	}
+	published, err := service.PublicBySlug(ctx, "enabled-one")
+	if err != nil {
+		t.Fatalf("PublicBySlug() error = %v", err)
+	}
+	if len(published.Categories) != 1 || len(published.Categories[0].Sites) != 1 || published.Categories[0].Sites[0].ID != visible.ID {
+		t.Fatalf("published projection = %#v", published)
+	}
+	// Disabling the whole category must drop remaining sites from the next publish.
+	page, err = service.PageDraft(ctx, owner, page.ID)
+	if err != nil {
+		t.Fatalf("PageDraft before category hide: %v", err)
+	}
+	if _, err := service.UpdateCategory(ctx, owner, page.ID, category.ID, CategoryPatch{Enabled: boolPointer(false)}); err != nil {
+		t.Fatalf("hide category error = %v", err)
+	}
+	page, err = service.PageDraft(ctx, owner, page.ID)
+	if err != nil {
+		t.Fatalf("PageDraft after category hide: %v", err)
+	}
+	if _, err := service.Publish(ctx, owner, page.ID, page.DraftRevision, "https://nav.ax"); err != nil {
+		t.Fatalf("second Publish() error = %v", err)
+	}
+	published, err = service.PublicBySlug(ctx, "enabled-one")
+	if err != nil {
+		t.Fatalf("PublicBySlug after category hide error = %v", err)
+	}
+	if len(published.Categories) != 0 {
+		t.Fatalf("published after category hide = %#v", published)
+	}
+	// Batch re-enable sites + re-enable category.
+	page, err = service.PageDraft(ctx, owner, page.ID)
+	if err != nil {
+		t.Fatalf("PageDraft before re-enable: %v", err)
+	}
+	if _, err := service.UpdateCategory(ctx, owner, page.ID, category.ID, CategoryPatch{Enabled: boolPointer(true)}); err != nil {
+		t.Fatalf("enable category error = %v", err)
+	}
+	page, err = service.PageDraft(ctx, owner, page.ID)
+	if err != nil {
+		t.Fatalf("PageDraft after category enable: %v", err)
+	}
+	if _, err := service.BatchSetSitesEnabled(ctx, owner, page.ID, BatchSitesEnabledInput{
+		SiteIDs: []string{hidden.ID}, Enabled: true, ExpectedRevision: page.DraftRevision,
+	}); err != nil {
+		t.Fatalf("BatchSetSitesEnabled error = %v", err)
+	}
+	page, err = service.PageDraft(ctx, owner, page.ID)
+	if err != nil {
+		t.Fatalf("PageDraft after batch enable: %v", err)
+	}
+	if _, err := service.Publish(ctx, owner, page.ID, page.DraftRevision, "https://nav.ax"); err != nil {
+		t.Fatalf("third Publish() error = %v", err)
+	}
+	published, err = service.PublicBySlug(ctx, "enabled-one")
+	if err != nil {
+		t.Fatalf("PublicBySlug after re-enable error = %v", err)
+	}
+	if len(published.Categories) != 1 || len(published.Categories[0].Sites) != 2 {
+		t.Fatalf("published after re-enable = %#v", published)
+	}
+	_ = db
 }
 
 func TestApprovedSubdomainResolvesPublishedPage(t *testing.T) {
@@ -385,3 +492,4 @@ func insertTestUser(t *testing.T, db *sql.DB, userID, username, role string) {
 }
 
 func stringPointer(value string) *string { return &value }
+func boolPointer(value bool) *bool       { return &value }

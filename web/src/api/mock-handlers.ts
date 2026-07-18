@@ -125,7 +125,9 @@ function syncPageCategories() {
 function contractPageResponse() {
   const page = activePage();
   const categories = activeCategories();
-  const sites = categories.flatMap(category => category.sites);
+  const sites = categories.flatMap(category =>
+    category.sites.map(site => ({ ...site, enabled: site.enabled ?? true })),
+  );
   return {
     id: page.id,
     kind: isEditingSystem() ? 'system' : 'personal',
@@ -135,7 +137,10 @@ function contractPageResponse() {
     description: page.description,
     draftRevision: 0,
     settings: activePageSettings(),
-    categories: categories.map(({ sites: _sites, ...rest }) => rest),
+    categories: categories.map(({ sites: _sites, ...rest }) => ({
+      ...rest,
+      enabled: rest.enabled ?? true,
+    })),
     sites,
     publication: activePublication(),
     draftUpdatedAt: page.draftUpdatedAt,
@@ -639,6 +644,7 @@ handlers.push((url, init) => {
         name: body.name.trim(),
         icon: body.icon || 'ri-folder-line',
         sortOrder: cats.length,
+        enabled: body.enabled ?? true,
         sites: [],
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -661,6 +667,7 @@ handlers.push((url, init) => {
       if (!cat) return Promise.resolve(jsonResponse({ code: 'NotFound', data: null, meta: { message: '分类不存在', detail: '' } }, 404));
       if (body.name) cat.name = body.name;
       if (body.icon) cat.icon = body.icon;
+      if (body.enabled !== undefined) cat.enabled = body.enabled;
       cat.updatedAt = new Date().toISOString();
       syncPageCategories();
       return Promise.resolve(jsonResponse({ code: 'OK', data: cat, meta: { message: '分类已更新', detail: '' } }));
@@ -716,6 +723,7 @@ handlers.push((url, init) => {
         icon: body.icon || 'ri-link',
         description: body.description || '',
         sortOrder: cat.sites.length,
+        enabled: body.enabled ?? true,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -740,6 +748,7 @@ handlers.push((url, init) => {
       if (body.url) site.url = body.url;
       if (body.icon !== undefined) site.icon = body.icon;
       if (body.description !== undefined) site.description = body.description;
+      if (body.enabled !== undefined) site.enabled = body.enabled;
       if (body.categoryId && body.categoryId !== site.categoryId) {
         // Move to new category
         const oldCat = cats.find(c => c.id === site.categoryId);

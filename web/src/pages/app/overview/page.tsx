@@ -67,6 +67,10 @@ export default function AppOverview() {
   }
 
   const totalSites = page.categories.reduce((sum, c) => sum + c.sites.length, 0);
+  const enabledSites = page.categories.reduce(
+    (sum, c) => sum + c.sites.filter(s => s.enabled !== false).length,
+    0,
+  );
   const enabledDisplayItems = page.settings
     ? [page.settings.display.showClock, page.settings.display.showDate, page.settings.display.showGreeting].filter(Boolean).length
     : 0;
@@ -172,7 +176,7 @@ export default function AppOverview() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
         {[
           { label: '分类数', value: page.categories.length },
-          { label: '站点数', value: totalSites },
+          { label: '站点数', value: enabledSites === totalSites ? totalSites : `${enabledSites}/${totalSites}` },
           { label: '首页信息项', value: enabledDisplayItems },
           { label: '发布状态', value: state.shortLabel },
         ].map(stat => (

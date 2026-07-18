@@ -2,7 +2,7 @@
 // nav.ax BatchLinkChecker — batch check managed links
 // ============================================================
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { X, Search, RotateCw, CheckCircle2, AlertTriangle, Clock, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { navigationApi } from '@/api/navigation';
@@ -12,6 +12,7 @@ interface ManagedLink {
   id: string;
   title: string;
   url: string;
+  enabled?: boolean;
 }
 
 interface DisplayResult extends LinkCheckResult, ManagedLink {}
@@ -27,21 +28,28 @@ export default function BatchLinkChecker({ open, onClose, pageId, managedLinks }
   const [results, setResults] = useState<DisplayResult[]>([]);
   const [checking, setChecking] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  // 13-A: default check all; optional filter to enabled-only.
+  const [enabledOnly, setEnabledOnly] = useState(false);
+
+  const targets = useMemo(
+    () => (enabledOnly ? managedLinks.filter(link => link.enabled !== false) : managedLinks),
+    [managedLinks, enabledOnly],
+  );
 
   const handleCheck = useCallback(async () => {
-    if (managedLinks.length === 0) return;
+    if (targets.length === 0) return;
 
     setChecking(true);
     setResults([]);
     setErrorMessage('');
     try {
       const checked: LinkCheckResult[] = [];
-      for (let start = 0; start < managedLinks.length; start += 50) {
-        const siteIds = managedLinks.slice(start, start + 50).map(link => link.id);
+      for (let start = 0; start < targets.length; start += 50) {
+        const siteIds = targets.slice(start, start + 50).map(link => link.id);
         const response = await navigationApi.forPage(pageId).checkLinks(siteIds);
         checked.push(...response.data);
       }
-      const linksById = new Map(managedLinks.map(link => [link.id, link]));
+      const linksById = new Map(targets.map(link => [link.id, link]));
       setResults(checked.flatMap(result => {
         const link = linksById.get(result.siteId);
         return link ? [{ ...result, ...link }] : [];
@@ -51,7 +59,7 @@ export default function BatchLinkChecker({ open, onClose, pageId, managedLinks }
     } finally {
       setChecking(false);
     }
-  }, [managedLinks, pageId]);
+  }, [targets, pageId]);
 
   const clearResults = useCallback(() => {
     setResults([]);
@@ -72,7 +80,7 @@ export default function BatchLinkChecker({ open, onClose, pageId, managedLinks }
           <div>
             <h3 className="text-base font-semibold text-foreground-900">批量链接检测</h3>
             <p className="text-xs text-foreground-400 mt-0.5">
-              检测当前管理的 {managedLinks.length} 个链接的可用性
+              将检测 {targets.length} 个链接（草稿共 {managedLinks.length}）
             </p>
           </div>
 
@@ -87,13 +95,22 @@ export default function BatchLinkChecker({ open, onClose, pageId, managedLinks }
 
         {/* Managed links summary */}
         <div className="px-5 py-3 border-b border-background-100 flex-shrink-0">
+          <label className="mb-2 flex items-center gap-2 text-xs text-foreground-500">
+            <input
+              type="checkbox"
+              checked={enabledOnly}
+              onChange={event => setEnabledOnly(event.target.checked)}
+              className="rounded border-background-300"
+            />
+            仅检查已上架站点
+          </label>
           <div className="flex items-center gap-3">
             <button
               onClick={handleCheck}
-              disabled={checking || managedLinks.length === 0}
+              disabled={checking || targets.length === 0}
               className={cn(
                 'h-9 px-4 rounded-lg text-sm font-medium transition-all duration-150 flex items-center gap-1.5 whitespace-nowrap',
-                checking || managedLinks.length === 0
+                checking || targets.length === 0
                   ? 'bg-background-100 text-foreground-300 cursor-not-allowed'
                   : 'bg-primary-500 text-background-50 dark:text-foreground-950 hover:bg-primary-600'
               )}

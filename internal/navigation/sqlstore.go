@@ -129,10 +129,14 @@ func (s *SQLStore) CreateCategory(ctx context.Context, actor Actor, pageID strin
 		if count >= maximum {
 			return fmt.Errorf("%w: category limit reached", ErrConflict)
 		}
+		enabled := 1
+		if !category.Enabled {
+			enabled = 0
+		}
 		_, err := tx.ExecContext(ctx, `
-			INSERT INTO categories(id, page_id, name, icon, sort_order, is_uncategorized, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, 0, ?, ?)`,
-			category.ID, pageID, category.Name, category.Icon, sortOrder, dbTime(now), dbTime(now),
+			INSERT INTO categories(id, page_id, name, icon, sort_order, is_uncategorized, enabled, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?)`,
+			category.ID, pageID, category.Name, category.Icon, sortOrder, enabled, dbTime(now), dbTime(now),
 		)
 		if err != nil {
 			return mapWriteError(err)
@@ -154,16 +158,23 @@ func (s *SQLStore) UpdateCategory(ctx context.Context, actor Actor, pageID, cate
 		if err != nil {
 			return err
 		}
-		name, icon := current.Name, current.Icon
+		name, icon, enabled := current.Name, current.Icon, current.Enabled
 		if patch.Name != nil {
 			name = *patch.Name
 		}
 		if patch.Icon != nil {
 			icon = *patch.Icon
 		}
+		if patch.Enabled != nil {
+			enabled = *patch.Enabled
+		}
+		enabledValue := 0
+		if enabled {
+			enabledValue = 1
+		}
 		_, err = tx.ExecContext(ctx,
-			"UPDATE categories SET name = ?, icon = ?, updated_at = ? WHERE id = ? AND page_id = ?",
-			name, icon, dbTime(now), categoryID, pageID,
+			"UPDATE categories SET name = ?, icon = ?, enabled = ?, updated_at = ? WHERE id = ? AND page_id = ?",
+			name, icon, enabledValue, dbTime(now), categoryID, pageID,
 		)
 		if err != nil {
 			return mapWriteError(err)
@@ -264,10 +275,14 @@ func (s *SQLStore) CreateSite(ctx context.Context, actor Actor, pageID string, s
 		if count >= maximum {
 			return fmt.Errorf("%w: site limit reached", ErrConflict)
 		}
+		enabled := 1
+		if !site.Enabled {
+			enabled = 0
+		}
 		_, err := tx.ExecContext(ctx, `
-			INSERT INTO sites(id, page_id, category_id, title, url, icon, description, sort_order, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			site.ID, pageID, site.CategoryID, site.Title, site.URL, site.Icon, site.Description, sortOrder, dbTime(now), dbTime(now),
+			INSERT INTO sites(id, page_id, category_id, title, url, icon, description, sort_order, enabled, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			site.ID, pageID, site.CategoryID, site.Title, site.URL, site.Icon, site.Description, sortOrder, enabled, dbTime(now), dbTime(now),
 		)
 		if err != nil {
 			return mapWriteError(err)
@@ -290,6 +305,7 @@ func (s *SQLStore) UpdateSite(ctx context.Context, actor Actor, pageID, siteID s
 			return err
 		}
 		categoryID, title, rawURL, icon, description := current.CategoryID, current.Title, current.URL, current.Icon, current.Description
+		enabled := current.Enabled
 		sortOrder := current.SortOrder
 		if patch.CategoryID != nil && *patch.CategoryID != current.CategoryID {
 			if _, err := loadCategory(ctx, tx, pageID, *patch.CategoryID); err != nil {
@@ -312,10 +328,17 @@ func (s *SQLStore) UpdateSite(ctx context.Context, actor Actor, pageID, siteID s
 		if patch.Description != nil {
 			description = *patch.Description
 		}
+		if patch.Enabled != nil {
+			enabled = *patch.Enabled
+		}
+		enabledValue := 0
+		if enabled {
+			enabledValue = 1
+		}
 		_, err = tx.ExecContext(ctx, `
-			UPDATE sites SET category_id = ?, title = ?, url = ?, icon = ?, description = ?, sort_order = ?, updated_at = ?
+			UPDATE sites SET category_id = ?, title = ?, url = ?, icon = ?, description = ?, sort_order = ?, enabled = ?, updated_at = ?
 			WHERE id = ? AND page_id = ?`,
-			categoryID, title, rawURL, icon, description, sortOrder, dbTime(now), siteID, pageID,
+			categoryID, title, rawURL, icon, description, sortOrder, enabledValue, dbTime(now), siteID, pageID,
 		)
 		if err != nil {
 			return mapWriteError(err)
@@ -350,6 +373,50 @@ func (s *SQLStore) DeleteSite(ctx context.Context, actor Actor, pageID, siteID s
 		}
 		return touchDraft(ctx, tx, pageID, now)
 	})
+}
+
+func (s *SQLStore) BatchSetSitesEnabled(ctx context.Context, actor Actor, pageID string, input BatchSitesEnabledInput, now time.Time) (int, error) {
+	newRevision := 0
+	err := database.WithinTx(ctx, s.db, nil, func(tx *sql.Tx) error {
+		page, err := loadPageBase(ctx, tx, pageID)
+		if err != nil {
+			return err
+		}
+		if err := authorize(actor, page); err != nil {
+			return err
+		}
+		if page.DraftRevision != input.ExpectedRevision {
+			return ErrPrecondition
+		}
+		enabledValue := 0
+		if input.Enabled {
+			enabledValue = 1
+		}
+		placeholders := strings.TrimSuffix(strings.Repeat("?,", len(input.SiteIDs)), ",")
+		args := make([]any, 0, len(input.SiteIDs)+3)
+		args = append(args, enabledValue, dbTime(now), pageID)
+		for _, siteID := range input.SiteIDs {
+			args = append(args, siteID)
+		}
+		result, err := tx.ExecContext(ctx, `
+			UPDATE sites SET enabled = ?, updated_at = ?
+			WHERE page_id = ? AND id IN (`+placeholders+`)`, args...)
+		if err != nil {
+			return fmt.Errorf("batch set sites enabled: %w", err)
+		}
+		affected, err := result.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("read batch sites enabled result: %w", err)
+		}
+		if int(affected) != len(input.SiteIDs) {
+			return ErrNotFound
+		}
+		if err := touchDraft(ctx, tx, pageID, now); err != nil {
+			return err
+		}
+		return tx.QueryRowContext(ctx, "SELECT draft_revision FROM navigation_pages WHERE id = ?", pageID).Scan(&newRevision)
+	})
+	return newRevision, err
 }
 
 func (s *SQLStore) ReplaceContentOrder(ctx context.Context, actor Actor, pageID string, expectedRevision int, order []CategoryOrder, now time.Time) (int, error) {
@@ -660,7 +727,7 @@ func loadPageBase(ctx context.Context, q queryer, pageID string) (Page, error) {
 
 func loadCategories(ctx context.Context, q queryer, pageID string) ([]Category, error) {
 	rows, err := q.QueryContext(ctx, `
-		SELECT id, page_id, name, icon, sort_order, is_uncategorized, created_at, updated_at
+		SELECT id, page_id, name, icon, sort_order, is_uncategorized, enabled, created_at, updated_at
 		FROM categories WHERE page_id = ? ORDER BY sort_order, id`, pageID)
 	if err != nil {
 		return nil, fmt.Errorf("list navigation categories: %w", err)
@@ -679,7 +746,7 @@ func loadCategories(ctx context.Context, q queryer, pageID string) ([]Category, 
 
 func loadCategory(ctx context.Context, q queryer, pageID, categoryID string) (Category, error) {
 	category, err := scanCategory(q.QueryRowContext(ctx, `
-		SELECT id, page_id, name, icon, sort_order, is_uncategorized, created_at, updated_at
+		SELECT id, page_id, name, icon, sort_order, is_uncategorized, enabled, created_at, updated_at
 		FROM categories WHERE page_id = ? AND id = ?`, pageID, categoryID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return Category{}, ErrNotFound
@@ -691,10 +758,12 @@ type rowScanner interface{ Scan(...any) error }
 
 func scanCategory(row rowScanner) (Category, error) {
 	var category Category
+	var enabled int
 	var createdAt, updatedAt string
-	if err := row.Scan(&category.ID, &category.PageID, &category.Name, &category.Icon, &category.SortOrder, &category.IsUncategorized, &createdAt, &updatedAt); err != nil {
+	if err := row.Scan(&category.ID, &category.PageID, &category.Name, &category.Icon, &category.SortOrder, &category.IsUncategorized, &enabled, &createdAt, &updatedAt); err != nil {
 		return Category{}, err
 	}
+	category.Enabled = enabled != 0
 	var err error
 	category.CreatedAt, err = parseDBTime(createdAt)
 	if err != nil {
@@ -705,7 +774,7 @@ func scanCategory(row rowScanner) (Category, error) {
 }
 
 func loadSites(ctx context.Context, q queryer, pageID, categoryID, search string) ([]Site, error) {
-	query := `SELECT id, page_id, category_id, title, url, icon, description, sort_order, created_at, updated_at FROM sites WHERE page_id = ?`
+	query := `SELECT id, page_id, category_id, title, url, icon, description, sort_order, enabled, created_at, updated_at FROM sites WHERE page_id = ?`
 	args := []any{pageID}
 	if categoryID != "" {
 		query += " AND category_id = ?"
@@ -735,7 +804,7 @@ func loadSites(ctx context.Context, q queryer, pageID, categoryID, search string
 
 func loadSite(ctx context.Context, q queryer, pageID, siteID string) (Site, error) {
 	site, err := scanSite(q.QueryRowContext(ctx, `
-		SELECT id, page_id, category_id, title, url, icon, description, sort_order, created_at, updated_at
+		SELECT id, page_id, category_id, title, url, icon, description, sort_order, enabled, created_at, updated_at
 		FROM sites WHERE page_id = ? AND id = ?`, pageID, siteID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return Site{}, ErrNotFound
@@ -745,10 +814,12 @@ func loadSite(ctx context.Context, q queryer, pageID, siteID string) (Site, erro
 
 func scanSite(row rowScanner) (Site, error) {
 	var site Site
+	var enabled int
 	var createdAt, updatedAt string
-	if err := row.Scan(&site.ID, &site.PageID, &site.CategoryID, &site.Title, &site.URL, &site.Icon, &site.Description, &site.SortOrder, &createdAt, &updatedAt); err != nil {
+	if err := row.Scan(&site.ID, &site.PageID, &site.CategoryID, &site.Title, &site.URL, &site.Icon, &site.Description, &site.SortOrder, &enabled, &createdAt, &updatedAt); err != nil {
 		return Site{}, err
 	}
+	site.Enabled = enabled != 0
 	var err error
 	site.CreatedAt, err = parseDBTime(createdAt)
 	if err != nil {
@@ -831,17 +902,27 @@ func loadPublication(ctx context.Context, q queryer, pageID, publicBaseURL strin
 }
 
 func buildPublishedPage(page Page, snapshotID string, visibility Visibility, slug string, publishedAt time.Time) PublishedPage {
-	byCategory := make(map[string][]Site, len(page.Categories))
+	byCategory := make(map[string][]PublicSite, len(page.Categories))
 	for _, site := range page.Sites {
-		byCategory[site.CategoryID] = append(byCategory[site.CategoryID], site)
+		if !site.Enabled {
+			continue
+		}
+		byCategory[site.CategoryID] = append(byCategory[site.CategoryID], toPublicSite(site))
 	}
 	categories := make([]PublicCategory, 0, len(page.Categories))
 	for _, category := range page.Categories {
-		sites := byCategory[category.ID]
-		if sites == nil {
-			sites = make([]Site, 0)
+		if !category.Enabled {
+			continue
 		}
-		categories = append(categories, PublicCategory{Category: category, Sites: sites})
+		sites := byCategory[category.ID]
+		if len(sites) == 0 {
+			continue
+		}
+		categories = append(categories, PublicCategory{
+			ID: category.ID, PageID: category.PageID, Name: category.Name, Icon: category.Icon,
+			SortOrder: category.SortOrder, CreatedAt: category.CreatedAt, UpdatedAt: category.UpdatedAt,
+			Sites: sites,
+		})
 	}
 	owner := PublishedOwner{Visible: page.Publication.ShowAuthor}
 	if owner.Visible {
@@ -855,6 +936,14 @@ func buildPublishedPage(page Page, snapshotID string, visibility Visibility, slu
 		Slug: slug, Visibility: visibility,
 		Owner:    owner,
 		Settings: page.Settings, Categories: categories, PublishedAt: publishedAt,
+	}
+}
+
+func toPublicSite(site Site) PublicSite {
+	return PublicSite{
+		ID: site.ID, CategoryID: site.CategoryID, Title: site.Title, URL: site.URL,
+		Icon: site.Icon, Description: site.Description, SortOrder: site.SortOrder,
+		CreatedAt: site.CreatedAt, UpdatedAt: site.UpdatedAt,
 	}
 }
 

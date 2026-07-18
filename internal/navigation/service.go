@@ -23,6 +23,7 @@ type Store interface {
 	CreateSite(context.Context, Actor, string, Site, time.Time) (Site, error)
 	UpdateSite(context.Context, Actor, string, string, SitePatch, time.Time) (Site, error)
 	DeleteSite(context.Context, Actor, string, string, time.Time) error
+	BatchSetSitesEnabled(context.Context, Actor, string, BatchSitesEnabledInput, time.Time) (int, error)
 	ReplaceContentOrder(context.Context, Actor, string, int, []CategoryOrder, time.Time) (int, error)
 	Settings(context.Context, Actor, string) (PageSettings, error)
 	ReplaceSettings(context.Context, Actor, string, int, PageSettings, time.Time) (PageSettings, error)
@@ -92,11 +93,15 @@ func (s *Service) CreateCategory(ctx context.Context, actor Actor, pageID string
 	if err != nil {
 		return Category{}, err
 	}
-	return s.store.CreateCategory(ctx, actor, pageID, Category{ID: id, Name: input.Name, Icon: input.Icon}, s.now().UTC())
+	enabled := true
+	if input.Enabled != nil {
+		enabled = *input.Enabled
+	}
+	return s.store.CreateCategory(ctx, actor, pageID, Category{ID: id, Name: input.Name, Icon: input.Icon, Enabled: enabled}, s.now().UTC())
 }
 
 func (s *Service) UpdateCategory(ctx context.Context, actor Actor, pageID, categoryID string, patch CategoryPatch) (Category, error) {
-	if patch.Name == nil && patch.Icon == nil {
+	if patch.Name == nil && patch.Icon == nil && patch.Enabled == nil {
 		return Category{}, validation("category", "at least one field is required")
 	}
 	if patch.Name != nil {
@@ -136,11 +141,18 @@ func (s *Service) CreateSite(ctx context.Context, actor Actor, pageID string, in
 	if err != nil {
 		return Site{}, err
 	}
-	return s.store.CreateSite(ctx, actor, pageID, Site{ID: id, CategoryID: clean.CategoryID, Title: clean.Title, URL: clean.URL, Icon: clean.Icon, Description: clean.Description}, s.now().UTC())
+	enabled := true
+	if clean.Enabled != nil {
+		enabled = *clean.Enabled
+	}
+	return s.store.CreateSite(ctx, actor, pageID, Site{
+		ID: id, CategoryID: clean.CategoryID, Title: clean.Title, URL: clean.URL,
+		Icon: clean.Icon, Description: clean.Description, Enabled: enabled,
+	}, s.now().UTC())
 }
 
 func (s *Service) UpdateSite(ctx context.Context, actor Actor, pageID, siteID string, patch SitePatch) (Site, error) {
-	if patch.CategoryID == nil && patch.Title == nil && patch.URL == nil && patch.Icon == nil && patch.Description == nil {
+	if patch.CategoryID == nil && patch.Title == nil && patch.URL == nil && patch.Icon == nil && patch.Description == nil && patch.Enabled == nil {
 		return Site{}, validation("site", "at least one field is required")
 	}
 	if patch.CategoryID != nil {
@@ -183,6 +195,24 @@ func (s *Service) UpdateSite(ctx context.Context, actor Actor, pageID, siteID st
 
 func (s *Service) DeleteSite(ctx context.Context, actor Actor, pageID, siteID string) error {
 	return s.store.DeleteSite(ctx, actor, pageID, siteID, s.now().UTC())
+}
+
+func (s *Service) BatchSetSitesEnabled(ctx context.Context, actor Actor, pageID string, input BatchSitesEnabledInput) (int, error) {
+	if len(input.SiteIDs) < 1 || len(input.SiteIDs) > 200 {
+		return 0, validation("siteIds", "must contain between 1 and 200 IDs")
+	}
+	seen := make(map[string]struct{}, len(input.SiteIDs))
+	for _, siteID := range input.SiteIDs {
+		siteID = strings.TrimSpace(siteID)
+		if len(siteID) < 8 || len(siteID) > 64 {
+			return 0, validation("siteIds", "every id must be 8 to 64 characters")
+		}
+		if _, exists := seen[siteID]; exists {
+			return 0, validation("siteIds", "must be unique")
+		}
+		seen[siteID] = struct{}{}
+	}
+	return s.store.BatchSetSitesEnabled(ctx, actor, pageID, input, s.now().UTC())
 }
 
 func (s *Service) ReplaceContentOrder(ctx context.Context, actor Actor, pageID string, expectedRevision int, order []CategoryOrder) (int, error) {

@@ -99,6 +99,7 @@ type AdminLink struct {
 	Icon         string
 	Description  string
 	SortOrder    int
+	Enabled      bool
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 }

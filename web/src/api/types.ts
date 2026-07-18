@@ -81,6 +81,11 @@ export interface Site {
   icon: string;
   description: string;
   sortOrder: number;
+  /**
+   * Draft visibility. Present and required on draft contracts; omitted from
+   * public/published projections (treat missing as visible).
+   */
+  enabled?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -91,6 +96,11 @@ export interface Category {
   name: string;
   icon: string;
   sortOrder: number;
+  /**
+   * Draft visibility. Present and required on draft contracts; omitted from
+   * public/published projections (treat missing as visible).
+   */
+  enabled?: boolean;
   /** @deprecated 草稿契约通过 NavigationPage.sites 返回；仅公开快照嵌套 sites。 */
   sites: Site[];
   createdAt: string;
@@ -623,6 +633,7 @@ export interface SessionInfo {
 export interface CreateCategoryRequest {
   name: string;
   icon: string;
+  enabled?: boolean;
 }
 
 export interface CreateSiteRequest {
@@ -631,6 +642,7 @@ export interface CreateSiteRequest {
   url: string;
   icon?: string;
   description?: string;
+  enabled?: boolean;
 }
 
 export interface UpdateSiteRequest {
@@ -640,6 +652,13 @@ export interface UpdateSiteRequest {
   description?: string;
   categoryId?: string;
   sortOrder?: number;
+  enabled?: boolean;
+}
+
+export interface BatchSitesEnabledRequest {
+  siteIds: string[];
+  enabled: boolean;
+  expectedRevision: number;
 }
 
 export interface ReorderRequest {
@@ -685,12 +704,14 @@ export interface ImportPreviewSite {
   url: string;
   duplicate: boolean;
   valid: boolean;
+  enabled: boolean;
   error?: string;
 }
 
 export interface ImportPreviewCategory {
   sourceId: string;
   name: string;
+  enabled: boolean;
   sites: ImportPreviewSite[];
 }
 
@@ -711,6 +732,8 @@ export interface ImportCommitRequest {
   mode: 'merge' | 'replace';
   selectedSiteIds: string[];
   expectedRevision: number;
+  /** When set, overrides every selected site's enabled on commit (bookmark import UI). */
+  sitesEnabled?: boolean;
 }
 
 export interface ImportResult {

@@ -40,7 +40,13 @@ type DeleteCategoryMode = 'reject-if-not-empty' | 'delete-sites' | 'move-to-unca
 
 // 契约把分类与站点分开返回；UI 需要 category.sites 嵌套结构。
 function nestCategory(category: CategoryContract, sites: Site[] = []): Category {
-  return { ...category, sites: sites.filter(site => site.categoryId === category.id) };
+  return {
+    ...category,
+    enabled: category.enabled ?? true,
+    sites: sites
+      .filter(site => site.categoryId === category.id)
+      .map(site => ({ ...site, enabled: site.enabled ?? true })),
+  };
 }
 
 // 草稿页：契约 → UI 模型，只做分类嵌套，其余字段直接读契约（settings/publication）。
@@ -116,6 +122,12 @@ export function createPageNavigationApi(pageId: string) {
 
     deleteSite: (siteId: string) =>
       request<ApiResponse<null>>(`${base}/sites/${encodeURIComponent(siteId)}`, { method: 'DELETE' }),
+
+    batchSetSitesEnabled: (data: {
+      siteIds: string[];
+      enabled: boolean;
+      expectedRevision: number;
+    }) => request<ApiResponse<{ draftRevision: number }>>(`${base}/sites/batch-enabled`, { method: 'POST', body: data }),
 
     replaceContentOrder: (data: {
       expectedRevision: number;

@@ -47,6 +47,7 @@ func (h *NavigationHandler) MountProtected(router chi.Router) {
 	router.Delete("/pages/{pageId}/categories/{categoryId}", h.deleteCategory)
 	router.Get("/pages/{pageId}/sites", h.sites)
 	router.Post("/pages/{pageId}/sites", h.createSite)
+	router.Post("/pages/{pageId}/sites/batch-enabled", h.batchSetSitesEnabled)
 	router.Patch("/pages/{pageId}/sites/{siteId}", h.updateSite)
 	router.Delete("/pages/{pageId}/sites/{siteId}", h.deleteSite)
 	router.Put("/pages/{pageId}/content-order", h.replaceContentOrder)
@@ -201,6 +202,28 @@ func (h *NavigationHandler) deleteSite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	WriteJSON(w, r, http.StatusOK, nil)
+}
+
+func (h *NavigationHandler) batchSetSitesEnabled(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		SiteIDs          []string `json:"siteIds"`
+		Enabled          bool     `json:"enabled"`
+		ExpectedRevision int      `json:"expectedRevision"`
+	}
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+	revision, err := h.service.BatchSetSitesEnabled(
+		r.Context(), navigationActor(r), chi.URLParam(r, "pageId"),
+		navigation.BatchSitesEnabledInput{
+			SiteIDs: request.SiteIDs, Enabled: request.Enabled, ExpectedRevision: request.ExpectedRevision,
+		},
+	)
+	if err != nil {
+		h.writeError(w, r, err)
+		return
+	}
+	WriteJSON(w, r, http.StatusOK, map[string]int{"draftRevision": revision})
 }
 
 func (h *NavigationHandler) replaceContentOrder(w http.ResponseWriter, r *http.Request) {
