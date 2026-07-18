@@ -126,20 +126,7 @@ jobs:
             -H "Accept: application/json" \
             -d "{\"gitRef\":\"${GIT_REF}\"}")"
           echo "$response" | tee /tmp/deploy-hook.json
-          deployment_id="$(python3 - <<'PY'
-import json, sys
-raw = open("/tmp/deploy-hook.json").read()
-data = json.loads(raw)
-# tolerate {data:{id}} or {id} or {deploymentId}
-if isinstance(data, dict):
-    if isinstance(data.get("data"), dict) and data["data"].get("id"):
-        print(data["data"]["id"]); sys.exit(0)
-    for key in ("id", "deploymentId", "deployment_id"):
-        if data.get(key):
-            print(data[key]); sys.exit(0)
-print("", end="")
-PY
-)"
+          deployment_id="$(python3 -c 'import json; d=json.load(open("/tmp/deploy-hook.json")); d=d.get("data",d) if isinstance(d,dict) else {}; print(d.get("id") or d.get("deploymentId") or d.get("deployment_id") or "")')"
           if [ -z "$deployment_id" ]; then
             echo "::error::Deploy hook did not return a deployment id: $response"
             exit 1
