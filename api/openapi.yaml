@@ -2114,7 +2114,7 @@ components:
             template: { $ref: '#/components/schemas/LayoutTemplate' }
             density: { $ref: '#/components/schemas/Density' }
             columns: { type: integer, minimum: 1, maximum: 8 }
-            categoryStyle: { type: string, enum: [tabs, sidebar, grid] }
+            categoryStyle: { type: string, enum: [tabs, sidebar, grid, folders] }
         appearance:
           type: object
           required: [themeId, background]

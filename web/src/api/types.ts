@@ -125,7 +125,7 @@ export interface LayoutConfig {
   showClock: boolean;
   showDate: boolean;
   columns: number;
-  categoryStyle: 'tabs' | 'sidebar' | 'grid';
+  categoryStyle: 'tabs' | 'sidebar' | 'grid' | 'folders';
 }
 
 export interface PageSettings {
@@ -133,7 +133,7 @@ export interface PageSettings {
     template: LayoutTemplate;
     density: Density;
     columns: number;
-    categoryStyle: 'tabs' | 'sidebar' | 'grid';
+    categoryStyle: 'tabs' | 'sidebar' | 'grid' | 'folders';
   };
   appearance: {
     themeId: string;

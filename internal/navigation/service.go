@@ -332,7 +332,7 @@ func ValidateSettings(settings PageSettings) error {
 	if !oneOf(settings.Layout.Density, "list", "compact", "comfortable") {
 		return validation("layout.density", "is invalid")
 	}
-	if settings.Layout.Columns < 1 || settings.Layout.Columns > 8 || !oneOf(settings.Layout.CategoryStyle, "tabs", "sidebar", "grid") {
+	if settings.Layout.Columns < 1 || settings.Layout.Columns > 8 || !oneOf(settings.Layout.CategoryStyle, "tabs", "sidebar", "grid", "folders") {
 		return validation("layout", "columns or category style is invalid")
 	}
 	if strings.TrimSpace(settings.Appearance.ThemeID) == "" || !oneOf(settings.Appearance.Background.Type, "none", "color", "gradient", "image", "video") || len(settings.Appearance.Background.Value) > 2048 || settings.Appearance.Background.Opacity < 0 || settings.Appearance.Background.Opacity > 1 {
