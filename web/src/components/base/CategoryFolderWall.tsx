@@ -3,7 +3,7 @@
 // Desktop: hover opens, leave tile+panel closes (~120ms). Touch/click toggles.
 // ============================================================
 
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import type { Site } from '@/api/types';
 
@@ -21,7 +21,7 @@ function getDomain(url: string): string {
   }
 }
 
-/** Prefer site.icon when it is an https(s) URL; else Google favicon by domain. */
+/** Prefer site.icon when it is an http(s) URL; else Google favicon by domain. */
 function siteFavicon(site: Site): string {
   const icon = (site.icon || '').trim();
   if (/^https?:\/\//i.test(icon)) return icon;
@@ -83,6 +83,46 @@ function FolderSiteIcon({
   );
 }
 
+type PanelPlacement = {
+  top: number;
+  left: number;
+  transform: string;
+  maxHeight: number;
+};
+
+function placePanel(tileEl: HTMLElement, panelW: number, panelMaxH: number): PanelPlacement {
+  const rect = tileEl.getBoundingClientRect();
+  const gap = 8;
+  const margin = 8;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+
+  const spaceBelow = vh - rect.bottom - gap - margin;
+  const spaceAbove = rect.top - gap - margin;
+  const placeAbove = spaceBelow < 160 && spaceAbove > spaceBelow;
+  const maxHeight = Math.max(120, Math.min(panelMaxH, placeAbove ? spaceAbove : spaceBelow));
+
+  let left = rect.left + rect.width / 2;
+  const half = panelW / 2;
+  if (left - half < margin) left = margin + half;
+  if (left + half > vw - margin) left = vw - margin - half;
+
+  if (placeAbove) {
+    return {
+      top: rect.top - gap,
+      left,
+      transform: 'translate(-50%, -100%)',
+      maxHeight,
+    };
+  }
+  return {
+    top: rect.bottom + gap,
+    left,
+    transform: 'translate(-50%, 0)',
+    maxHeight,
+  };
+}
+
 interface FolderTileProps {
   category: { id: string; name: string; sites: Site[] };
   open: boolean;
@@ -91,6 +131,7 @@ interface FolderTileProps {
   onHoverIntentClose: () => void;
   onHoverStay: () => void;
   onSiteOpen: (site: Site) => void;
+  onClose: () => void;
 }
 
 function FolderTile({
@@ -101,13 +142,71 @@ function FolderTile({
   onHoverIntentClose,
   onHoverStay,
   onSiteOpen,
+  onClose,
 }: FolderTileProps) {
   const panelId = useId();
+  const tileRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const preview = category.sites.slice(0, 4);
   const count = category.sites.length;
+  const [placement, setPlacement] = useState<PanelPlacement | null>(null);
+
+  useLayoutEffect(() => {
+    if (!open || !tileRef.current) {
+      setPlacement(null);
+      return;
+    }
+    const update = () => {
+      if (!tileRef.current) return;
+      setPlacement(placePanel(tileRef.current, 224, 256));
+    };
+    update();
+    window.addEventListener('resize', update);
+    window.addEventListener('scroll', update, true);
+    return () => {
+      window.removeEventListener('resize', update);
+      window.removeEventListener('scroll', update, true);
+    };
+  }, [open, count]);
+
+  useEffect(() => {
+    if (!open || !panelRef.current) return;
+    const panel = panelRef.current;
+    const focusable = panel.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    );
+    const list = Array.from(focusable);
+    const first = list[0] ?? panel;
+    first.focus();
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+        buttonRef.current?.focus();
+        return;
+      }
+      if (e.key !== 'Tab' || list.length === 0) return;
+      const active = document.activeElement as HTMLElement | null;
+      const idx = list.indexOf(active as HTMLElement);
+      if (e.shiftKey) {
+        if (idx <= 0) {
+          e.preventDefault();
+          list[list.length - 1].focus();
+        }
+      } else if (idx === list.length - 1 || idx === -1) {
+        e.preventDefault();
+        list[0].focus();
+      }
+    };
+    panel.addEventListener('keydown', onKeyDown);
+    return () => panel.removeEventListener('keydown', onKeyDown);
+  }, [open, onClose]);
 
   return (
     <div
+      ref={tileRef}
       className="relative"
       data-folder-tile={category.id}
       onMouseEnter={() => {
@@ -121,6 +220,7 @@ function FolderTile({
       }}
     >
       <button
+        ref={buttonRef}
         type="button"
         aria-expanded={open}
         aria-haspopup="dialog"
@@ -156,15 +256,34 @@ function FolderTile({
         <span className="text-[10px] text-foreground-400 tabular-nums">{count}</span>
       </button>
 
-      {open ? (
+      {open && placement ? (
         <div
+          ref={panelRef}
           id={panelId}
           role="dialog"
           aria-label={category.name}
+          tabIndex={-1}
+          style={{
+            position: 'fixed',
+            top: placement.top,
+            left: placement.left,
+            transform: placement.transform,
+            maxHeight: placement.maxHeight,
+            width: 224,
+          }}
           className={cn(
-            'absolute z-30 left-1/2 -translate-x-1/2 top-[calc(100%+8px)] w-56 max-h-64 overflow-auto',
-            'rounded-xl border border-background-200/60 bg-background-0/95 backdrop-blur-md p-3 shadow-lg',
+            'z-50 overflow-auto rounded-xl border border-background-200/60',
+            'bg-background-0/95 backdrop-blur-md p-3 shadow-lg',
+            'focus:outline-none',
           )}
+          onMouseEnter={() => {
+            if (!canHoverOpen()) return;
+            onHoverStay();
+          }}
+          onMouseLeave={() => {
+            if (!canHoverOpen()) return;
+            onHoverIntentClose();
+          }}
         >
           {count === 0 ? (
             <p className="text-xs text-foreground-400 text-center py-4">暂无站点</p>
@@ -175,6 +294,8 @@ function FolderTile({
                   key={site.id}
                   href={site.url}
                   title={site.title}
+                  target="_blank"
+                  rel="nofollow noopener noreferrer"
                   className={cn(
                     'flex flex-col items-center gap-1 min-h-[44px] min-w-[40px] rounded-lg p-1',
                     'hover:bg-background-100/80',
@@ -223,6 +344,11 @@ export default function CategoryFolderWall({
     }, 120);
   }, [clearCloseTimer]);
 
+  const closeOpen = useCallback(() => {
+    clearCloseTimer();
+    setOpenId(null);
+  }, [clearCloseTimer]);
+
   useEffect(() => () => clearCloseTimer(), [clearCloseTimer]);
 
   useEffect(() => {
@@ -247,6 +373,7 @@ export default function CategoryFolderWall({
       const openTile = root.querySelector(
         `[data-folder-tile="${CSS.escape(openId)}"]`,
       );
+      // Fixed popover is portaled via fixed coords but still inside tile DOM tree
       if (openTile && !openTile.contains(target)) {
         clearCloseTimer();
         setOpenId(null);
@@ -280,6 +407,7 @@ export default function CategoryFolderWall({
           onHoverIntentClose={scheduleClose}
           onHoverStay={clearCloseTimer}
           onSiteOpen={onSiteOpen}
+          onClose={closeOpen}
         />
       ))}
     </div>

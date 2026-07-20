@@ -30,6 +30,7 @@ import {
   arrayMove,
 } from '@dnd-kit/sortable';
 import { SortableSiteCard, SortableCategoryBlock, WidgetPreview } from '@/components/feature/DnDPreview';
+import CategoryFolderWall from '@/components/base/CategoryFolderWall';
 import {
   useMyPage,
   useCreateCategory,
@@ -1483,31 +1484,51 @@ export default function LinksPage() {
                   <span className="text-xs text-foreground-300">搜索或输入网址...</span>
                 </div>
 
-                <SortableContext
-                  items={page.categories.map(c => c.id)}
-                  strategy={verticalListSortingStrategy}
-                >
-                  <div>
-                    {page.categories.map(cat => (
-                      <SortableCategoryBlock
-                        key={cat.id}
-                        category={cat}
-                        density={page.settings.layout.density}
-                        columns={page.settings.layout.columns}
-                        isOver={overCategoryId === cat.id}
-                        defaultCollapsed={cat.sites.length > 24}
-                        siteActions={sitePreviewActions}
-                        forceExpand={previewFocusCatId === cat.id}
-                      />
-                    ))}
+                {page.settings.layout.categoryStyle === 'folders' ? (
+                  <div className="space-y-3">
+                    <CategoryFolderWall
+                      categories={page.categories.map(cat => ({
+                        id: cat.id,
+                        name: cat.name,
+                        sites: cat.sites.filter(s => s.enabled !== false),
+                      }))}
+                      onSiteOpen={site => {
+                        window.open(site.url, '_blank', 'noopener,noreferrer');
+                      }}
+                    />
+                    <p className="text-[11px] text-foreground-400 text-center">
+                      文件夹样式预览（只读）· 站点排序请在左侧列表操作
+                    </p>
                   </div>
-                </SortableContext>
+                ) : (
+                  <SortableContext
+                    items={page.categories.map(c => c.id)}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    <div>
+                      {page.categories.map(cat => (
+                        <SortableCategoryBlock
+                          key={cat.id}
+                          category={cat}
+                          density={page.settings.layout.density}
+                          columns={page.settings.layout.columns}
+                          isOver={overCategoryId === cat.id}
+                          defaultCollapsed={cat.sites.length > 24}
+                          siteActions={sitePreviewActions}
+                          forceExpand={previewFocusCatId === cat.id}
+                        />
+                      ))}
+                    </div>
+                  </SortableContext>
+                )}
               </div>
             </div>
           </DndContext>
 
           <p className="text-[11px] text-foreground-300 mt-3 text-center">
-            拖拽分类手柄排序 · 拖站点到其他分类即可移动 · 布局改动会自动保存到草稿
+            {page.settings.layout.categoryStyle === 'folders'
+              ? '文件夹样式下预览只读 · 左侧编辑分类与站点 · 布局改动会自动保存到草稿'
+              : '拖拽分类手柄排序 · 拖站点到其他分类即可移动 · 布局改动会自动保存到草稿'}
           </p>
         </div>
       </div>

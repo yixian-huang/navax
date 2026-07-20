@@ -179,7 +179,7 @@ export default function SiteCard({ site, density, onOpen, onEdit, onDelete, sear
   const shared = { site, onOpen, onEdit, onDelete, title: tip };
 
   if (density === 'list') {
-    const secondary = desc || domain;
+    // Spec: list keeps one domain line; description stays in tooltip only.
     return (
       <CardWrapper
         {...shared}
@@ -192,15 +192,8 @@ export default function SiteCard({ site, density, onOpen, onEdit, onDelete, sear
           <span className="site-card-title block text-sm font-medium text-foreground-800 truncate group-hover:text-accent-500 transition-colors duration-200">
             <HighlightText text={site.title} query={q} />
           </span>
-          <span
-            className={cn(
-              'block text-[11px] truncate max-w-full',
-              desc
-                ? 'site-card-list-desc text-foreground-500'
-                : 'site-card-list-domain text-foreground-400 font-mono',
-            )}
-          >
-            <HighlightText text={secondary} query={q} />
+          <span className="site-card-list-domain block text-[11px] truncate max-w-full text-foreground-400 font-mono">
+            <HighlightText text={domain} query={q} />
           </span>
         </span>
         <i className="ri-arrow-right-up-line text-sm text-foreground-300 opacity-0 group-hover:opacity-100 transition-all duration-200 flex-shrink-0" />
