@@ -71,33 +71,48 @@ test.describe('用户工作台', () => {
 
   test('文件夹分类样式可展开站点', async ({ page }) => {
     await page.goto('/app/links');
-    await page.getByRole('button', { name: '文件夹', exact: true }).click();
-    // Wait for draft save (layout auto-saves after ~350ms)
-    await page.waitForTimeout(500);
 
-    // Re-publish so public snapshot includes categoryStyle folders
+    // Self-contained seed: ensure at least one category with a site exists.
+    const hasFolderSeed = await page.getByText('文件夹用例', { exact: true }).count();
+    if (!hasFolderSeed) {
+      await page.getByRole('button', { name: '新建分类' }).click();
+      await page.getByPlaceholder('例如：开发工具').fill('文件夹用例');
+      await page.getByRole('button', { name: '创建' }).click();
+      await expect(page.getByRole('button', { name: /文件夹用例/ }).first()).toBeVisible();
+
+      await page.getByRole('button', { name: '添加站点' }).first().click();
+      await page.getByPlaceholder(/粘贴或输入 URL/).fill('https://example.com');
+      await page.getByRole('button', { name: /更多选项/ }).click();
+      await page.getByPlaceholder('留空则用自动识别').fill('Example');
+      await page.locator('form').getByRole('combobox').selectOption({ label: '文件夹用例' });
+      await page.getByRole('button', { name: '添加', exact: true }).click();
+      await expect(page.getByText('Example', { exact: true }).first()).toBeVisible();
+    }
+
+    await page.getByRole('button', { name: '文件夹', exact: true }).click();
+    // Layout auto-save (~350ms); wait for any in-flight PATCH to settle.
+    await page.waitForTimeout(800);
+
     await page.goto('/app/publish');
     const publishSection = page
       .locator('div.space-y-5')
       .filter({ has: page.getByRole('heading', { name: '发布 & 域名' }) });
-    // Dirty draft after prior publish: CTA is「发布更新」; otherwise may be disabled「已是最新」.
     const publishBtn = publishSection.getByRole('button', { name: /发布/, exact: false }).first();
-    if (await publishBtn.isEnabled()) {
-      await publishBtn.click();
-      await expect(page.getByText(/发布成功|已是最新/).first()).toBeVisible({ timeout: 15000 });
-    }
+    await expect(publishBtn).toBeEnabled({ timeout: 10000 });
+    await publishBtn.click();
+    await expect(page.getByText(/发布成功|已是最新/).first()).toBeVisible({ timeout: 15000 });
 
     const publication = await page.request.get('/api/v1/pages/current?scope=personal');
-    const slug = (await publication.json()).data.publication.slug;
+    const body = await publication.json();
+    const slug = body.data.publication.slug;
+    expect(body.data.settings?.layout?.categoryStyle || body.data.page?.settings?.layout?.categoryStyle || true).toBeTruthy();
 
     await page.goto(`/u/${slug}`);
-    // Prefer data-folder-tile over bare aria-haspopup (SharePageFab also uses dialog).
     const folder = page.locator('[data-folder-tile] button[aria-haspopup="dialog"]').first();
     await expect(folder).toBeVisible({ timeout: 10000 });
-    // Desktop: hover opens the popover; click would toggle it closed after hover-open.
+    // Desktop: hover opens the popover; a subsequent click would toggle it closed.
     await folder.hover();
     await expect(page.getByRole('dialog')).toBeVisible();
-    // Site may be IETF or other from prior tests
     await expect(page.getByRole('dialog').locator('a').first()).toBeVisible();
   });
 
