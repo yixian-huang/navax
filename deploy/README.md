@@ -46,9 +46,11 @@ bash install-navax.sh /root/navax
 
 官方生产（VIP Cloud `/opt/navax` + systemd）经 **NoPanel artifact** 流水线发布：
 
-1. **构建机** Alpha VPS：`bash deploy/build-artifact.sh` → 产物 `bin/navax` + `activate-artifact.sh`
-2. **传输** 到生产机
+1. **构建机**（当前 env `buildServerId` = **VIP Cloud**，与生产同机）：`bash deploy/build-artifact.sh` → 产物 `bin/navax` + `activate-artifact.sh`
+2. **传输** 到激活目录（`distributionConfig.targetPath`，现为 `/opt/navax-build/incoming`）
 3. **激活** `activate-artifact.sh`：换二进制 → `systemctl restart navax` → 探 `http://127.0.0.1:8090/readyz` → 失败回滚
+
+> **为何不是 Alpha？** Alpha 上 `nopanel-probe` 默认 `PrivateTmp=true`，且 SFTP 上传的 `/tmp/npc-source-*.tar.gz` 属 root，probe 用户无法 `rm`。已在 Alpha 加 drop-in `PrivateTmp=false` 并 `chown` `/opt/navax-build`，但 root 拥有的 sticky `/tmp` 上传文件仍无法被 probe 删除，故生产 env 暂时把 **build server 设为 VIP Cloud（control-plane SSH / root）**。恢复 Alpha 构建前需 NoPanel 侧把源码包落到 probe 可写路径（或上传用户改为 `nopanel-probe`）。
 
 ### 触发方式
 
@@ -62,7 +64,7 @@ bash install-navax.sh /root/navax
 
 在 GitHub → Settings → Secrets → Actions 配置：
 
-- `NPC_API_KEY`：NoPanel API Key（需 `deployments:write`、`environments:read`、`projects:read`）
+- `NPC_API_KEY`：NoPanel API Key（需 `deployments:write`、`environments:read`、`projects:read`；与本机 `npc` 可用的 team key 对齐）。**401** 时先 `npc auth test` 确认本地 key，再 `gh secret set NPC_API_KEY` 覆盖。
 
 未配置时 `deploy-production` 会失败并提示，避免静默跳过。
 
@@ -72,4 +74,4 @@ bash install-navax.sh /root/navax
 npc deploy navax production --ref main --wait
 ```
 
-构建机磁盘紧张时先清理 Docker build cache（Alpha VPS），否则 `build-artifact.sh` 在可用空间 <1GiB 时会拒绝构建。
+构建机磁盘紧张时先清理 Docker build cache / `/opt/navax-build`，否则 `build-artifact.sh` 在可用空间 <1GiB 时会拒绝构建。VIP 上需有 `sudo`（activate 包装会调用）；`apt-get install -y sudo` 一次即可。
