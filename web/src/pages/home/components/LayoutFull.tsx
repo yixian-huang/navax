@@ -1,4 +1,4 @@
-import { SearchSection, SitesSection, FooterActions } from './SharedSections';
+import { SearchSection, SitesSection, FooterActions, type CategoryStyle } from './SharedSections';
 import { cn } from '@/lib/utils';
 import type { Density, Site } from '@/api/types';
 import type { SearchEngine } from '@/components/base/SearchBar';
@@ -32,6 +32,7 @@ interface LayoutProps {
   searchSuggestions?: string[];
   showEngineSelector?: boolean;
   wallpaperMode?: boolean;
+  categoryStyle?: CategoryStyle;
 }
 
 export default function LayoutFull({
@@ -44,6 +45,7 @@ export default function LayoutFull({
   activeSites, density, onDensityChange, totalSites, onSiteOpen,
   searchSuggestions,
   wallpaperMode = false,
+  categoryStyle = 'tabs',
 }: LayoutProps) {
   const showHeader = showGreeting || showDate || showClock;
 
@@ -132,6 +134,7 @@ export default function LayoutFull({
         density={density} onDensityChange={onDensityChange}
         totalSites={totalSites} query={query} onSiteOpen={onSiteOpen} delay={120}
         wallpaperMode={wallpaperMode}
+        categoryStyle={categoryStyle}
       />
 
       <FooterActions wallpaperMode={wallpaperMode} />
