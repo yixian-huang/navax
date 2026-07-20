@@ -59,7 +59,7 @@ func TestThemesReturnsEnabledSeeded(t *testing.T) {
 	}
 
 	// 停用一个主题后不应再出现。
-	if _, err := db.Exec("UPDATE themes SET enabled = 0 WHERE id = 'kyoto'"); err != nil {
+	if _, err := db.Exec("UPDATE themes SET enabled = 0 WHERE id = 'noir'"); err != nil {
 		t.Fatal(err)
 	}
 	after, err := service.Themes(context.Background())
@@ -70,8 +70,8 @@ func TestThemesReturnsEnabledSeeded(t *testing.T) {
 		t.Fatalf("停用后主题数应减一: before=%d after=%d", len(themes), len(after))
 	}
 	for _, theme := range after {
-		if theme.ID == "kyoto" {
-			t.Fatal("已停用的 kyoto 不应出现")
+		if theme.ID == "noir" {
+			t.Fatal("已停用的 noir 不应出现")
 		}
 	}
 }
