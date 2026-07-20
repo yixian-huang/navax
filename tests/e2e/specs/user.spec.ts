@@ -69,6 +69,38 @@ test.describe('用户工作台', () => {
     await expect(page.getByText('IETF').first()).toBeVisible();
   });
 
+  test('文件夹分类样式可展开站点', async ({ page }) => {
+    await page.goto('/app/links');
+    await page.getByRole('button', { name: '文件夹', exact: true }).click();
+    // Wait for draft save (layout auto-saves after ~350ms)
+    await page.waitForTimeout(500);
+
+    // Re-publish so public snapshot includes categoryStyle folders
+    await page.goto('/app/publish');
+    const publishSection = page
+      .locator('div.space-y-5')
+      .filter({ has: page.getByRole('heading', { name: '发布 & 域名' }) });
+    // Dirty draft after prior publish: CTA is「发布更新」; otherwise may be disabled「已是最新」.
+    const publishBtn = publishSection.getByRole('button', { name: /发布/, exact: false }).first();
+    if (await publishBtn.isEnabled()) {
+      await publishBtn.click();
+      await expect(page.getByText(/发布成功|已是最新/).first()).toBeVisible({ timeout: 15000 });
+    }
+
+    const publication = await page.request.get('/api/v1/pages/current?scope=personal');
+    const slug = (await publication.json()).data.publication.slug;
+
+    await page.goto(`/u/${slug}`);
+    // Prefer data-folder-tile over bare aria-haspopup (SharePageFab also uses dialog).
+    const folder = page.locator('[data-folder-tile] button[aria-haspopup="dialog"]').first();
+    await expect(folder).toBeVisible({ timeout: 10000 });
+    // Desktop: hover opens the popover; click would toggle it closed after hover-open.
+    await folder.hover();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    // Site may be IETF or other from prior tests
+    await expect(page.getByRole('dialog').locator('a').first()).toBeVisible();
+  });
+
   test('切换主题为 Slate Dark', async ({ page }) => {
     await page.goto('/app/themes');
     await expect(page.getByText('Slate Dark').first()).toBeVisible();
