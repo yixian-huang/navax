@@ -20,6 +20,7 @@ import { themeRegistry } from '@/themes/registry';
 import { useToast } from '@/components/base/Toast';
 import { useSaveStatus } from '@/hooks/useSaveStatus';
 import { cn } from '@/lib/utils';
+import { resolveThemeId } from '@/lib/themeResolve';
 import { draftSaveToastMessage } from '@/lib/publish-state';
 import type { ThemePackage } from '@/themes/types';
 import { useMyPage, useThemes, useUpdatePageSettings } from '@/hooks/useQueries';
@@ -119,7 +120,9 @@ export default function ThemesPage() {
 
   useEffect(() => {
     if (!page?.settings) return;
-    setActiveId(page.settings.appearance.themeId);
+    const resolvedThemeId = resolveThemeId(page.settings.appearance.themeId);
+    setActiveId(resolvedThemeId);
+    themeRegistry.activate(resolvedThemeId);
     const background = page.settings.appearance.background;
     if (background.type === 'image' || background.type === 'video') {
       setBgConfig({
