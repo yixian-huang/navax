@@ -9,6 +9,7 @@ import { themeRegistry } from '@/themes/registry';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { useWallpaperTone } from '@/hooks/useWallpaperTone';
 import NavaxLogo from '@/components/base/NavaxLogo';
+import { resolveThemeId } from '@/lib/themeResolve';
 import { cn } from '@/lib/utils';
 
 import '@/themes/packages';
@@ -54,8 +55,9 @@ export default function PublicShell({
   );
 
   // 公开页主题来自服务端发布快照，不在浏览器持久化服务端状态。
+  // Culled package ids map to retained themes so activate never hits a missing package.
   useEffect(() => {
-    themeRegistry.activate(themeRegistry.has(themeId) ? themeId : DEFAULT_THEME);
+    themeRegistry.activate(resolveThemeId(themeId));
   }, [themeId]);
 
   // Scroll-aware navbar
