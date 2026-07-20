@@ -85,6 +85,13 @@ const densityLabels: Record<Density, string> = {
   comfortable: '舒适',
 };
 
+const CATEGORY_STYLES = [
+  { id: 'tabs' as const, label: '标签' },
+  { id: 'sidebar' as const, label: '侧栏' },
+  { id: 'grid' as const, label: '网格' },
+  { id: 'folders' as const, label: '文件夹' },
+];
+
 // ============================================================
 // Main Page — SortablePreview components imported from DnDPreview
 // ============================================================
@@ -758,6 +765,24 @@ export default function LinksPage() {
     [page, scheduleLayoutSave],
   );
 
+  const setCategoryStyle = useCallback(
+    (style: (typeof CATEGORY_STYLES)[number]['id']) => {
+      if (!page?.settings) return;
+      setLocalPage(prev => {
+        const base = prev || page;
+        return {
+          ...base,
+          settings: {
+            ...base.settings,
+            layout: { ...base.settings.layout, categoryStyle: style },
+          },
+        };
+      });
+      scheduleLayoutSave(350);
+    },
+    [page, scheduleLayoutSave],
+  );
+
   const setColumns = useCallback(
     (c: number) => {
       if (!page?.settings) return;
@@ -1306,6 +1331,30 @@ export default function LinksPage() {
                   {densityLabels[d]}
                 </button>
               ))}
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <span className="text-[10px] text-foreground-400">分类样式</span>
+            <div className="grid grid-cols-2 gap-1">
+              {CATEGORY_STYLES.map(s => {
+                const isActive = (page.settings.layout.categoryStyle ?? 'tabs') === s.id;
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => setCategoryStyle(s.id)}
+                    className={cn(
+                      'px-2 py-1.5 rounded-md text-[10px] font-medium transition-all duration-150 whitespace-nowrap cursor-pointer',
+                      isActive
+                        ? 'bg-primary-100 text-primary-700'
+                        : 'text-foreground-400 hover:bg-background-100 hover:text-foreground-600',
+                    )}
+                  >
+                    {s.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
 

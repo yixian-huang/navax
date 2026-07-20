@@ -97,6 +97,7 @@ export default function PublicNavigationView({
   }, [settings?.search?.defaultEngine]);
 
   const layout: HomeLayout = (settings?.layout.template as HomeLayout) ?? 'full';
+  const categoryStyle = settings?.layout.categoryStyle ?? 'tabs';
   const [density, setDensity] = useState<Density>('comfortable');
 
   useEffect(() => {
@@ -185,6 +186,7 @@ export default function PublicNavigationView({
     searchSuggestions,
     showEngineSelector: settings?.search?.showEngineSelector ?? true,
     wallpaperMode,
+    categoryStyle,
   };
 
   const renderLayout = () => {

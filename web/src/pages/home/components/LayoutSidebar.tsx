@@ -1,12 +1,14 @@
 import { Link } from 'react-router-dom';
 import SearchBar from '@/components/base/SearchBar';
 import SiteGrid from '@/components/base/SiteGrid';
+import CategoryFolderWall from '@/components/base/CategoryFolderWall';
 import DensitySwitcher from '@/components/base/DensitySwitcher';
 import { useCurrentUser } from '@/hooks/useQueries';
 import { cn } from '@/lib/utils';
 import IconRenderer from '@/components/base/IconRenderer';
 import type { Density, Site, Category } from '@/api/types';
 import type { SearchEngine } from '@/components/base/SearchBar';
+import type { CategoryStyle } from './SharedSections';
 
 interface LayoutProps {
   query: string;
@@ -25,6 +27,7 @@ interface LayoutProps {
   searchSuggestions?: string[];
   showEngineSelector?: boolean;
   wallpaperMode?: boolean;
+  categoryStyle?: CategoryStyle;
 }
 
 export default function LayoutSidebar({
@@ -33,9 +36,59 @@ export default function LayoutSidebar({
   activeSites, density, onDensityChange, totalSites, onSiteOpen,
   searchSuggestions,
   wallpaperMode = false,
+  categoryStyle = 'tabs',
 }: LayoutProps) {
   const { data: authSession } = useCurrentUser();
   const canManageLinks = Boolean(authSession?.authenticated && authSession.user);
+  const useFolders = categoryStyle === 'folders' && !query.trim();
+
+  // Folders style: single-column wall (no left category rail) — search still filters via SiteGrid.
+  if (useFolders) {
+    return (
+      <div className={cn(
+        'mx-auto max-w-4xl px-6 md:px-8 pb-24',
+        wallpaperMode ? 'pt-10 md:pt-12' : 'pt-12 md:pt-16',
+      )}>
+        <div className="relative z-20 mb-5 rise-in" style={{ animationDelay: '40ms' }}>
+          <SearchBar
+            value={query}
+            onChange={onQueryChange}
+            onSearch={onSearch}
+            engine={engine}
+            onEngineChange={onEngineChange}
+            showEngineSelector={showEngineSelector}
+            size="md"
+            suggestions={searchSuggestions}
+            showHint={false}
+          />
+        </div>
+        <div className={cn('rise-in', wallpaperMode && 'wallpaper-sites-scope')} style={{ animationDelay: '80ms' }}>
+          {!wallpaperMode && (
+            <div className="flex items-baseline gap-2 mb-4">
+              <span className="text-[11px] text-foreground-300 tracking-wide">
+                {categories.length} 个文件夹 · {totalSites} 个站点
+              </span>
+            </div>
+          )}
+          <CategoryFolderWall categories={categories} onSiteOpen={onSiteOpen} />
+        </div>
+        <div className="mt-10 flex justify-center">
+          <Link
+            to="/app/links"
+            className={cn(
+              'inline-flex items-center gap-2 text-xs transition-colors duration-200',
+              wallpaperMode
+                ? 'text-foreground-600 hover:text-primary-500'
+                : 'text-foreground-400 hover:text-primary-500',
+            )}
+          >
+            <i className="ri-settings-3-line text-sm" />
+            {wallpaperMode ? '管理' : '管理站点'}
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={cn(

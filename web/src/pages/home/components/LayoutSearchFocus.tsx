@@ -1,4 +1,4 @@
-import { SearchSection, SitesSection, FooterActions } from './SharedSections';
+import { SearchSection, SitesSection, FooterActions, type CategoryStyle } from './SharedSections';
 import { cn } from '@/lib/utils';
 import type { Density, Site } from '@/api/types';
 import type { SearchEngine } from '@/components/base/SearchBar';
@@ -20,6 +20,7 @@ interface LayoutProps {
   searchSuggestions?: string[];
   showEngineSelector?: boolean;
   wallpaperMode?: boolean;
+  categoryStyle?: CategoryStyle;
 }
 
 export default function LayoutSearchFocus({
@@ -28,6 +29,7 @@ export default function LayoutSearchFocus({
   activeSites, density, onDensityChange, totalSites, onSiteOpen,
   searchSuggestions,
   wallpaperMode = false,
+  categoryStyle = 'tabs',
 }: LayoutProps) {
   return (
     <div className={cn(
@@ -56,6 +58,7 @@ export default function LayoutSearchFocus({
         density={density} onDensityChange={onDensityChange}
         totalSites={totalSites} query={query} onSiteOpen={onSiteOpen} delay={120}
         wallpaperMode={wallpaperMode}
+        categoryStyle={categoryStyle}
       />
 
       <FooterActions wallpaperMode={wallpaperMode} />

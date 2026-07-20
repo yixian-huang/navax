@@ -2,11 +2,14 @@ import { Link } from 'react-router-dom';
 import SearchBar from '@/components/base/SearchBar';
 import SiteGrid, { SiteCountLabel } from '@/components/base/SiteGrid';
 import CategoryTabs from '@/components/base/CategoryTabs';
+import CategoryFolderWall from '@/components/base/CategoryFolderWall';
 import DensitySwitcher from '@/components/base/DensitySwitcher';
 import { useCurrentUser } from '@/hooks/useQueries';
 import { cn } from '@/lib/utils';
 import type { Density, Site } from '@/api/types';
 import type { SearchEngine } from '@/components/base/SearchBar';
+
+export type CategoryStyle = 'tabs' | 'sidebar' | 'grid' | 'folders';
 
 export function SearchSection({
   query, onQueryChange, engine, onEngineChange, onSearch,
@@ -53,6 +56,7 @@ export function SitesSection({
   activeSites, density, onDensityChange,
   totalSites, query, onSiteOpen, delay,
   wallpaperMode = false,
+  categoryStyle = 'tabs',
 }: {
   categories: any[]; activeCategory: string;
   onCategoryChange: (id: string) => void;
@@ -62,9 +66,11 @@ export function SitesSection({
   onSiteOpen: (s: Site) => void;
   delay: number;
   wallpaperMode?: boolean;
+  categoryStyle?: CategoryStyle;
 }) {
   const { data: authSession } = useCurrentUser();
   const canManageLinks = Boolean(authSession?.authenticated && authSession.user);
+  const useFolders = categoryStyle === 'folders' && !query.trim();
 
   // No section-level slab for categories / density / site grid — wallpaper shows
   // through; individual site cards use low-opacity frost via [data-wallpaper].
@@ -83,33 +89,52 @@ export function SitesSection({
               <span className="text-[11px] text-foreground-700 tracking-wide truncate wallpaper-type">
                 {activeSites.length} 个结果
               </span>
+            ) : useFolders ? (
+              <span className="text-[11px] text-foreground-700 tracking-wide truncate wallpaper-type">
+                {categories.length} 个文件夹 · {totalSites} 个站点
+              </span>
             ) : null
+          ) : useFolders ? (
+            <SiteCountLabel count={totalSites} total={totalSites} query="" />
           ) : (
             <SiteCountLabel count={activeSites.length} total={totalSites} query={query} />
           )}
         </div>
-        <DensitySwitcher density={density} onChange={onDensityChange} />
+        {!useFolders && (
+          <DensitySwitcher density={density} onChange={onDensityChange} />
+        )}
       </div>
 
-      {categories.length > 1 && (
-        <div className={cn(wallpaperMode ? 'mb-4 wallpaper-type wallpaper-ink-scope' : 'mb-8')}>
-          <CategoryTabs
+      {useFolders ? (
+        <div className={cn(wallpaperMode && 'wallpaper-sites-scope')}>
+          <CategoryFolderWall
             categories={categories}
-            activeId={activeCategory}
-            onChange={onCategoryChange}
+            onSiteOpen={onSiteOpen}
           />
         </div>
-      )}
+      ) : (
+        <>
+          {categories.length > 1 && (
+            <div className={cn(wallpaperMode ? 'mb-4 wallpaper-type wallpaper-ink-scope' : 'mb-8')}>
+              <CategoryTabs
+                categories={categories}
+                activeId={activeCategory}
+                onChange={onCategoryChange}
+              />
+            </div>
+          )}
 
-      <div className={cn(wallpaperMode && 'wallpaper-sites-scope')}>
-        <SiteGrid
-          sites={activeSites}
-          density={density}
-          query={query}
-          onSiteOpen={onSiteOpen}
-          showAddLink={canManageLinks && !query}
-        />
-      </div>
+          <div className={cn(wallpaperMode && 'wallpaper-sites-scope')}>
+            <SiteGrid
+              sites={activeSites}
+              density={density}
+              query={query}
+              onSiteOpen={onSiteOpen}
+              showAddLink={canManageLinks && !query}
+            />
+          </div>
+        </>
+      )}
     </div>
   );
 }
