@@ -78,7 +78,7 @@ export default function SiteGrid({
     // Not material-card: a frosted slab around the whole list fights wallpaper.
     // Plain panel + dividers; wallpaper mode is restyled in index.css.
     return (
-      <div className={cn('site-card-list-panel p-1 sm:p-2 divide-y divide-background-200/40', className)}>
+      <div className={cn('site-card-list-panel p-0.5 sm:p-1 divide-y divide-background-200/40', className)}>
         {sites.map(site => (
           <SiteCard
             key={site.id}
@@ -99,9 +99,8 @@ export default function SiteGrid({
       className={cn(
         'grid',
         density === 'comfortable'
-          // Prefer 3 columns on md so title+desc stay readable; override via prop.
-          ? (comfortableCols || 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3.5')
-          : (compactCols || 'grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3'),
+          ? (comfortableCols || 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2.5')
+          : (compactCols || 'grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2'),
         className,
       )}
     >
