@@ -6,17 +6,14 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { Check, Paintbrush, Upload, Trash2, Film, Image as ImageIcon, Library } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { themeRegistry } from '@/themes/registry';
 import { useToast } from '@/components/base/Toast';
 import { cn } from '@/lib/utils';
-import type { ThemePackage } from '@/themes/types';
+import { themeDisplayFromApi, type ThemePackage } from '@/themes/types';
 import { useAdminThemes, useUpdateAdminThemeState } from '@/hooks/useQueries';
 import { ErrorState, LoadingSkeleton } from '@/components/base/SharedUI';
 import { backgroundsApi } from '@/api/backgrounds';
 import { ApiError } from '@/api/client';
 import type { BackgroundMedia } from '@/api/types';
-
-import '@/themes/packages';
 
 const UPLOAD_ACCEPT = 'image/png,image/jpeg,image/jpg,image/gif,image/webp,video/mp4,video/webm';
 const MAX_INSTANCE_PRESETS = 12;
@@ -25,7 +22,11 @@ const MAX_UPLOAD_BYTES = 40 * 1024 * 1024;
 export default function AdminThemesPage() {
   const { data: platformThemes, isLoading, isError, error, refetch } = useAdminThemes();
   const updateTheme = useUpdateAdminThemeState();
-  const themes = useMemo(() => themeRegistry.list(), []);
+  // 后台目录直接渲染 GET /api/v1/admin/themes 的结果，含已停用与他人私有主题。
+  const themes = useMemo(
+    () => (platformThemes ?? []).map(themeDisplayFromApi),
+    [platformThemes],
+  );
   const [pendingId, setPendingId] = useState<string | null>(null);
   const { toast } = useToast();
   const activeId = platformThemes?.find(theme => theme.default || theme.isDefault)?.id ?? 'slate';
@@ -63,21 +64,21 @@ export default function AdminThemesPage() {
     void loadPresets();
   }, [loadPresets]);
 
+  // 管理端只改实例默认主题，不在本页加载主题样式：把第三方 CSS 应用到管理界面
+  // 等于让主题作者能改写管理操作的外观。要看效果请到工作台「主题设置」的预览框。
   const handleActivate = useCallback(async (id: string) => {
     if (id === activeId) return;
     setPendingId(id);
-    themeRegistry.activate(id);
     try {
       await updateTheme.mutateAsync({ themeId: id, data: { enabled: true, default: true } });
-      setPendingId(null);
-      const pkg = themeRegistry.get(id);
-      toast('success', `默认主题已切换为「${pkg?.meta.name || id}」`);
+      const name = themes.find(pkg => pkg.id === id)?.meta.name || id;
+      toast('success', `默认主题已切换为「${name}」`);
     } catch (cause) {
-      themeRegistry.activate(activeId);
       toast('error', cause instanceof Error ? cause.message : '主题切换失败');
+    } finally {
       setPendingId(null);
     }
-  }, [activeId, toast, updateTheme]);
+  }, [activeId, themes, toast, updateTheme]);
 
   const handleToggleEnabled = useCallback(async (id: string, enabled: boolean) => {
     if (id === activeId && !enabled) {
@@ -354,6 +355,14 @@ export default function AdminThemesPage() {
           )}
         </div>
       </div>
+
+      {themes.length === 0 && (
+        <div className="rounded-lg border border-dashed border-background-200/80 py-10 px-4 text-center bg-background-50/80">
+          <Paintbrush className="w-6 h-6 text-foreground-300 mx-auto mb-2" />
+          <p className="text-sm text-foreground-600 font-medium">实例中还没有主题</p>
+          <p className="text-xs text-foreground-400 mt-1">内置主题会在服务启动时同步入库</p>
+        </div>
+      )}
 
       {seriousThemes.length > 0 && (
         <div className="mb-8">

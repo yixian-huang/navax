@@ -1,13 +1,13 @@
 // ============================================================
-// ThemePicker — full theme switcher powered by ThemeRegistry.
-// Renders available themes from the registry, grouped by vibe.
-// Supports dynamic installation: newly registered themes
-// appear automatically.
+// ThemePicker — full theme switcher.
+// Theme list is data-driven: it comes from GET /api/v1/themes,
+// so a theme installed server-side shows up without a frontend
+// release.
 // ============================================================
 
 import { useEffect, useState, useMemo } from 'react';
-import { themeRegistry } from '@/themes/registry';
-import type { ThemePackage } from '@/themes/types';
+import { useThemes } from '@/hooks/useQueries';
+import { themePackagesFromApi, type ThemePackage } from '@/themes/types';
 
 interface ThemePickerProps {
   active: string;
@@ -17,10 +17,11 @@ interface ThemePickerProps {
 export default function ThemePicker({ active, onChange }: ThemePickerProps) {
   const [open, setOpen] = useState(true);
   const [mounted, setMounted] = useState(false);
+  const { data: apiThemes, isLoading } = useThemes();
 
   useEffect(() => { setMounted(true); }, []);
 
-  const themes = useMemo(() => themeRegistry.list(), []);
+  const themes = useMemo(() => themePackagesFromApi(apiThemes), [apiThemes]);
   const seriousThemes = useMemo(() => themes.filter(t => t.meta.vibe === 'serious'), [themes]);
   const cuteThemes = useMemo(() => themes.filter(t => t.meta.vibe === 'cute'), [themes]);
 
@@ -92,6 +93,17 @@ export default function ThemePicker({ active, onChange }: ThemePickerProps) {
             点击切换主题，同一布局·多种风格。主题包独立加载，随时可扩展。
           </p>
           <div className="flex flex-col gap-3">
+            {isLoading && (
+              <>
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="skeleton h-16 rounded-xl" />
+                ))}
+              </>
+            )}
+            {!isLoading && themes.length === 0 && (
+              <p className="text-[11px] text-foreground-400 py-4 text-center">暂无可用主题</p>
+            )}
+
             {/* ---- Serious themes ---- */}
             {seriousThemes.length > 0 && (
               <>

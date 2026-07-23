@@ -272,6 +272,7 @@ export default function PublicNavigationView({
     <PublicShell
       showSearch={false}
       themeId={settings?.appearance.themeId}
+      themeVersionId={page.themeVersionId}
       backgroundUrl={backgroundUrl}
       backgroundOpacity={bg?.opacity ?? 1}
       backgroundMediaType={backgroundMediaType}

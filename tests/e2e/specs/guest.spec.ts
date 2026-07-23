@@ -53,4 +53,43 @@ test.describe('游客', () => {
       }
     }
   });
+
+  test('主题作用域封闭在宿主 frame 内', async ({ page }) => {
+    await page.goto('/');
+
+    // data-theme 必须落在主题根上，而不是 <html>。设在 <html> 上意味着
+    // 第三方 CSS 会作用于整个应用，包括已登录界面。
+    await expect(page.locator('html')).not.toHaveAttribute('data-theme', /.+/);
+    const root = page.locator('[data-nx="page-root"]');
+    await expect(root).toHaveCount(1);
+
+    // 隔离边界在宿主 wrapper 上：contain: paint 一次性提供包含块、
+    // 层叠上下文与绘制裁剪，而主题在语法上选不到它。
+    const frame = page.locator('[data-nx-frame]');
+    await expect(frame).toHaveCount(1);
+    const contain = await frame.evaluate(el => getComputedStyle(el).contain);
+    expect(contain).toContain('paint');
+
+    // 受保护的源码链接必须在 frame 之外，且实际可见可点。
+    const protectedRegion = page.locator('[data-nx-protected]');
+    await expect(protectedRegion).toBeVisible();
+    const outsideFrame = await protectedRegion.evaluate(
+      el => !el.closest('[data-nx-frame]'),
+    );
+    expect(outsideFrame).toBe(true);
+    const sourceLink = protectedRegion.getByRole('link', { name: '源码' });
+    await expect(sourceLink).toBeVisible();
+  });
+
+  test('主题样式经内容寻址的 link 供应', async ({ page }) => {
+    await page.goto('/');
+    const link = page.locator('link[data-theme-style]');
+    if (await link.count()) {
+      const href = await link.first().getAttribute('href');
+      expect(href).toMatch(/\/api\/v1\/public\/themes\/v[0-9a-f]{32}\.css$/);
+      const response = await page.request.get(href!);
+      expect(response.status()).toBe(200);
+      expect(response.headers()['cache-control']).toContain('immutable');
+    }
+  });
 });
