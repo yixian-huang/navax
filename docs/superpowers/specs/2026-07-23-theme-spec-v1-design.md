@@ -417,9 +417,16 @@ GET /api/v1/public/themes/{versionId}/assets/{path}
 
 三个副作用均为收益：约 900 行 CSS 移出 JS bundle；主题样式成为可长缓存的独立资源；`style-src 'unsafe-inline'` 不再因主题而必需。
 
-### 8.4 CSP 收紧（待核实）
+### 8.4 CSP 收紧（已核实：不做）
 
-`internal/httpapi/security_headers.go` 当前放行 `fonts.googleapis.com`、`fonts.gstatic.com`、`cdnjs.cloudflare.com`。字体自托管后这些应可移除，但实现时须先核实是否另有用途（`sakura`/`orbit` 只声明 `font-family`、未写 `@import`，疑似依赖系统已装字体）。核实后再改，本设计不硬性承诺。
+`internal/httpapi/security_headers.go` 放行 `fonts.googleapis.com`、`fonts.gstatic.com`、`cdnjs.cloudflare.com`。本设计原先推测这些放行在字体自托管后即可移除——**该推测经核实是错的**：
+
+- `web/src/index.css:1` 用 `@import` 从 Google Fonts 加载**全部**内置主题字体（Fraunces、Inter、Noto Sans SC、M PLUS Rounded 1c、Nunito、JetBrains Mono、Space Grotesk 等）。内置主题的 `font-family` 声明依赖的正是它，不是系统已装字体。
+- `web/index.html:29-30` 从 cdnjs 加载 remixicon 与 font-awesome 图标字体。
+
+因此收紧 CSP 不属于本子项目，强行移除会直接打碎全部内置主题的排版。它是一件独立的事：把宿主自己的字体与图标改为自托管，收益是访客 IP 不再泄给 Google/Cloudflare（这与主题规范"资产同源供应"的动机一致，但作用对象是宿主而非主题）。建议单独立项。
+
+注意这不影响本规范的安全承诺：**第三方主题**的资产必须同源，规则由校验器强制；宿主自身加载哪些外部字体是宿主的选择。
 
 ## 9. 测试策略
 

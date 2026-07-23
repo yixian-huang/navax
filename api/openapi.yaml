@@ -152,6 +152,53 @@ paths:
       security: []
       responses:
         '200': { $ref: '#/components/responses/ThemesResponse' }
+  /api/v1/public/themes/{versionId}.css:
+    get:
+      tags: [Public]
+      operationId: getThemeVersionCSS
+      security: []
+      description: |
+        主题版本的编译产物。URL 是内容寻址的（versionId 由内容哈希派生），
+        因此可以长缓存。撤销不依赖缓存清除：被撤销的版本不再被任何快照引用，
+        新访问自然不会请求它。
+      parameters:
+        - $ref: '#/components/parameters/ThemeVersionId'
+      responses:
+        '200':
+          description: 主题 CSS
+          headers:
+            Cache-Control: { schema: { type: string }, description: 'public, max-age=31536000, immutable' }
+            ETag: { schema: { type: string } }
+          content:
+            text/css:
+              schema: { type: string }
+        '304': { description: 未修改 }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+        '410': { $ref: '#/components/responses/ErrorResponse' }
+  /api/v1/public/themes/{versionId}/assets/{assetPath}:
+    get:
+      tags: [Public]
+      operationId: getThemeVersionAsset
+      security: []
+      description: 主题版本自带的字体或图片，同源供应，访客 IP 不外泄给第三方主机。
+      parameters:
+        - $ref: '#/components/parameters/ThemeVersionId'
+        - in: path
+          name: assetPath
+          required: true
+          schema: { type: string, maxLength: 256 }
+      responses:
+        '200':
+          description: 主题资产
+          headers:
+            Cache-Control: { schema: { type: string }, description: 'public, max-age=31536000, immutable' }
+            ETag: { schema: { type: string } }
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        '304': { description: 未修改 }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+        '410': { $ref: '#/components/responses/ErrorResponse' }
 
   /api/v1/auth/session:
     get:
@@ -1698,6 +1745,7 @@ components:
     SiteId: { in: path, name: siteId, required: true, schema: { $ref: '#/components/schemas/Id' } }
     InvitationId: { in: path, name: invitationId, required: true, schema: { $ref: '#/components/schemas/Id' } }
     ThemeId: { in: path, name: themeId, required: true, schema: { $ref: '#/components/schemas/Id' } }
+    ThemeVersionId: { in: path, name: versionId, required: true, schema: { $ref: '#/components/schemas/ThemeVersionId' } }
     BackupId: { in: path, name: backupId, required: true, schema: { $ref: '#/components/schemas/Id' } }
     Slug: { in: path, name: slug, required: true, schema: { type: string, pattern: '^[a-z0-9](?:[a-z0-9-]{1,46}[a-z0-9])$', minLength: 3, maxLength: 48 } }
     ProviderKind: { in: path, name: kind, required: true, schema: { type: string, enum: [smtp, storage, dns, oauth_google, oauth_github] } }
@@ -2267,10 +2315,11 @@ components:
         etag: { type: string }
     Theme:
       type: object
-      required: [id, name, version, author, description, mode, preview, enabled, default]
+      required: [id, name, version, author, description, mode, preview, enabled, default, currentVersionId, cssHref, tier, scope, vibe, swatches]
       properties:
         id: { $ref: '#/components/schemas/ThemeId' }
         name: { type: string }
+        subtitle: { type: string }
         version: { type: string }
         author: { type: string }
         description: { type: string }
@@ -2278,6 +2327,76 @@ components:
         preview: { type: string }
         enabled: { type: boolean }
         default: { type: boolean }
+        currentVersionId:
+          $ref: '#/components/schemas/ThemeVersionId'
+        cssHref:
+          type: string
+          description: 该主题当前版本的编译产物地址，内容寻址、可长缓存。
+        tier: { type: integer, minimum: 1, maximum: 3 }
+        scope: { type: string, enum: [catalog, private] }
+        vibe: { type: string, enum: [serious, cute] }
+        swatches:
+          type: array
+          minItems: 3
+          maxItems: 3
+          items: { type: string, pattern: '^#[0-9a-fA-F]{6}$' }
+    ThemeVersionId:
+      type: string
+      description: 主题版本 ID，由编译产物的内容哈希派生，因此不可变。
+      pattern: '^v[0-9a-f]{32}$'
+      minLength: 33
+      maxLength: 33
+    ThemeManifestV1:
+      type: object
+      description: |
+        theme.json 的契约。这是第三方主题包的唯一入口格式，服务端据此解析、
+        校验并编译。字段语义见 docs/theme-api.md。
+      required: [specVersion, id, name, version, author, mode, vibe, swatches, tier, tokens]
+      properties:
+        specVersion: { type: integer, enum: [1] }
+        id: { $ref: '#/components/schemas/ThemeId' }
+        name: { type: string, minLength: 1, maxLength: 100 }
+        subtitle: { type: string, maxLength: 100 }
+        description: { type: string, maxLength: 500 }
+        version: { type: string, pattern: '^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$' }
+        author: { type: string, minLength: 1, maxLength: 100 }
+        license: { type: string, maxLength: 100 }
+        homepage: { type: string, maxLength: 2048 }
+        mode: { type: string, enum: [light, dark, both] }
+        vibe: { type: string, enum: [serious, cute] }
+        swatches:
+          type: array
+          minItems: 3
+          maxItems: 3
+          items: { type: string, pattern: '^#[0-9a-fA-F]{6}$' }
+        tier:
+          type: integer
+          minimum: 1
+          maximum: 3
+          description: 能力级别。当前宿主只接受 1；2 随声明式布局发布，3 语义未定。
+        tokens:
+          type: object
+          required: [font, color]
+          properties:
+            font:
+              type: object
+              required: [heading, body, label, mono]
+              additionalProperties: { type: string }
+            radius:
+              type: object
+              additionalProperties: { type: string }
+            elevation:
+              type: object
+              additionalProperties: { type: string }
+            color:
+              type: object
+              required: [background, foreground, primary, accent]
+              additionalProperties:
+                type: object
+                additionalProperties:
+                  type: string
+                  description: OKLCH 三通道，L∈[0,1] C∈[0,0.5] H∈[0,360)。
+                  pattern: '^\d+(\.\d+)? \d+(\.\d+)? \d+(\.\d+)?$'
     DiscoverPage:
       type: object
       required: [slug, title, description, ownerName, themeId, tags, publishedAt]

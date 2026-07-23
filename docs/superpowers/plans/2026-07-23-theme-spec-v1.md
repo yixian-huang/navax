@@ -1620,43 +1620,23 @@ git commit -m "test: cover theme css delivery in mock and e2e suites"
 
 ---
 
-### Task 13: CSP 收紧（核实后执行）
+### Task 13: CSP 收紧 —— 已核实，不执行
 
-**Files:**
-- Modify: `internal/httpapi/security_headers.go`
-- Modify: `internal/httpapi/router_test.go` 或新增断言
+**状态：终止（2026-07-23）。** 计划的 Step 1 要求先核实外部主机是否仍有用途，
+核实结果是**有**，因此按计划规定终止本任务并记录原因：
 
-**Interfaces:**
-- Consumes: Task 7 之后的自托管字体现状
-- Produces: 更严格的 `style-src` / `font-src`
-
-- [ ] **Step 1: 核实外部主机是否仍被使用**
-
-```bash
-rg 'fonts.googleapis|fonts.gstatic|cdnjs' web/src web/index.html internal
 ```
-若仅出现在 `security_headers.go`，说明放行已无用途，继续；若有真实引用，**本任务终止并在计划中记录原因**，不要强行收紧。
-
-- [ ] **Step 2: 写期望新 CSP 的失败测试**
-
-断言响应头的 `style-src` 与 `font-src` 不再包含上述外部主机。
-
-- [ ] **Step 3: 运行确认失败** — `go test ./internal/httpapi -run TestSecurityHeaders -v`
-
-- [ ] **Step 4: 修改并验证**
-
-```bash
-go test -race ./internal/httpapi
-make build && make e2e
+web/src/index.css:1        @import url('https://fonts.googleapis.com/css2?family=Fraunces…')
+web/index.html:29-30       cdnjs 的 remixicon 与 font-awesome
 ```
-浏览器控制台必须无 CSP 违规报错。
 
-- [ ] **Step 5: 提交**
+内置主题的字体正是由 index.css 的 `@import` 提供，不是系统已装字体（spec 里
+原先的推测是错的，已在 §8.4 更正）。移除 CSP 放行会直接打碎全部内置主题的
+排版。
 
-```bash
-git add internal/httpapi
-git commit -m "chore: tighten style and font CSP after self-hosting theme assets"
-```
+把宿主自身的字体与图标改为自托管是一件独立的事，收益是访客 IP 不再泄给
+Google/Cloudflare，建议单独立项。它不影响本规范的安全承诺：第三方主题的资产
+必须同源，由校验器强制；宿主自己加载什么是宿主的选择。
 
 ---
 
