@@ -152,7 +152,7 @@ jobs:
                 echo "Deploy succeeded"
                 exit 0
                 ;;
-              failed|error|cancelled|canceled|rolled_back|rollback_failed)
+              failed|error|cancelled|canceled|rolled_back|rollback_failed|activation_failed|health_check_failed)
                 echo "::error::Deploy failed with status=${status}"
                 printf '%s\n' "$body" | python3 -m json.tool || printf '%s\n' "$body"
                 exit 1
