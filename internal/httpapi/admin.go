@@ -509,11 +509,35 @@ func invitationData(item adminpkg.Invitation) map[string]any {
 }
 
 func themeData(item adminpkg.Theme) map[string]any {
-	return map[string]any{
-		"id": item.ID, "name": item.Name, "version": item.Version, "author": item.Author,
+	data := map[string]any{
+		"id": item.ID, "name": item.Name,
+		"version": item.Version, "author": item.Author,
 		"description": item.Description, "mode": item.Mode, "preview": item.Preview,
 		"enabled": item.Enabled, "default": item.Default,
 	}
+	// 规范 v1 字段只在主题确实有编译版本时才有意义。管理后台的全量列表
+	// 会包含尚无版本的主题（例如已停用的旧主题），对它们发空值会写出违反
+	// 契约的响应——缺省才是诚实的表达：这些主题不可被选用。
+	if item.CurrentVersionID != "" {
+		data["currentVersionId"] = item.CurrentVersionID
+		data["cssHref"] = item.CSSHref
+	}
+	if item.Subtitle != "" {
+		data["subtitle"] = item.Subtitle
+	}
+	if item.Tier > 0 {
+		data["tier"] = item.Tier
+	}
+	if item.Scope != "" {
+		data["scope"] = item.Scope
+	}
+	if item.Vibe != "" {
+		data["vibe"] = item.Vibe
+	}
+	if item.Swatches[0] != "" {
+		data["swatches"] = item.Swatches[:]
+	}
+	return data
 }
 
 func settingsData(item adminpkg.SystemSettings) map[string]any {

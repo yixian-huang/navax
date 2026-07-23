@@ -254,3 +254,81 @@ func (s *Store) serviceableVersion(ctx context.Context, condition string, args .
 }
 
 func dbTime(value time.Time) string { return value.UTC().Format(time.RFC3339Nano) }
+
+// 可用性谓词（eligibility）。列表、选择、预览、发布必须复用同一份判定，
+// 各写一份 SQL 就会出现「选择器里能选中、发布时却静默回落」这种不一致。
+//
+// 三条缺一不可：
+//   - themes.enabled = 1 —— 同时作用于目录主题与私有主题。卸载私有主题
+//     正是通过 enabled = 0 实现的，私有分支漏掉这条，已卸载的主题会继续
+//     出现在选择器里。
+//   - 当前版本必须属于本主题且处于 active。
+//   - 目录主题人人可用；私有主题只有归属者可用。
+const (
+	// EligibilityJoin 把主题与它的当前版本连起来。
+	EligibilityJoin = `JOIN theme_versions
+		ON theme_versions.id = themes.current_version_id
+		AND theme_versions.theme_id = themes.id`
+
+	// EligibilityWhere 需要绑定一个参数：调用方的用户 ID。
+	// 匿名调用传空串——私有主题的 owner_id 非空，因此永不匹配。
+	EligibilityWhere = `themes.enabled = 1
+		AND theme_versions.status = 'active'
+		AND (themes.scope = 'catalog' OR (themes.scope = 'private' AND themes.owner_id = ?))`
+)
+
+// ResolveEligibleVersion 解析出某个主体可用的主题版本。
+//
+// 谓词不成立时回落默认主题——而不是报错。用户不该因为别人下架了一个主题
+// 就被卡住无法发布。但如果**默认主题自己**也不可用，那是实例级故障，必须
+// 响亮失败，否则会产出一个引用空版本的快照。
+// Queryer 让解析既能在 *sql.DB 上跑，也能在事务里跑。发布必须走后者：
+// 解析与写快照之间若隔着事务边界，主题在这个空档被撤销就会留下一条指向
+// 已撤销版本的快照，公开页从此拿不到样式。
+type Queryer interface {
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+// ResolveEligibleVersion 在给定的 Queryer 上解析可用版本。
+func ResolveEligibleVersion(ctx context.Context, q Queryer, themeID, actorID string) (string, error) {
+	candidates := []string{strings.TrimSpace(themeID)}
+	if alias, ok := themeIDAliases[strings.TrimSpace(themeID)]; ok {
+		candidates = append(candidates, alias)
+	}
+	for _, candidate := range candidates {
+		if candidate == "" {
+			continue
+		}
+		var versionID string
+		err := q.QueryRowContext(ctx, `
+			SELECT themes.current_version_id
+			FROM themes `+EligibilityJoin+`
+			WHERE themes.id = ? AND `+EligibilityWhere, candidate, actorID).Scan(&versionID)
+		switch {
+		case err == nil:
+			return versionID, nil
+		case errors.Is(err, sql.ErrNoRows):
+			continue
+		default:
+			return "", err
+		}
+	}
+
+	var fallback string
+	err := q.QueryRowContext(ctx, `
+		SELECT themes.current_version_id
+		FROM themes `+EligibilityJoin+`
+		WHERE themes.is_default = 1 AND `+EligibilityWhere, "").Scan(&fallback)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrDefaultThemeUnavailable
+	}
+	if err != nil {
+		return "", err
+	}
+	return fallback, nil
+}
+
+// ResolveEligibleVersion 是实例方法形式，供不在事务中的调用方使用。
+func (s *Store) ResolveEligibleVersion(ctx context.Context, themeID, actorID string) (string, error) {
+	return ResolveEligibleVersion(ctx, s.db, themeID, actorID)
+}

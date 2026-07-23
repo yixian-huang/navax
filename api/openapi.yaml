@@ -2315,7 +2315,7 @@ components:
         etag: { type: string }
     Theme:
       type: object
-      required: [id, name, version, author, description, mode, preview, enabled, default, currentVersionId, cssHref, tier, scope, vibe, swatches]
+      required: [id, name, version, author, description, mode, preview, enabled, default]
       properties:
         id: { $ref: '#/components/schemas/ThemeId' }
         name: { type: string }
@@ -2328,7 +2328,11 @@ components:
         enabled: { type: boolean }
         default: { type: boolean }
         currentVersionId:
-          $ref: '#/components/schemas/ThemeVersionId'
+          description: |
+            当前编译版本。公开列表只返回可用主题，因此必然有值；管理后台的
+            全量列表可能包含尚无编译版本的主题，此时缺省——它们不可被选用。
+          allOf:
+            - $ref: '#/components/schemas/ThemeVersionId'
         cssHref:
           type: string
           description: 该主题当前版本的编译产物地址，内容寻址、可长缓存。

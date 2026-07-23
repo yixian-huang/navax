@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/yixian-huang/navax/internal/database"
+	"github.com/yixian-huang/navax/internal/themes"
 )
 
 func TestNavigationDraftPublicationIsolation(t *testing.T) {
@@ -454,7 +455,18 @@ func testNavigationService(t *testing.T) (*sql.DB, *Service) {
 		t.Fatalf("OpenAndMigrate() error = %v", err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-	return db, NewService(NewSQLStore(db))
+
+	// 发布要锁定主题版本，因此测试实例也必须有内置主题。顺带让这批测试
+	// 覆盖「发布 → 主题解析」这条真实链路，而不是绕过它。
+	themeStore := themes.NewStore(db)
+	if err := themes.SyncBuiltin(ctx, themeStore, time.Now().UTC()); err != nil {
+		t.Fatalf("SyncBuiltin() error = %v", err)
+	}
+	store := NewSQLStore(db)
+	store.SetThemeVersionResolver(func(ctx context.Context, tx *sql.Tx, themeID, actorID string) (string, error) {
+		return themes.ResolveEligibleVersion(ctx, tx, themeID, actorID)
+	})
+	return db, NewService(store)
 }
 
 func insertTestPersonalPage(t *testing.T, db *sql.DB, userID, username, pageID, categoryID, slug string) Actor {

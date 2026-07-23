@@ -11,6 +11,7 @@ import (
 
 	adminpkg "github.com/yixian-huang/navax/internal/admin"
 	"github.com/yixian-huang/navax/internal/navigation"
+	"github.com/yixian-huang/navax/internal/themes"
 )
 
 // ErrDiscoverDisabled is returned when the instance has turned off the discover surface.
@@ -105,23 +106,47 @@ func (s *Service) Config(ctx context.Context) (Config, error) {
 	return config, nil
 }
 
-func (s *Service) Themes(ctx context.Context) ([]adminpkg.Theme, error) {
+// Themes 返回调用方可用的主题。谓词与预览、发布共用同一份定义
+// （themes.EligibilityJoin/Where），各写一份 SQL 就会出现「列表里能选中、
+// 发布时却静默回落」这种不一致。
+//
+// actorID 为空表示匿名调用：私有主题的 owner_id 非空，因此永不匹配。
+func (s *Service) Themes(ctx context.Context, actorID string) ([]adminpkg.Theme, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, name, version, author, description, mode, preview, enabled, is_default
-		FROM themes WHERE enabled = 1 ORDER BY is_default DESC, name, id`)
+		SELECT themes.id, themes.name, themes.version, themes.author, themes.description,
+		       themes.mode, themes.preview, themes.enabled, themes.is_default,
+		       themes.current_version_id, themes.scope,
+		       theme_versions.manifest_json
+		FROM themes `+themes.EligibilityJoin+`
+		WHERE `+themes.EligibilityWhere+`
+		ORDER BY themes.is_default DESC, themes.name, themes.id`, actorID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	themes := make([]adminpkg.Theme, 0)
+	list := make([]adminpkg.Theme, 0)
 	for rows.Next() {
-		var theme adminpkg.Theme
-		if err := rows.Scan(&theme.ID, &theme.Name, &theme.Version, &theme.Author, &theme.Description, &theme.Mode, &theme.Preview, &theme.Enabled, &theme.Default); err != nil {
+		var (
+			theme        adminpkg.Theme
+			manifestJSON string
+		)
+		if err := rows.Scan(&theme.ID, &theme.Name, &theme.Version, &theme.Author, &theme.Description,
+			&theme.Mode, &theme.Preview, &theme.Enabled, &theme.Default,
+			&theme.CurrentVersionID, &theme.Scope, &manifestJSON); err != nil {
 			return nil, err
 		}
-		themes = append(themes, theme)
+		theme.CSSHref = "/api/v1/public/themes/" + theme.CurrentVersionID + ".css"
+		var manifest themes.Manifest
+		if err := json.Unmarshal([]byte(manifestJSON), &manifest); err != nil {
+			return nil, err
+		}
+		theme.Subtitle = manifest.Subtitle
+		theme.Tier = manifest.Tier
+		theme.Vibe = manifest.Vibe
+		theme.Swatches = manifest.Swatches
+		list = append(list, theme)
 	}
-	return themes, rows.Err()
+	return list, rows.Err()
 }
 
 func (s *Service) Directory(ctx context.Context, search, categoryID string, page, pageSize int) (Page[DirectorySite], error) {
