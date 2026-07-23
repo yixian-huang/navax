@@ -212,3 +212,27 @@ h2 {
 ::-webkit-scrollbar-thumb:hover {
   background: oklch(var(--primary-300) / 0.65);
 }
+
+/* 悬停花瓣 —— content 现在允许符号/标点类目的装饰字符（≤2 个），
+   因此不必为一个字符打包 PNG。 */
+[data-nx="site-card"]::after {
+  content: "✿";
+  position: absolute;
+  top: 10px;
+  right: 14px;
+  font-size: 12px;
+  opacity: 0;
+  transform: scale(0.6) rotate(-30deg);
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  color: oklch(var(--primary-400));
+}
+
+[data-nx="site-card"]:hover::after {
+  opacity: 1;
+  transform: scale(1) rotate(0deg);
+}
+
+/* 标签做成了胶囊，下方的动画下划线指示器就多余了 */
+[data-nx="category-indicator"] {
+  display: none;
+}

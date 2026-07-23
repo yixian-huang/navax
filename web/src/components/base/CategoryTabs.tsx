@@ -118,7 +118,7 @@ export default function CategoryTabs({
       </div>
 
       {/* Animated underline indicator */}
-      <div className="relative h-[2px]">
+      <div data-nx="category-indicator" className="relative h-[2px]">
         <div className="absolute inset-0 bg-secondary-100/25 rounded-full" />
         <div
           ref={indicatorRef}
