@@ -1,0 +1,44 @@
+/* Terminal — Phosphor Console
+ *
+ * 迁移说明：`.material-card` → `site-card`、`.hairline*` → `divider*`、
+ * `body::after` 扫描线 → `[data-nx="page-root"]::after`，视觉不变。
+ */
+
+[data-nx="site-card"]:hover {
+  transform: none;
+  box-shadow: var(--elevation-raised);
+}
+
+h1,
+h2 {
+  letter-spacing: -0.02em;
+  text-transform: none;
+}
+
+/* CRT 扫描线 + 暗角 —— 全屏装饰层，改挂在主题根上 */
+[data-nx="page-root"]::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.28;
+  mix-blend-mode: screen;
+  background-image:
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 3px,
+      oklch(0.70 0.14 145 / 0.04) 3px,
+      oklch(0.70 0.14 145 / 0.04) 4px
+    ),
+    radial-gradient(ellipse at center, transparent 50%, oklch(0.10 0.02 145 / 0.45) 100%);
+}
+
+[data-nx="divider"] {
+  background: oklch(var(--primary-400) / 0.20);
+}
+
+[data-nx="divider-gradient"] {
+  background: linear-gradient(90deg, transparent, oklch(var(--primary-400) / 0.32), oklch(var(--accent-400) / 0.20), transparent);
+}

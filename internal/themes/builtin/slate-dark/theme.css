@@ -1,0 +1,75 @@
+/* Slate Dark — Flat Editorial（暗色版）
+ *
+ * 迁移说明（详见 docs/theme-api.md §4.1）：
+ * - 原 `body::after` 的 SVG feTurbulence 噪点改为纯 CSS 重复渐变颗粒，
+ *   暗底仍走 screen 混合，质感近似而非等价。
+ * - 原针对 `.site-card-domain` 与 `.wallpaper-ink-scope` 的壁纸墨色规则没有
+ *   对应钩子，已删除。
+ */
+
+/* 扁平：网格项与列表面板同色同描边 */
+[data-nx="site-card"] {
+  background: oklch(var(--background-50));
+  box-shadow: none;
+  border: 1px solid oklch(0.95 0.01 255 / 0.10);
+}
+
+[data-nx="site-card"]:hover {
+  transform: none;
+  box-shadow: none;
+  border-color: oklch(0.95 0.01 255 / 0.18);
+  background: oklch(var(--background-50));
+}
+
+/* 壁纸态 */
+[data-nx="page-root"][data-wallpaper] [data-nx="site-card"] {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  box-shadow: none !important;
+}
+
+[data-nx="page-root"][data-wallpaper][data-wallpaper-tone="light"] [data-nx="site-card"] {
+  background: oklch(1 0 0 / 0.2) !important;
+  border-color: color-mix(in oklch, var(--wp-ink) 14%, transparent);
+}
+
+[data-nx="page-root"][data-wallpaper][data-wallpaper-tone="dark"] [data-nx="site-card"] {
+  background: oklch(0.12 0.02 260 / 0.34) !important;
+  border-color: color-mix(in oklch, var(--wp-ink) 14%, transparent);
+}
+
+[data-nx="page-root"][data-wallpaper][data-wallpaper-tone="light"] [data-nx="site-card"]:hover {
+  background: oklch(1 0 0 / 0.3) !important;
+}
+
+[data-nx="page-root"][data-wallpaper][data-wallpaper-tone="dark"] [data-nx="site-card"]:hover {
+  background: oklch(0.12 0.02 260 / 0.48) !important;
+}
+
+[data-nx="page-root"][data-wallpaper] [data-nx="site-card-title"],
+[data-nx="page-root"][data-wallpaper] [data-nx="site-card-title"] * {
+  color: var(--wp-ink) !important;
+  text-shadow: var(--wp-shadow);
+}
+
+[data-nx="page-root"][data-wallpaper] [data-nx="site-card-desc"],
+[data-nx="page-root"][data-wallpaper] [data-nx="site-card-desc"] * {
+  color: var(--wp-ink-muted) !important;
+  text-shadow: var(--wp-shadow);
+}
+
+/* 纸纹颗粒 —— 暗底用 screen 混合、低透明度 */
+[data-nx="page-root"]::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.3;
+  mix-blend-mode: screen;
+  background-image:
+    repeating-conic-gradient(from 8deg at 50% 50%, oklch(0.95 0.01 255 / 0.06) 0deg 24deg, transparent 24deg 48deg),
+    repeating-linear-gradient(63deg, transparent 0 1px, oklch(0.95 0.01 255 / 0.04) 1px 2px),
+    repeating-linear-gradient(-27deg, transparent 0 2px, oklch(0.95 0.01 255 / 0.035) 2px 3px);
+  background-size: 3px 3px, 7px 7px, 5px 5px;
+}

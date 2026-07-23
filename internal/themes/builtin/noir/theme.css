@@ -1,0 +1,14 @@
+/* Noir — Dark Luxury
+ *
+ * 迁移说明：原 `.hairline` / `.hairline-gradient` 内部类名改为登记钩子
+ * `divider` / `divider-gradient`，视觉不变。
+ */
+
+/* 暗底上的细线更轻、更透 */
+[data-nx="divider"] {
+  background: oklch(var(--secondary-200) / 0.15);
+}
+
+[data-nx="divider-gradient"] {
+  background: linear-gradient(90deg, transparent, oklch(var(--secondary-200) / 0.25), transparent);
+}

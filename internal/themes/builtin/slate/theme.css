@@ -1,0 +1,76 @@
+/* Slate — Flat Editorial
+ *
+ * 迁移说明（详见 docs/theme-api.md §4.1）：
+ * - 原 `body::after` 的 SVG feTurbulence 噪点用 data:image/svg+xml 引入，规范
+ *   一律拒绝 SVG。这里改用三层重复渐变叠加出的纯 CSS 颗粒，质感近似而非等价。
+ * - 原针对 `.site-card-domain` 与 `.wallpaper-ink-scope` 的壁纸墨色规则没有
+ *   对应钩子，已删除。
+ */
+
+/* 扁平：卡片不上浮，1px 实线描边取代阴影 */
+[data-nx="site-card"] {
+  background: oklch(var(--background-50));
+  box-shadow: none;
+  border: 1px solid oklch(var(--background-200) / 0.55);
+}
+
+[data-nx="site-card"]:hover {
+  transform: none;
+  box-shadow: none;
+  border-color: oklch(var(--background-300) / 0.85);
+  background: oklch(var(--background-50));
+}
+
+/* 壁纸态：卡片改用半透明 wash，与列表行同一套语言 */
+[data-nx="page-root"][data-wallpaper] [data-nx="site-card"] {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  box-shadow: none !important;
+}
+
+[data-nx="page-root"][data-wallpaper][data-wallpaper-tone="light"] [data-nx="site-card"] {
+  background: oklch(1 0 0 / 0.2) !important;
+  border-color: color-mix(in oklch, var(--wp-ink) 14%, transparent);
+}
+
+[data-nx="page-root"][data-wallpaper][data-wallpaper-tone="dark"] [data-nx="site-card"] {
+  background: oklch(0.12 0.02 260 / 0.34) !important;
+  border-color: color-mix(in oklch, var(--wp-ink) 14%, transparent);
+}
+
+[data-nx="page-root"][data-wallpaper][data-wallpaper-tone="light"] [data-nx="site-card"]:hover {
+  background: oklch(1 0 0 / 0.3) !important;
+}
+
+[data-nx="page-root"][data-wallpaper][data-wallpaper-tone="dark"] [data-nx="site-card"]:hover {
+  background: oklch(0.12 0.02 260 / 0.48) !important;
+}
+
+/* wash 上用壁纸墨色，覆盖全局卡片深色字规则 */
+[data-nx="page-root"][data-wallpaper] [data-nx="site-card-title"],
+[data-nx="page-root"][data-wallpaper] [data-nx="site-card-title"] * {
+  color: var(--wp-ink) !important;
+  text-shadow: var(--wp-shadow);
+}
+
+[data-nx="page-root"][data-wallpaper] [data-nx="site-card-desc"],
+[data-nx="page-root"][data-wallpaper] [data-nx="site-card-desc"] * {
+  color: var(--wp-ink-muted) !important;
+  text-shadow: var(--wp-shadow);
+}
+
+/* 纸纹颗粒 —— 纯 CSS 近似（原 SVG 噪点已不可用） */
+[data-nx="page-root"]::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.55;
+  mix-blend-mode: multiply;
+  background-image:
+    repeating-conic-gradient(from 8deg at 50% 50%, oklch(0.20 0.015 255 / 0.05) 0deg 24deg, transparent 24deg 48deg),
+    repeating-linear-gradient(63deg, transparent 0 1px, oklch(0.20 0.015 255 / 0.035) 1px 2px),
+    repeating-linear-gradient(-27deg, transparent 0 2px, oklch(0.20 0.015 255 / 0.03) 2px 3px);
+  background-size: 3px 3px, 7px 7px, 5px 5px;
+}
