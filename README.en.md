@@ -23,8 +23,9 @@ docker compose logs -f navax
 Open `http://localhost:8080/setup` and complete first-run setup with the
 `NAVAX_SETUP_TOKEN` from `.env`. Before going live, set `PUBLIC_BASE_URL` in
 `.env` to your real HTTPS address and set `NAVAX_SECURE_COOKIES=true`. Your
-reverse proxy must preserve the original `Host`; enabling personal subdomains
-additionally requires `ROOT_DOMAIN`, wildcard DNS, and TLS.
+reverse proxy must preserve the original `Host`. To enable personal subdomains,
+set the root domain under Admin → System settings → Domain, and provide wildcard
+DNS and TLS.
 
 On the official `nav.ax` instance, available subdomains of 4+ characters are
 enabled automatically; scarce 1–3 character names go to admin review. Paid
@@ -60,7 +61,6 @@ NAVAX_DATA_DIR=./data ./bin/navax
 | `NAVAX_ADDR` | `:8080` | HTTP listen address |
 | `NAVAX_DATA_DIR` | `./data` | SQLite, uploads, backups, and key directory; `/data` inside containers |
 | `PUBLIC_BASE_URL` | `http://localhost:8080` | Public absolute URL, no trailing `/` |
-| `ROOT_DOMAIN` | empty | Root domain for personal subdomains |
 | `INSTANCE_NAME` | `nav.ax` | Instance name |
 | `NAVAX_SETUP_TOKEN` | random at startup | First-run setup token, at least 32 characters |
 | `NAVAX_MASTER_KEY` | empty | Base64 32-byte key encrypting third-party credentials; do not rotate casually once set |

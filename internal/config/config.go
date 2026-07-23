@@ -27,7 +27,6 @@ type Config struct {
 	DataDir           string
 	DatabasePath      string
 	PublicBaseURL     string
-	RootDomain        string
 	InstanceName      string
 	SetupToken        string
 	MasterKey         []byte
@@ -106,7 +105,6 @@ func Load() (Config, error) {
 		DataDir:           absDataDir,
 		DatabasePath:      filepath.Join(absDataDir, "navax.db"),
 		PublicBaseURL:     publicBaseURL,
-		RootDomain:        strings.ToLower(strings.TrimSpace(os.Getenv("ROOT_DOMAIN"))),
 		InstanceName:      env("INSTANCE_NAME", defaultInstanceName),
 		SetupToken:        setupToken,
 		MasterKey:         masterKey,

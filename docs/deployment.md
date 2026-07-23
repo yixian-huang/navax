@@ -41,7 +41,6 @@ nav.ax 是**单个静态 Go 二进制 + 内嵌前端 + SQLite（WAL）**，纯 G
 | `INSTANCE_NAME` | `nav.ax` | 实例展示名称。 |
 | `NAVAX_SECURE_COOKIES` | `true` | 会话 Cookie 加 `Secure`。挂 HTTPS 反代后务必开启。 |
 | `NAVAX_TRUSTED_PROXIES` | 反代来源 CIDR/IP | **关键**：不配置的话，限流与访问统计会全部按反代 IP 归并——限流塌成一个全局桶（暴力破解防护失效、正常用户互相牵连），统计 UV 恒为 1。只有直连对端命中此列表时才会采信其 `X-Forwarded-For`。 |
-| `ROOT_DOMAIN` | `nav.ax` | 启用子域名时填写；用户子域名形如 `name.nav.ax`。 |
 | `NAVAX_MASTER_KEY` | `openssl rand -base64 32` | 加密第三方凭据。不配置会在数据目录自动生成 `master.key`。**备份归档（`.navbak`）刻意不包含 `master.key`**，避免密文与密钥同 archive 外泄；就地恢复沿用磁盘上现有的密钥，但**跨机器灾备必须自行保留同一个 `NAVAX_MASTER_KEY`**，否则恢复后第三方凭据无法解密（数据库其余内容仍可恢复）。生产环境建议显式配置本变量并按部署密钥妥善保管。 |
 | `NAVAX_SETUP_TOKEN` | `openssl rand -hex 32` | 首次 `/setup` 初始化令牌。 |
 
@@ -108,6 +107,7 @@ server {
    - Caddy：如上用 `tls { dns <provider> ... }`（需对应 DNS 插件构建）。
    - certbot：`certbot certonly --dns-cloudflare -d nav.ax -d '*.nav.ax'`。
 3. 反代 `server_name`/站点块同时覆盖裸域名 `nav.ax` 与 `*.nav.ax`。
+4. **在管理后台开启子域名**：根域名是可变产品设置，存放在 `system_settings.root_domain`，**没有对应的环境变量**。管理员在后台「系统设置 → 域名」填写根域名（如 `nav.ax`）并打开子域名开关，等价于 `PATCH /api/v1/admin/settings`，请求体 `{"domain":{"rootDomain":"nav.ax","subdomainsEnabled":true}}`。该策略每次请求实时读取，改完立即生效，无需重启。
 
 未知的 `*.nav.ax` 主机若无对应已批准子域名，应用返回 404；裸域名与系统域名回落到系统首页。
 

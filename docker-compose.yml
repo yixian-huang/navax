@@ -12,7 +12,6 @@ services:
       NAVAX_ADDR: ":8080"
       NAVAX_DATA_DIR: /data
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8080}
-      ROOT_DOMAIN: ${ROOT_DOMAIN:-}
       INSTANCE_NAME: ${INSTANCE_NAME:-nav.ax}
       NAVAX_SETUP_TOKEN: ${NAVAX_SETUP_TOKEN:-}
       NAVAX_MASTER_KEY: ${NAVAX_MASTER_KEY:-}
