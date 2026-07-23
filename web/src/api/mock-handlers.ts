@@ -824,6 +824,22 @@ handlers.push((url, init) => {
     const published = contractPublishedResponse(mockPublishedPage, 'personal', currentSub?.subdomain || '');
     return Promise.resolve(jsonResponse({ code: 'OK', data: published, meta: { message: '', detail: '' } }));
   }
+  // 主题版本的编译产物。真实实现是内容寻址的不可变资源，mock 只需返回
+  // 一段合法 CSS，让 registry 的加载路径在开发态也能真实走通。
+  if (url.startsWith(`${API_BASE}/public/themes/`) && url.endsWith('.css')) {
+    const versionId = url.slice(`${API_BASE}/public/themes/`.length, -'.css'.length);
+    return Promise.resolve(new Response(
+      `[data-theme="mock"]{--mock-version:"${versionId}"}`,
+      {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/css; charset=utf-8',
+          'Cache-Control': 'public, max-age=31536000, immutable',
+          ETag: `"${versionId}"`,
+        },
+      },
+    ));
+  }
   if (url === `${API_BASE}/navigation/themes`) {
     return Promise.resolve(jsonResponse({ code: 'OK', data: mockThemes, meta: { message: '', detail: '' } }));
   }

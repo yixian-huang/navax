@@ -3,16 +3,13 @@
 // glassmorphism navbar. Theme controlled by admin panel.
 // ============================================================
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { themeRegistry } from '@/themes/registry';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { useWallpaperTone } from '@/hooks/useWallpaperTone';
 import NavaxLogo from '@/components/base/NavaxLogo';
-import { resolveThemeId } from '@/lib/themeResolve';
 import { cn } from '@/lib/utils';
-
-import '@/themes/packages';
 
 const DEFAULT_THEME = 'slate';
 
@@ -23,6 +20,12 @@ interface PublicShellProps {
   children: React.ReactNode;
   showSearch?: boolean;
   themeId?: string;
+  /**
+   * 发布快照锁定的主题版本。样式表地址由它内容寻址得出，所以主题后续更新或下架
+   * 都不会改变这个页面。旧快照没有这个字段，此时不加载任何主题样式表，页面回落
+   * 到主 CSS 里的基线令牌。
+   */
+  themeVersionId?: string;
   /** Full-bleed background image or video URL (page settings appearance.background). */
   backgroundUrl?: string;
   /**
@@ -40,12 +43,14 @@ export default function PublicShell({
   children,
   showSearch = true,
   themeId = DEFAULT_THEME,
+  themeVersionId,
   backgroundUrl,
   backgroundOpacity = 1,
   backgroundMediaType = 'image',
   backgroundPoster,
 }: PublicShellProps) {
   const [scrolled, setScrolled] = useState(false);
+  const themeRootRef = useRef<HTMLDivElement>(null);
   const hasBackground = Boolean(backgroundUrl);
   // Sample wallpaper + opacity → light|dark ink (low opacity ⇒ base shows ⇒ dark ink).
   // Prefer poster for video so canvas sampling works without decoding video frames.
@@ -55,10 +60,26 @@ export default function PublicShell({
   );
 
   // 公开页主题来自服务端发布快照，不在浏览器持久化服务端状态。
-  // Culled package ids map to retained themes so activate never hits a missing package.
+  // 未知 themeId 的兜底由服务端负责：解析不到可用主题时快照里就已经是默认主题，
+  // 前端不再做别名映射。
   useEffect(() => {
-    themeRegistry.activate(resolveThemeId(themeId));
-  }, [themeId]);
+    const root = themeRootRef.current;
+    if (!root || !themeVersionId) return;
+    void themeRegistry.activate(
+      themeId,
+      `/api/v1/public/themes/${encodeURIComponent(themeVersionId)}.css`,
+      root,
+    );
+  }, [themeId, themeVersionId]);
+
+  // 只在卸载时撤下主题：放进上面那个 effect 的 cleanup 会在换主题时先摘掉旧样式表，
+  // 正是要避免的闪烁。root 在这里提前捕获，因为 React 卸载时会把 ref 置空。
+  useEffect(() => {
+    const root = themeRootRef.current;
+    return () => {
+      if (root) themeRegistry.deactivate(root);
+    };
+  }, []);
 
   // Scroll-aware navbar
   useEffect(() => {
@@ -149,6 +170,7 @@ export default function PublicShell({
       */}
       <div data-nx-frame className="relative flex-1 flex flex-col" style={{ contain: 'paint' }}>
         <div
+          ref={themeRootRef}
           data-nx="page-root"
           className="relative flex-1 flex flex-col"
           data-wallpaper={hasBackground ? 'true' : undefined}

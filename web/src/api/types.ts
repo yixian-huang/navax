@@ -244,6 +244,8 @@ export interface PublishedNavigationPage {
   visibility?: Exclude<Visibility, 'private'>;
   settings?: PageSettings;
   etag?: string;
+  /** 发布时锁定的主题版本；旧快照没有，此时回落基线令牌。 */
+  themeVersionId?: string;
   ownerName: string;
   ownerAvatar: string;
   title: string;
@@ -293,15 +295,22 @@ export interface Theme {
   preview: string;
   enabled?: boolean;
   default?: boolean;
-  /** 当前版本 ID，由编译产物的内容哈希派生，因此不可变。 */
-  currentVersionId: string;
+  /**
+   * 当前版本 ID，由编译产物的内容哈希派生，因此不可变。
+   *
+   * 以下字段只在主题确实有编译版本时才存在。公开列表只返回可用主题，
+   * 因此必然有值；管理后台的全量列表会包含尚无版本的主题（例如已停用的
+   * 旧主题），此时缺省——它们不可被选用。这里如实标成可选，让编译器强制
+   * 调用方处理，而不是靠占位值把问题藏起来。
+   */
+  currentVersionId?: string;
   /** 该版本编译产物的地址，内容寻址、可长缓存。 */
-  cssHref: string;
+  cssHref?: string;
   /** 能力级别；当前宿主只接受 1。 */
-  tier: number;
-  scope: 'catalog' | 'private';
-  vibe: 'serious' | 'cute';
-  swatches: [string, string, string];
+  tier?: number;
+  scope?: 'catalog' | 'private';
+  vibe?: 'serious' | 'cute';
+  swatches?: [string, string, string];
   /** @deprecated 使用 default。 */
   isDefault?: boolean;
   /** @deprecated 使用 enabled。 */

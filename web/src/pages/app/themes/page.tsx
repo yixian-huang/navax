@@ -20,9 +20,8 @@ import { themeRegistry } from '@/themes/registry';
 import { useToast } from '@/components/base/Toast';
 import { useSaveStatus } from '@/hooks/useSaveStatus';
 import { cn } from '@/lib/utils';
-import { resolveThemeId } from '@/lib/themeResolve';
 import { draftSaveToastMessage } from '@/lib/publish-state';
-import type { ThemePackage } from '@/themes/types';
+import { themePackagesFromApi, type ThemePackage } from '@/themes/types';
 import { useMyPage, useThemes, useUpdatePageSettings } from '@/hooks/useQueries';
 import { ErrorState, LoadingSkeleton } from '@/components/base/SharedUI';
 import { getPublicConfig } from '@/api/assets';
@@ -35,8 +34,6 @@ const UPLOAD_ACCEPT = 'image/png,image/jpeg,image/jpg,image/gif,image/webp,video
 const DEFAULT_MAX_UPLOAD_BYTES = 40 * 1024 * 1024;
 const MAX_USER_LIBRARY = 3;
 const MAX_INSTANCE_PRESETS = 12;
-
-import '@/themes/packages';
 
 type BgSourceTab = 'presets' | 'mine' | 'url';
 
@@ -60,6 +57,9 @@ export default function ThemesPage() {
   const { isAdmin } = useAuth();
   const [activeId, setActiveId] = useState('slate');
   const [pendingId, setPendingId] = useState<string | null>(null);
+  // 回调 ref 存进 state：预览容器要等两个查询都就绪才挂载，用 useRef 的话
+  // 挂载这件事不会触发依赖变化，激活 effect 就可能永远等不到容器。
+  const [previewRoot, setPreviewRoot] = useState<HTMLDivElement | null>(null);
   const { toast } = useToast();
   const { markSaving, markSaved } = useSaveStatus();
 
@@ -108,21 +108,19 @@ export default function ThemesPage() {
     void loadLibrary();
   }, [loadLibrary]);
 
-  const themes = useMemo(() => {
-    const enabledIds = new Set((enabledThemesQuery.data ?? []).map(theme => theme.id));
-    const registered = themeRegistry.list();
-    if (enabledIds.size === 0) return registered;
-    return registered.filter(pkg => enabledIds.has(pkg.id));
-  }, [enabledThemesQuery.data]);
+  // 服务端只返回当前用户可选的主题（eligible 谓词），前端不再做二次过滤。
+  const themes = useMemo(
+    () => themePackagesFromApi(enabledThemesQuery.data),
+    [enabledThemesQuery.data],
+  );
+  const themeById = useMemo(() => new Map(themes.map(pkg => [pkg.id, pkg])), [themes]);
 
   const seriousThemes = useMemo(() => themes.filter(t => t.meta.vibe === 'serious'), [themes]);
   const cuteThemes = useMemo(() => themes.filter(t => t.meta.vibe === 'cute'), [themes]);
 
   useEffect(() => {
     if (!page?.settings) return;
-    const resolvedThemeId = resolveThemeId(page.settings.appearance.themeId);
-    setActiveId(resolvedThemeId);
-    themeRegistry.activate(resolvedThemeId);
+    setActiveId(page.settings.appearance.themeId);
     const background = page.settings.appearance.background;
     if (background.type === 'image' || background.type === 'video') {
       setBgConfig({
@@ -137,11 +135,34 @@ export default function ThemesPage() {
     }
   }, [page?.settings]);
 
+  // 预览用的主题：保存进行中先看新选择，保存失败后 pendingId 一清就自动退回旧主题，
+  // 不需要手写回滚。
+  const previewId = pendingId ?? activeId;
+
+  // 安全边界：data-theme 只写在预览容器上。第三方主题 CSS 的作用域上界就是这个
+  // 元素，写到 <html> 上会让主题样式接管整个已登录工作台。
+  useEffect(() => {
+    const pkg = themeById.get(previewId);
+    // 没有编译版本的主题（cssHref 缺省）不可选用，别对它发一个必然 404 的请求。
+    if (!previewRoot || !pkg?.cssHref) return;
+    let cancelled = false;
+    void themeRegistry.activate(pkg.id, pkg.cssHref, previewRoot).then(result => {
+      if (!cancelled && result === 'failed') {
+        toast('error', `主题「${pkg.meta.name}」样式加载失败，预览保持不变`);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [previewId, previewRoot, themeById, toast]);
+
+  useEffect(() => {
+    if (!previewRoot) return;
+    return () => themeRegistry.deactivate(previewRoot);
+  }, [previewRoot]);
+
   const handleActivate = useCallback(async (id: string) => {
     if (id === activeId || !page?.settings) return;
     setPendingId(id);
     markSaving();
-    themeRegistry.activate(id);
     try {
       await updateSettings.mutateAsync({
         ...page.settings,
@@ -149,16 +170,14 @@ export default function ThemesPage() {
       });
       setActiveId(id);
       markSaved();
-      const pkg = themeRegistry.get(id);
-      const name = pkg?.meta.name || id;
+      const name = themeById.get(id)?.meta.name || id;
       toast('success', draftSaveToastMessage(page.publication, `主题已写入草稿：「${name}」`));
     } catch (cause) {
-      themeRegistry.activate(activeId);
       toast('error', cause instanceof Error ? cause.message : '主题保存失败');
     } finally {
       setPendingId(null);
     }
-  }, [activeId, page?.settings, page?.publication, toast, markSaving, markSaved, updateSettings]);
+  }, [activeId, page?.settings, page?.publication, themeById, toast, markSaving, markSaved, updateSettings]);
 
   const persistBackground = useCallback(async (next: BgConfig) => {
     if (!page?.settings) return;
@@ -750,6 +769,87 @@ export default function ThemesPage() {
           )}
         </div>
       </div>
+
+      {/*
+        主题预览。三层结构与公开页一致（docs/theme-api.md §1）：
+        [data-nx-frame] 宿主 wrapper → [data-nx="page-root"] 主题根 → 内容。
+        主题样式的作用域上界就是这个主题根，wrapper 的 contain: paint 又把绘制
+        裁剪在框内，所以第三方主题既选不到也盖不住工作台的导航与编辑 UI。
+      */}
+      <div className="mb-8">
+        <h3 className="text-sm font-semibold text-foreground-700 mb-3 flex items-center gap-2">
+          <span className="w-1.5 h-4 rounded-full bg-primary-400" />
+          主题预览
+          <span className="text-[11px] font-normal text-foreground-400">
+            仅此框内应用主题样式，不影响工作台
+          </span>
+        </h3>
+        <div
+          data-nx-frame
+          style={{ contain: 'paint' }}
+          className="rounded-xl border border-background-200/70 overflow-hidden"
+        >
+          <div
+            ref={setPreviewRoot}
+            data-nx="page-root"
+            aria-hidden="true"
+            className="bg-background-100 p-4 flex flex-col gap-3 min-h-[13rem]"
+          >
+            <header data-nx="navbar" className="flex items-center justify-between">
+              <span data-nx="nav-brand" className="text-sm font-semibold text-foreground-900">nav.ax</span>
+              <span data-nx="nav-cta" className="text-xs text-foreground-500">登录</span>
+            </header>
+            <form data-nx="search-box" onSubmit={event => event.preventDefault()}>
+              <input
+                data-nx="search-input"
+                readOnly
+                tabIndex={-1}
+                value="搜索站点…"
+                onChange={() => { /* 预览是只读的 */ }}
+                className="w-full h-9 px-3 rounded-lg bg-background-50 border border-background-200/70 text-xs text-foreground-500"
+              />
+            </form>
+            <div data-nx="category-tablist" className="flex items-center gap-1.5">
+              {['常用', '开发', '设计'].map((label, index) => (
+                <button
+                  key={label}
+                  type="button"
+                  tabIndex={-1}
+                  data-nx="category-tab"
+                  className={cn(
+                    'h-7 px-2.5 rounded-lg text-[11px]',
+                    index === 0 ? 'bg-primary-500 text-background-50' : 'text-foreground-500',
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div data-nx="site-grid" className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {['GitHub', 'Figma', 'Notion'].map(title => (
+                <div
+                  key={title}
+                  data-nx="site-card"
+                  className="flex items-center gap-2 p-2 rounded-lg bg-background-50 border border-background-200/70"
+                >
+                  <span data-nx="site-card-icon" className="w-7 h-7 rounded-md bg-background-200 flex-shrink-0" />
+                  <span data-nx="site-card-title" className="text-[11px] text-foreground-800 truncate">
+                    {title}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {themes.length === 0 && (
+        <div className="rounded-lg border border-dashed border-background-200/80 py-8 px-4 text-center bg-background-50/80">
+          <Paintbrush className="w-6 h-6 text-foreground-300 mx-auto mb-2" />
+          <p className="text-sm text-foreground-600 font-medium">暂无可用主题</p>
+          <p className="text-xs text-foreground-400 mt-1">请联系站长在管理端启用主题</p>
+        </div>
+      )}
 
       {seriousThemes.length > 0 && (
         <div className="mb-8">
