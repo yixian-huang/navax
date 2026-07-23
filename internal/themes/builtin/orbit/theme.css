@@ -1,0 +1,36 @@
+/* Orbit — Deep Space Mission Control
+ *
+ * 迁移说明：`.material-card` → `site-card`、`.hairline*` → `divider*`、
+ * `body::after` → `[data-nx="page-root"]::after`，其余原样通过。
+ */
+
+[data-nx="site-card"]:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--elevation-raised), 0 0 28px oklch(0.70 0.12 255 / 0.14);
+}
+
+/* 星场 —— 全屏装饰层，改挂在主题根上 */
+[data-nx="page-root"]::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.45;
+  mix-blend-mode: screen;
+  background-image:
+    radial-gradient(1.2px 1.2px at 12% 18%, oklch(0.92 0.04 255 / 0.55), transparent),
+    radial-gradient(1px 1px at 38% 62%, oklch(0.90 0.05 295 / 0.40), transparent),
+    radial-gradient(1.4px 1.4px at 72% 28%, oklch(0.95 0.03 255 / 0.50), transparent),
+    radial-gradient(1px 1px at 88% 74%, oklch(0.88 0.06 295 / 0.35), transparent),
+    radial-gradient(1.1px 1.1px at 55% 10%, oklch(0.93 0.04 255 / 0.40), transparent),
+    radial-gradient(0.9px 0.9px at 22% 88%, oklch(0.90 0.04 270 / 0.30), transparent);
+}
+
+[data-nx="divider"] {
+  background: oklch(var(--primary-400) / 0.18);
+}
+
+[data-nx="divider-gradient"] {
+  background: linear-gradient(90deg, transparent, oklch(var(--primary-400) / 0.30), oklch(var(--accent-400) / 0.22), transparent);
+}

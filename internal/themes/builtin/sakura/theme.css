@@ -1,0 +1,214 @@
+/* Sakura — Cherry Blossom Dream
+ *
+ * 迁移说明（详见 docs/theme-api.md §4.1）：
+ * - `body` / `body::before` → `[data-nx="page-root"]` / `::before`。
+ * - 卡片右上角的 `content: '✿'` 装饰字符被规则拒绝（content 只允许 "" 与 none），
+ *   本次不引入资产，因此整条规则删除 —— 记录为视觉降级。
+ * - `footer a:hover` 删除：页脚是受保护区域，位于主题根之外。
+ * - `[role="tablist"] + div` / `~ div[class*="relative"]` 的 display:none 删除：
+ *   它依赖未登记的内部 DOM 结构与 Tailwind 原子类，没有对应钩子。
+ * - `.rise-in` 删除：无对应钩子（宿主的通用入场动画不属于主题契约）。
+ * - `@keyframes gentleFloat` 原先复用宿主 index.css 的全局定义；全局名会被
+ *   命名空间化，因此在包内自带一份同名定义。
+ */
+
+/* ---- Shared Kawaii Foundations ---- */
+[data-nx="page-root"] {
+  position: relative;
+}
+
+[data-nx="page-root"]::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 80% 60% at 15% 30%, oklch(var(--primary-50) / 0.35) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 50% at 85% 70%, oklch(var(--accent-100) / 0.20) 0%, transparent 55%),
+    radial-gradient(circle 4px at 12% 18%, oklch(var(--primary-300) / 0.25) 0%, transparent 100%),
+    radial-gradient(circle 3px at 88% 25%, oklch(var(--primary-200) / 0.22) 0%, transparent 100%),
+    radial-gradient(circle 5px at 25% 75%, oklch(var(--accent-200) / 0.18) 0%, transparent 100%),
+    radial-gradient(circle 3px at 72% 82%, oklch(var(--primary-300) / 0.20) 0%, transparent 100%),
+    radial-gradient(circle 4px at 55% 12%, oklch(var(--accent-200) / 0.22) 0%, transparent 100%),
+    oklch(var(--background-100));
+}
+
+h1 {
+  font-size: 2.8rem !important;
+  line-height: 1.08 !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.02em !important;
+}
+
+h2 {
+  font-size: 1.25rem !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.01em !important;
+}
+
+/* ---- Site cards ---- */
+[data-nx="site-card"] {
+  position: relative;
+  border: 1.5px solid transparent;
+  background: linear-gradient(160deg, oklch(var(--background-50)), oklch(var(--primary-50) / 0.4));
+  border-color: oklch(var(--primary-200) / 0.35);
+  box-shadow:
+    0 4px 16px rgb(220 150 170 / 0.08),
+    0 0 0 1px oklch(var(--primary-200) / 0.25),
+    inset 0 1px 0 oklch(var(--primary-50) / 0.6);
+  animation: gentleFloat 3s ease-in-out infinite;
+}
+
+[data-nx="site-card"]:hover {
+  transform: translateY(-5px) scale(1.02);
+  box-shadow:
+    0 8px 32px rgb(220 150 170 / 0.16),
+    0 0 0 1.5px oklch(var(--primary-400) / 0.4),
+    inset 0 1px 0 oklch(var(--primary-50) / 0.8);
+}
+
+[data-nx="site-card-title"] {
+  font-size: 0.95rem !important;
+  font-weight: 700 !important;
+}
+
+[data-nx="site-card-icon"] {
+  background: linear-gradient(135deg, oklch(var(--primary-200) / 0.5), oklch(var(--accent-200) / 0.5)) !important;
+  color: oklch(var(--primary-700)) !important;
+  border-radius: 1rem !important;
+  width: 3rem !important;
+  height: 3rem !important;
+}
+
+[data-nx="site-card"]:hover [data-nx="site-card-icon"] {
+  background: linear-gradient(135deg, oklch(var(--primary-400)), oklch(var(--primary-500))) !important;
+  color: oklch(var(--background-50)) !important;
+}
+
+[data-nx="site-card-icon"] i {
+  font-size: 1.4rem !important;
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+[data-nx="site-card"]:hover [data-nx="site-card-icon"] i {
+  transform: scale(1.2);
+}
+
+/* ---- Category tabs ---- */
+[data-nx="category-tab"] {
+  padding: 6px 18px !important;
+  border-radius: 9999px !important;
+  font-weight: 600 !important;
+  font-size: 0.8rem !important;
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+
+[data-nx="category-tab"][aria-selected="true"] {
+  background: oklch(var(--primary-500)) !important;
+  color: oklch(var(--background-50)) !important;
+  box-shadow: 0 4px 14px oklch(var(--primary-400) / 0.45) !important;
+}
+
+[data-nx="category-tab"][aria-selected="true"]:hover {
+  transform: scale(1.05);
+}
+
+[data-nx="category-tab"][aria-selected="false"] {
+  color: oklch(var(--foreground-400)) !important;
+}
+
+[data-nx="category-tab"][aria-selected="false"]:hover {
+  background: oklch(var(--primary-100) / 0.5) !important;
+  color: oklch(var(--primary-600)) !important;
+}
+
+/* ---- Search ---- */
+[data-nx="search-box"] > div {
+  height: 4.5rem !important;
+  border-radius: 2rem !important;
+  background: linear-gradient(160deg, oklch(var(--background-50)), oklch(var(--primary-50) / 0.3)) !important;
+  border: 1.5px solid oklch(var(--primary-200) / 0.25) !important;
+}
+
+[data-nx="search-input"] {
+  font-size: 1.05rem !important;
+  font-weight: 500 !important;
+}
+
+/* ---- Navbar ---- */
+[data-nx="nav-brand"] span:first-child {
+  width: 2.5rem !important;
+  height: 2.5rem !important;
+  border-radius: 1rem !important;
+  font-size: 1.1rem !important;
+  font-weight: 700 !important;
+}
+
+[data-nx="nav-link"] {
+  border-radius: 9999px !important;
+  padding-left: 1.25rem !important;
+  padding-right: 1.25rem !important;
+  font-weight: 600 !important;
+  font-size: 0.8rem !important;
+  height: 2.5rem !important;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+
+[data-nx="nav-link"]:hover {
+  transform: scale(1.06);
+}
+
+[data-nx="nav-tagline"] {
+  color: oklch(var(--primary-400)) !important;
+}
+
+/* ---- Kawaii Animations ---- */
+@keyframes gentleFloat {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-2px);
+  }
+}
+
+[data-nx="site-grid"] > [data-nx="site-card"]:nth-child(1) {
+  animation-delay: 0s;
+}
+[data-nx="site-grid"] > [data-nx="site-card"]:nth-child(2) {
+  animation-delay: 0.15s;
+}
+[data-nx="site-grid"] > [data-nx="site-card"]:nth-child(3) {
+  animation-delay: 0.3s;
+}
+[data-nx="site-grid"] > [data-nx="site-card"]:nth-child(4) {
+  animation-delay: 0.45s;
+}
+[data-nx="site-grid"] > [data-nx="site-card"]:nth-child(5) {
+  animation-delay: 0.6s;
+}
+[data-nx="site-grid"] > [data-nx="site-card"]:nth-child(6) {
+  animation-delay: 0.75s;
+}
+[data-nx="site-grid"] > [data-nx="site-card"]:nth-child(7) {
+  animation-delay: 0.9s;
+}
+[data-nx="site-grid"] > [data-nx="site-card"]:nth-child(8) {
+  animation-delay: 1.05s;
+}
+
+[data-nx="skeleton"] {
+  background: linear-gradient(90deg, oklch(var(--primary-100) / 0.4) 25%, oklch(var(--primary-200) / 0.3) 50%, oklch(var(--primary-100) / 0.4) 75%);
+  background-size: 200% 100%;
+}
+
+::-webkit-scrollbar-thumb {
+  background: oklch(var(--primary-200) / 0.5);
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: oklch(var(--primary-300) / 0.65);
+}
