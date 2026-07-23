@@ -96,6 +96,9 @@ export default function SiteGrid({
 
   return (
     <div
+      // Stable theme hook: staggered entry animations select
+      // [data-nx="site-grid"] > [data-nx="site-card"]:nth-child(n).
+      data-nx="site-grid"
       className={cn(
         'grid',
         density === 'comfortable'

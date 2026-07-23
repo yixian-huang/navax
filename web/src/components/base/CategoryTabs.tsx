@@ -65,11 +65,13 @@ export default function CategoryTabs({
       <div
         ref={tabsRef}
         className="flex items-center gap-5 md:gap-6 overflow-x-auto pb-3 scrollbar-none"
+        data-nx="category-tablist"
         role="tablist"
         aria-label="分类筛选"
       >
         {showAll && (
           <button
+            data-nx="category-tab"
             role="tab"
             aria-selected={activeId === ''}
             tabIndex={activeId === '' ? 0 : -1}
@@ -90,7 +92,8 @@ export default function CategoryTabs({
           return (
             <button
               key={cat.id}
-              role="tab"
+              data-nx="category-tab"
+            role="tab"
               aria-selected={isActive}
               tabIndex={isActive ? 0 : -1}
               data-active={isActive}
