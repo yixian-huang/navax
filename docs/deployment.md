@@ -156,6 +156,23 @@ WantedBy=multi-user.target
 
 `systemctl enable --now navax`。这样管理员在后台点“应用更新”后，进程退出即被 systemd 用新二进制拉起。
 
+### 启用后台一键更新
+
+官方 Release 附带用官方私钥签名的 `update-manifest.json`。在 `.env` 中配置以下两项后，管理后台即可执行「下载 → SHA-256/Ed25519 校验 → SQLite 在线备份 → 原子替换 → 退出待拉起」的更新流程：
+
+```bash
+NAVAX_UPDATE_MANIFEST_URL=https://github.com/yixian-huang/navax/releases/latest/download/update-manifest.json
+NAVAX_UPDATE_PUBLIC_KEY=P0yCGX0jV+TAx/BfmY7tvGKFeRQmtjq/y9/pMl8ciDA=
+```
+
+注意事项：
+
+- `latest/download` **只解析正式版**。带连字符的 tag（如 `v0.1.0-rc.1`）由发布工作流标记为预发布，因此在首个 `v0.1.0` 正式版发布前该 URL 返回 404；也可改为指向具体 tag 的资产地址。
+- 仅 `deployment=binary`（原生二进制）可自更新；容器部署会返回错误，请走 `docker compose pull`。
+- 必须已按上文配置 `Restart=always`，否则更新后进程退出将不会被拉起。
+- 清单验签失败、资产 SHA-256 不匹配，或清单版本不高于当前运行版本时，更新会被拒绝并保留旧版本。
+- 若实例的二进制由外部 CD 管理（如本文开头提到的官方自动 CD，见 [`deploy/README.md`](../deploy/README.md)），**不要**同时启用一键更新——两条通道会争夺同一个二进制、互相覆盖。官方 `nav.ax` 实例因此刻意不启用本功能。
+
 ## 8. 上线前检查清单
 
 - [ ] 服务器就绪，`nav.ax` 与（可选）`*.nav.ax` 的 DNS 记录已添加并生效

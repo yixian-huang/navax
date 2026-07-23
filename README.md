@@ -55,8 +55,8 @@ NAVAX_DATA_DIR=./data ./bin/navax
 | `NAVAX_SECURE_COOKIES` | 随 HTTPS 自动开启 | 是否仅通过 HTTPS 发送 Session Cookie |
 | `NAVAX_SESSION_TTL` | `720h` | Session 有效期 |
 | `NAVAX_SHUTDOWN_TIMEOUT` | `15s` | 优雅停机期限 |
-| `NAVAX_UPDATE_MANIFEST_URL` | 空 | 可选的签名更新清单 URL |
-| `NAVAX_UPDATE_PUBLIC_KEY` | 空 | Base64 Ed25519 更新验签公钥 |
+| `NAVAX_UPDATE_MANIFEST_URL` | 空 | 可选的签名更新清单 URL；官方取值见[更新](#更新) |
+| `NAVAX_UPDATE_PUBLIC_KEY` | 空 | Base64 Ed25519 更新验签公钥；官方取值见[更新](#更新) |
 
 ## 数据、备份与恢复
 
@@ -86,6 +86,22 @@ docker compose ps
 使用本地源码镜像时执行 `docker compose build --pull && docker compose up -d`。原生二进制可从 GitHub Release 下载对应平台文件，并用 `SHA256SUMS` 校验；配置签名更新清单后，也可在管理后台执行带备份与校验的原子更新。
 
 发布工作流会在仓库 Secret `NAVAX_UPDATE_SIGNING_KEY_DER` 存在时生成 `update-manifest.json`。Secret 内容是 Ed25519 PKCS#8 DER 私钥的 Base64；实例侧的 `NAVAX_UPDATE_PUBLIC_KEY` 使用对应 32 字节原始公钥的 Base64。私钥只用于 GitHub Actions 签名，不应部署到实例。
+
+### 启用后台一键更新（自托管）
+
+官方发布的 `update-manifest.json` 使用官方私钥签名。自托管实例填入下面两项，即可在管理后台执行带备份与校验的原子更新：
+
+```bash
+NAVAX_UPDATE_MANIFEST_URL=https://github.com/yixian-huang/navax/releases/latest/download/update-manifest.json
+NAVAX_UPDATE_PUBLIC_KEY=P0yCGX0jV+TAx/BfmY7tvGKFeRQmtjq/y9/pMl8ciDA=
+```
+
+生效条件：
+
+- **需等首个正式版**。带连字符的 tag（如 `v0.1.0-rc.1`）会作为预发布上传，而 `latest/download` 只解析正式版，因此该 URL 在 `v0.1.0` 发布前返回 404。也可改为指向某个具体 tag 的资产地址。
+- **仅原生二进制部署**支持自更新；容器部署会被拒绝，请改用 `docker compose pull`。
+- 更新后进程**优雅退出但不自拉起**，必须使用 `Restart=always` 的 systemd 单元（见 [docs/deployment.md](docs/deployment.md) §7）。
+- 校验失败、版本不高于当前版本，或清单签名不匹配时，更新会被拒绝并保留旧版本。
 
 ## 项目结构
 

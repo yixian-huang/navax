@@ -67,8 +67,8 @@ NAVAX_DATA_DIR=./data ./bin/navax
 | `NAVAX_SECURE_COOKIES` | auto-enabled with HTTPS | Send session cookies over HTTPS only |
 | `NAVAX_SESSION_TTL` | `720h` | Session lifetime |
 | `NAVAX_SHUTDOWN_TIMEOUT` | `15s` | Graceful shutdown deadline |
-| `NAVAX_UPDATE_MANIFEST_URL` | empty | Optional signed update-manifest URL |
-| `NAVAX_UPDATE_PUBLIC_KEY` | empty | Base64 Ed25519 public key verifying updates |
+| `NAVAX_UPDATE_MANIFEST_URL` | empty | Optional signed update-manifest URL; official value under [Updates](#updates) |
+| `NAVAX_UPDATE_PUBLIC_KEY` | empty | Base64 Ed25519 public key verifying updates; official value under [Updates](#updates) |
 
 ## Data, backup, and restore
 
@@ -117,6 +117,32 @@ Ed25519 PKCS#8 DER private key; on the instance side, `NAVAX_UPDATE_PUBLIC_KEY`
 is the Base64 of the corresponding 32-byte raw public key. The private key is
 used only for signing in GitHub Actions and must never be deployed to
 instances.
+
+### Enabling one-click updates (self-hosting)
+
+Official releases ship an `update-manifest.json` signed with the official key.
+Set both variables below, and the admin UI can perform atomic updates with
+backup and verification built in:
+
+```bash
+NAVAX_UPDATE_MANIFEST_URL=https://github.com/yixian-huang/navax/releases/latest/download/update-manifest.json
+NAVAX_UPDATE_PUBLIC_KEY=P0yCGX0jV+TAx/BfmY7tvGKFeRQmtjq/y9/pMl8ciDA=
+```
+
+Preconditions:
+
+- **Requires the first stable release.** Hyphenated tags (such as
+  `v0.1.0-rc.1`) are uploaded as pre-releases, and `latest/download` only
+  resolves stable releases — so the URL returns 404 until `v0.1.0` ships. You
+  may also point it at a specific tag's asset URL instead.
+- **Native binary deployments only.** Container deployments are rejected; use
+  `docker compose pull` there.
+- After an update the process **exits gracefully but does not restart itself**,
+  so a systemd unit with `Restart=always` is required (see
+  [docs/deployment.md](docs/deployment.md) §7, Chinese).
+- Updates are refused — leaving the old version in place — when checksum
+  verification fails, the manifest signature does not match, or the offered
+  version is not newer than the running one.
 
 ## Project structure
 
