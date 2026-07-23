@@ -74,7 +74,7 @@ export default function LayoutFull({
                 </p>
               )}
               {showGreeting && (
-                <h1 className={cn(
+                <h1 data-nx="greeting" className={cn(
                   'font-heading leading-[1.05] tracking-tight text-foreground-950',
                   wallpaperMode ? 'text-2xl md:text-3xl' : 'text-4xl md:text-5xl',
                 )}>
@@ -95,7 +95,7 @@ export default function LayoutFull({
               )}
             </div>
             {showClock && (
-              <div className="flex flex-col items-end flex-shrink-0">
+              <div data-nx="clock" className="flex flex-col items-end flex-shrink-0">
                 <span className={cn(
                   'font-heading tabular-nums text-foreground-800 tracking-tight',
                   wallpaperMode ? 'text-2xl md:text-3xl' : 'text-3xl md:text-4xl',

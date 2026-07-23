@@ -118,8 +118,8 @@ func detectMIME(data []byte) string {
 	return ""
 }
 
-// cleanAssetPath 规范化并校验包内路径。拒绝绝对路径、越界路径与
-// assets/ 之外的位置。
+// cleanAssetPath 规范化并校验资产路径。路径相对包内 assets/ 目录，
+// 因此这里拒绝的是绝对路径、越界路径与未规范化的写法。
 func cleanAssetPath(assetPath string) (string, error) {
 	trimmed := strings.TrimSpace(assetPath)
 	if trimmed == "" {

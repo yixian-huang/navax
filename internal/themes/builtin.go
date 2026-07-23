@@ -82,7 +82,8 @@ func readBuiltinPackage(id string) (Package, error) {
 }
 
 // readBuiltinAssets 读取可选的 assets/ 子目录。路径以包为根（形如
-// "assets/fonts/x.woff2"），与 CSS 里的 url("asset:…") 引用同一套写法。
+// "fonts/x.woff2"，对应磁盘上的 assets/fonts/x.woff2），与 CSS 里的
+// url("asset:…") 引用同一套写法。
 func readBuiltinAssets(dir string) ([]Asset, error) {
 	root := path.Join(dir, "assets")
 	if _, err := fs.Stat(builtinFS, root); err != nil {
@@ -104,7 +105,10 @@ func readBuiltinAssets(dir string) ([]Asset, error) {
 		if readErr != nil {
 			return readErr
 		}
-		asset, validateErr := ValidateAsset(strings.TrimPrefix(entryPath, dir+"/"), data)
+		// 路径相对包内 assets/ 目录：CSS 里写 url("asset:fonts/x.woff2")
+		// 就对应 assets/fonts/x.woff2。三条来源（embed、zip、GitHub）必须
+		// 用同一套形状，否则同一份 CSS 换个来源就找不到资产。
+		asset, validateErr := ValidateAsset(strings.TrimPrefix(entryPath, root+"/"), data)
 		if validateErr != nil {
 			return validateErr
 		}

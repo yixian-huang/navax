@@ -202,7 +202,7 @@ export default function PublicShell({
             </Link>
             <Link
               to="/login"
-              data-nx="nav-link"
+              data-nx="nav-cta"
               className={cn(
                 'h-9 px-3 flex items-center text-xs transition-colors duration-200 whitespace-nowrap',
                 hasBackground

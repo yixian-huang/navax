@@ -82,7 +82,7 @@ export function SitesSection({
       )}>
         <div className="flex items-baseline gap-3 min-w-0">
           {!wallpaperMode && (
-            <h2 className="font-heading text-lg text-foreground-900 tracking-tight">收藏站点</h2>
+            <h2 data-nx="section-title" className="font-heading text-lg text-foreground-900 tracking-tight">收藏站点</h2>
           )}
           {wallpaperMode ? (
             query ? (
@@ -174,7 +174,7 @@ export function FooterActions({ wallpaperMode = false }: { wallpaperMode?: boole
 
   return (
     <div className="mt-20 md:mt-24">
-      <div className="hairline-gradient mb-7" />
+      <div data-nx="divider-gradient" className="hairline-gradient mb-7" />
       <div className="flex items-center justify-center gap-8">
         <Link
           to="/app/links"

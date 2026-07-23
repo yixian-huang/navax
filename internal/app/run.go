@@ -35,6 +35,7 @@ import (
 	"github.com/yixian-huang/navax/internal/security"
 	seopkg "github.com/yixian-huang/navax/internal/seo"
 	"github.com/yixian-huang/navax/internal/subdomains"
+	"github.com/yixian-huang/navax/internal/themes"
 	"github.com/yixian-huang/navax/internal/webui"
 )
 
@@ -75,6 +76,15 @@ func Run(ctx context.Context, cfg config.Config, build BuildInfo) error {
 			slog.Error("close database", "error", err)
 		}
 	}()
+
+	// 内置主题走与第三方完全相同的编译管线，每次启动幂等落库。规范因此被
+	// 自家主题持续验证，目录与实现不会漂移；内置主题不合规是构建缺陷，
+	// 直接让启动失败而不是静默降级。
+	themeStore := themes.NewStore(db)
+	if err := themes.SyncBuiltin(runContext, themeStore, time.Now().UTC()); err != nil {
+		return fmt.Errorf("sync builtin themes: %w", err)
+	}
+	themeHandler := httpapi.NewThemeHandler(themeStore)
 
 	authStore := auth.NewSQLStore(db)
 	authService := auth.NewService(authStore, cfg.SetupToken, cfg.SessionTTL)
@@ -244,6 +254,7 @@ func Run(ctx context.Context, cfg config.Config, build BuildInfo) error {
 			accountHandler.Mount(router)
 			navigationHandler.MountPublic(router)
 			catalogHandler.Mount(router)
+			themeHandler.MountPublic(router)
 			analyticsHandler.MountPublic(router)
 			assetHandler.MountPublic(router)
 			router.Group(func(protected chi.Router) {

@@ -363,9 +363,33 @@ export const mockPublishedPage: MockPublishedPage = {
 
 // ---- Mock Themes ----
 export const mockThemes: Theme[] = [
-  { id: 'default-light', name: '浅色默认', version: '1.0.0', author: 'nav.ax', description: '简洁明亮的默认主题', mode: 'light', preview: '', enabled: true, default: true, isDefault: true, isActive: true },
-  { id: 'default-dark', name: '深色默认', version: '1.0.0', author: 'nav.ax', description: '沉稳护眼的深色主题', mode: 'dark', preview: '', enabled: true, default: false, isDefault: false, isActive: false },
-  { id: 'forest', name: '森林', version: '1.0.0', author: 'nav.ax', description: '清新自然的森林配色', mode: 'both', preview: '', enabled: true, default: false, isDefault: false, isActive: false },
+  {
+    id: 'slate', name: 'Slate', subtitle: '克制·当代', version: '1.0.0', author: 'nav.ax',
+    description: '中性冷灰基底，克制的当代排版。', mode: 'light', preview: '',
+    enabled: true, default: true, isDefault: true, isActive: true,
+    currentVersionId: 'v00000000000000000000000000000001',
+    cssHref: '/api/v1/public/themes/v00000000000000000000000000000001.css',
+    tier: 1, scope: 'catalog', vibe: 'serious',
+    swatches: ['#fafafa', '#8a8f98', '#1c1f24'],
+  },
+  {
+    id: 'slate-dark', name: 'Slate Dark', subtitle: '克制·夜间', version: '1.0.0', author: 'nav.ax',
+    description: '深色版本的中性冷灰。', mode: 'dark', preview: '',
+    enabled: true, default: false, isDefault: false, isActive: false,
+    currentVersionId: 'v00000000000000000000000000000002',
+    cssHref: '/api/v1/public/themes/v00000000000000000000000000000002.css',
+    tier: 1, scope: 'catalog', vibe: 'serious',
+    swatches: ['#16181d', '#6f757e', '#e8eaed'],
+  },
+  {
+    id: 'sakura', name: 'Sakura', subtitle: '樱花·魔法', version: '1.0.0', author: 'nav.ax',
+    description: '梦幻樱花粉 × 薄荷绿点缀。', mode: 'light', preview: '',
+    enabled: true, default: false, isDefault: false, isActive: false,
+    currentVersionId: 'v00000000000000000000000000000003',
+    cssHref: '/api/v1/public/themes/v00000000000000000000000000000003.css',
+    tier: 1, scope: 'catalog', vibe: 'cute',
+    swatches: ['#fef5f7', '#e88da5', '#8ecfba'],
+  },
 ];
 
 // ---- Mock Invitations ----
