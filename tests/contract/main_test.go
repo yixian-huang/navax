@@ -88,7 +88,6 @@ func testMain(m *testing.M) int {
 		"NAVAX_SETUP_TOKEN="+setupToken,
 		"PUBLIC_BASE_URL="+baseURL,
 		"INSTANCE_NAME=nav.ax",
-		"ROOT_DOMAIN=contract.test",
 	)
 	server.Stdout = os.Stderr
 	server.Stderr = os.Stderr

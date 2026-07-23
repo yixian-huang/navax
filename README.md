@@ -17,7 +17,7 @@ docker compose up -d --build
 docker compose logs -f navax
 ```
 
-访问 `http://localhost:8080/setup`，使用 `.env` 中的 `NAVAX_SETUP_TOKEN` 完成首次初始化。上线前必须把 `.env` 中的 `PUBLIC_BASE_URL` 改为真实 HTTPS 地址，并将 `NAVAX_SECURE_COOKIES` 设为 `true`。反向代理需保留原始 `Host`；启用个人子域名时还需配置 `ROOT_DOMAIN`、泛域名 DNS 与 TLS。
+访问 `http://localhost:8080/setup`，使用 `.env` 中的 `NAVAX_SETUP_TOKEN` 完成首次初始化。上线前必须把 `.env` 中的 `PUBLIC_BASE_URL` 改为真实 HTTPS 地址，并将 `NAVAX_SECURE_COOKIES` 设为 `true`。反向代理需保留原始 `Host`；启用个人子域名时，根域名在管理后台「系统设置 → 域名」中填写并开启，另需配置泛域名 DNS 与 TLS。
 
 官方 `nav.ax` 实例中，4 个及以上字符的可用子域名会自动启用；1–3 个字符的稀缺短域名进入管理员审核。付费订阅尚未进入 v1，未来商业化主要围绕更高链接额度、短子域名和白标能力展开。
 
@@ -49,7 +49,6 @@ NAVAX_DATA_DIR=./data ./bin/navax
 | `NAVAX_ADDR` | `:8080` | HTTP 监听地址 |
 | `NAVAX_DATA_DIR` | `./data` | SQLite、上传、备份与密钥目录；容器内为 `/data` |
 | `PUBLIC_BASE_URL` | `http://localhost:8080` | 对外绝对地址，不带末尾 `/` |
-| `ROOT_DOMAIN` | 空 | 个人子域名的根域名 |
 | `INSTANCE_NAME` | `nav.ax` | 实例名称 |
 | `NAVAX_SETUP_TOKEN` | 启动时随机生成 | 首次初始化令牌，至少 32 字符 |
 | `NAVAX_MASTER_KEY` | 空 | 加密第三方凭据的 Base64 32 字节密钥；配置后不可随意更换 |

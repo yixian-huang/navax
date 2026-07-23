@@ -23,7 +23,6 @@ ENV_FILE="$APP_DIR/.env"
 UNIT=/etc/systemd/system/navax.service
 BIND_ADDR=127.0.0.1:8090
 PUBLIC_BASE_URL=https://nav.ax
-ROOT_DOMAIN=nav.ax
 INSTANCE_NAME=nav.ax
 
 log() { printf '\033[1;36m[navax]\033[0m %s\n' "$*"; }
@@ -81,7 +80,6 @@ cat > "$ENV_FILE" <<EOF
 # nav.ax 生产配置（native binary + systemd）。由 install-navax.sh 生成。
 PUBLIC_BASE_URL=$PUBLIC_BASE_URL
 INSTANCE_NAME=$INSTANCE_NAME
-ROOT_DOMAIN=$ROOT_DOMAIN
 
 # 本机监听地址：只对反代（1Panel/openresty）暴露，不直接对外。
 NAVAX_ADDR=$BIND_ADDR
