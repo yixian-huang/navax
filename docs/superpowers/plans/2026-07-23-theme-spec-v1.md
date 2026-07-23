@@ -22,10 +22,12 @@
 - `z-index` 上限 50；`specVersion` 固定为 1；**校验器只接受 `tier: 1`**，`2`/`3` 拒绝。
 - 资产 MIME 白名单：`font/woff2`、`image/png`、`image/jpeg`、`image/webp`。**拒绝 SVG，含 `data:image/svg+xml`。**
 - 主题 CSS 中不得出现外部 URL；资产引用语法唯一：`url("asset:<包内路径>")`；`data:` 仅限 `image/png|jpeg|webp` 且单条 ≤ 8192 字节。
-- **主题 CSS 的作用域根是 `[data-nx="page-root"]`，不是 `<html>`**；禁止选择 `html`/`body`；根之后禁 `+`/`~`，选择器 subject 必须在根内；`[data-nx-protected]` 元素位于主题根之外。
-- 主题根必须 `transform: translateZ(0)`（建立 fixed 包含块 + 独立层叠上下文），受保护区域 `position: relative; z-index: 100`——仅靠选择器前缀挡不住视觉遮挡。
-- 禁 `image-set()` / `-webkit-image-set()`；禁 URL 形态的字符串字面量；自定义属性 `--*` 的值走与普通声明相同的完整校验。
+- **主题 CSS 的作用域根是 `[data-nx="page-root"]`，不是 `<html>`**；禁止选择 `html`/`body`；根之后禁 `+`/`~`，选择器 subject 必须在根内；`[data-nx-protected]` 元素位于宿主 wrapper 之外。
+- **视觉边界是宿主 wrapper `[data-nx-frame]` 上的 `contain: paint`**，不是主题根——主题能选中主题根并用 `transform: none !important` 废掉放在那里的机制，但在语法上选不到 wrapper。
+- 选择器标识符必须**先解码 CSS 转义并 ASCII 小写规范化**再比较；递归下钻**所有**接受 selector-list 的语法位置（不止 `:is/:where/:has/:not`，还有 `:nth-child(… of …)`）；拒绝 CSS nesting 与命名空间选择器。
+- **值中的函数走正向白名单**，白名单外一律拒绝（`src()`、`image()`、`cross-fade()`、`element()`、`paint()`、`image-set()` 因此自然被拒）；禁 URL 形态的字符串字面量；自定义属性 `--*` 的值走与普通声明相同的完整校验；函数名同样先解码转义再匹配。
 - 禁在 `font` 简写中引用包内字体。
+- `z-index ≤ 50` 与 `position: fixed` 须带 `pointer-events: none` 是**纵深防御，不是边界**——不要因为它们存在就放松 wrapper 的实现。
 
 ---
 
@@ -464,27 +466,28 @@ Expected: PASS。
 
 `PublicShell` 改为「外壳 → 主题根 → 内容」三层，页脚源码链接留在**主题根之外**：
 
+结构是**三层**，隔离边界在中间那层：
+
 ```tsx
 <div className="min-h-screen flex flex-col relative">
-  {/* transform 让根成为 fixed 后代的包含块，并建立独立层叠上下文 */}
-  <div
-    data-nx="page-root"
-    data-theme={themeId}
-    className="relative flex-1 flex flex-col"
-    style={{ transform: 'translateZ(0)' }}
-  >
-    {/* 导航栏、搜索、分类、站点卡片等全部内容 */}
+  {/* 宿主 wrapper：主题在语法上选不到它，因此这道边界不可被覆盖 */}
+  <div data-nx-frame className="relative flex-1 flex flex-col" style={{ contain: 'paint' }}>
+    <div data-nx="page-root" data-theme={themeId} className="relative flex-1 flex flex-col">
+      {/* 导航栏、搜索、分类、站点卡片等全部内容 */}
+    </div>
   </div>
-  <footer data-nx-protected className="relative z-[100]">
+  <footer data-nx-protected className="relative">
     <a href={SOURCE_REPO_URL} …>源码</a>
   </footer>
 </div>
 ```
 
-两处样式都不是可选的：
+为什么必须是 wrapper 而不是主题根：
 
-- `position: relative` **不会**为 `position: fixed` 的后代建立包含块——只有 `transform`/`filter`/`perspective`/`will-change`/`contain` 会。少了 `translateZ(0)`，主题的 fixed 覆盖层仍会铺满整个视口，在 `/app/themes` 预览时盖住整个已登录应用。
-- `translateZ(0)` 同时建立独立层叠上下文，使根内任何 `z-index`（上限 50）都被压在根这一层内；页脚 `z-index: 100` 因而永远绘制在主题之上。
+- `contain: paint` 一个属性同时给出三件事——成为绝对/固定定位后代的**包含块**、建立**独立层叠上下文**、把后代绘制**裁剪**在自己盒内。`transform: translateZ(0)` 只给前两件，阴影与 `filter` 仍会溢出。
+- 把它放在主题根上不成立：`[data-nx="page-root"]` 是登记钩子，主题可以选中它写 `transform: none !important` / `contain: none !important` 直接废掉边界。wrapper 不是钩子，且所有主题选择器都被前缀到 `[data-theme=…]` 作用域内，**语法上无法命中 wrapper**。
+- `data-nx-frame` **不得**加入 `allowedHooks`。Task 3 的校验器要显式拒绝命中它的选择器（和 `data-nx-protected` 同等对待）。
+- 受保护页脚是 wrapper 的兄弟，不在被裁剪的绘制范围内，因此不需要靠 `z-index` 竞争。
 
 - [ ] **Step 7: 其余元素挂钩子**
 
@@ -629,8 +632,19 @@ func TestValidateCSSRejects(t *testing.T) {
 		{"根后通用兄弟逃逸", `[data-nx="page-root"] ~ footer { opacity: 0; }`, "兄弟"},
 		{"逗号列表中混入越界项", `[data-nx="clock"], [data-nx="page-root"] + footer { color: red; }`, "兄弟"},
 		{":is() 嵌套越界", `:is([data-nx="page-root"] + footer) { display: none; }`, "兄弟"},
-		{"image-set 字符串形式外链", `[data-nx="clock"] { background-image: image-set("https://evil.example/p.png" 1x); }`, "image-set"},
-		{"-webkit-image-set", `[data-nx="clock"] { background-image: -webkit-image-set(url("asset:a.png") 1x); }`, "image-set"},
+		{"nth-child of 列表越界", `:nth-child(2 of [data-nx="page-root"] + footer) { display: none; }`, "兄弟"},
+		{"命中宿主 wrapper", `[data-nx-frame] { contain: none; }`, "data-nx-frame"},
+		{"转义的 html", `h\74ml { background: red; }`, "html"},
+		{"转义的 class 属性选择器", `[cl\61ss*="w-11"] { width: 0; }`, "class"},
+		{"命名空间选择器", `*|body { background: red; }`, "命名空间"},
+		{"CSS nesting", `[data-nx="clock"] { & + footer { display: none; } }`, "nesting"},
+		{"src() 函数外链", `[data-nx="clock"] { background-image: src("https://evil.example/p.png"); }`, "函数"},
+		{"转义的 src()", `[data-nx="clock"] { background-image: \73 rc("https://evil.example/p.png"); }`, "函数"},
+		{"image() 函数", `[data-nx="clock"] { background-image: image("https://evil.example/p.png"); }`, "函数"},
+		{"cross-fade() 函数", `[data-nx="clock"] { background-image: cross-fade(url("asset:a.png") 50%); }`, "函数"},
+		{"element() 函数", `[data-nx="clock"] { background: element(#x); }`, "函数"},
+		{"image-set 字符串形式外链", `[data-nx="clock"] { background-image: image-set("https://evil.example/p.png" 1x); }`, "函数"},
+		{"-webkit-image-set", `[data-nx="clock"] { background-image: -webkit-image-set(url("asset:a.png") 1x); }`, "函数"},
 		{"自定义属性藏外链", `[data-nx="clock"] { --bg: url("https://evil.example/p.png"); background-image: var(--bg); }`, "url"},
 		{"URL 形态字符串字面量", `[data-nx="clock"] { --bg: "https://evil.example/p.png"; }`, "字符串"},
 		{"font 简写引用包内字体", `[data-nx="clock"] { font: bold 12px "Sample Sans"; }`, "font"},
@@ -695,17 +709,20 @@ Expected: FAIL，`undefined: ValidateCSS`。
    - 出现任何类选择器 → 拒绝并回显类名（主题只能用钩子，不能用类）；
    - 出现 `[class…]` 形式的属性选择器 → 拒绝（`[class*="w-11"]` 是绕过类名限制的等价写法）；
    - `[data-nx="x"]` 中的 `x` 必须 `IsAllowedHook`，否则拒绝并回显 `x`；
+   - 命中 `data-nx-frame`（宿主 wrapper）→ 拒绝，与 `data-nx-protected` 同等对待；
    - **包含规则**：出现 `[data-nx="page-root"]` 时，其后只允许后代（空格）与子代（`>`）组合符；出现 `+` / `~` → 拒绝（`[data-nx="page-root"] + footer` 加完前缀会命中根外的受保护页脚）；subject（最右复合选择器）必须是根自身或其后代；
-   - `:is()` / `:where()` / `:has()` / `:not()` 的参数递归套用以上全部规则。
+   - **递归下钻所有接受 selector-list 的语法位置**，不要写成"检查这四个伪类"：`:is()` / `:where()` / `:has()` / `:not()` 之外还有 `:nth-child(… of <list>)` / `:nth-last-child(… of …)`。写成通用遍历，新伪类才不会自动成为缺口；
+   - **标识符必须先解码 CSS 转义再 ASCII 小写规范化，然后才做比较**：`h\74ml` 就是 `html`、`[cl\61ss*=…]` 就是 `[class*=…]`。用 AST 不会自动带来规范化，这一步必须显式实现并测试；
+   - 拒绝 CSS nesting（`&` / `@nest`）与命名空间选择器（`ns|el`、`*|body`）——v1 不承担它们的作用域语义。
 5. `DeclarationGrammar`：`data` 是属性名，`p.Values()` 是值 token 序列——
    - 属性名命中 `behavior` / `-moz-binding` → 拒绝；值中出现 `expression(` 函数 token → 拒绝；
    - `content`：值必须是空字符串字面量或 `none`，其余（含 `attr()` 与任何非空字面量）一律拒绝；
    - `z-index`：解析为整数且 ≤ 50，非整数值（如 `var(...)`）一律拒绝。
-6. **值的语义级白名单**（不是"扫描 URL token"——CSS 里能触发加载的写法不都产生 URL token）。对**每条声明的值，包括自定义属性 `--*` 的值**：
+6. **值走正向白名单**（不是"扫描 URL token"、也不是"拒绝已知的坏函数"——CSS 里能触发加载的写法不都产生 URL token，且新函数会持续出现）。对**每条声明的值，包括自定义属性 `--*` 的值**：
+   - **函数名白名单**（先解码转义 + ASCII 小写后匹配）：`var` `calc` `min` `max` `clamp` `rgb` `rgba` `hsl` `hsla` `oklch` `oklab` `color-mix` `linear-gradient` `radial-gradient` `conic-gradient` 及 `repeating-` 变体 `cubic-bezier` `steps` `translate*` `scale*` `rotate*` `skew*` `matrix*` `blur` `brightness` `contrast` `drop-shadow` `grayscale` `hue-rotate` `invert` `opacity` `saturate` `sepia` `format` `local` `url`。**白名单外的函数一律拒绝**——`src()`、`image()`、`cross-fade()`、`element()`、`paint()`、`image-set()`、`-webkit-image-set()` 因此自然被拒，无需逐个枚举；
    - `url("asset:<path>")`：合法，记录 `<path>`，供 Task 4 重写与资产存在性检查；
    - `url("data:image/png|jpeg|webp,…")`：总长 ≤ 8192 才合法；`data:image/svg+xml` 明确拒绝（与资产层拒绝 SVG 一致）；
-   - 其余 URL token 一律拒绝，错误文案回显被拒的 URL 前 64 字符；
-   - **`image-set()` / `-webkit-image-set()` 整体拒绝**：它接受字符串形式的地址（`image-set("https://…" 1x)`），不产生 URL token，扫描 token 挡不住；
+   - 其余 `url()` 一律拒绝，错误文案回显被拒的 URL 前 64 字符；
    - **任何字符串字面量若形如 URL**（含 `://`、以 `//` 开头，或经反斜杠转义拼接后成立）→ 拒绝；
    - 自定义属性必须走以上全部规则，否则 `--bg: url(https://…)` + `background: var(--bg)` 是等价的外链通道。
    - `font` 简写中出现包内 `@font-face` 族名 → 拒绝，提示改用 `font-family`。
@@ -1056,6 +1073,7 @@ git commit -m "feat: validate theme assets and compile packages to immutable ver
 2. `theme_versions.theme_id` 用 `ON DELETE RESTRICT`（**不是 CASCADE**）——已发布快照按 version_id 引用编译产物，删包不得毁掉线上样式。
 3. SQLite 不能给已有表补 `CHECK`，`scope`/`owner_id` 的配对不变量用 `themes_scope_owner_insert` / `themes_scope_owner_update` 两个 `BEFORE` 触发器实现（照抄 spec §7.1 的 SQL）。缺了它，`owner_id IS NULL` 的私有主题会因 NULL 在唯一索引中互不相等而绕过 slug 唯一性。
 4. **`published_snapshots` 必须增列 `theme_version_id TEXT REFERENCES theme_versions(id) ON DELETE RESTRICT`**（可空，NULL = 迁移前的旧快照，读取时回落默认主题）。只把 versionId 写进 `payload_json` 数据库管不着——`DELETE FROM theme_versions` 能直接抽掉线上公开页的样式。同时建部分索引 `idx_published_snapshots_theme_version`。
+5. **两个触发器把 `current_version_id` 变成数据库级不变量**（照抄 spec §7.1）：`themes_current_version_valid`（必须存在、属于本主题、`status='active'`）与 `theme_versions_current_guard`（仍被引用为当前版本的行不得删除）。只靠应用层校验挡不住绕过服务层的写入；快照外键也覆盖不到"当前版本尚未被任何快照引用"这段空窗。
 
 - [ ] **Step 2: 写失败测试**
 
@@ -1178,6 +1196,20 @@ func TestDeleteVersionReferencedBySnapshotIsRestricted(t *testing.T) {
 	// DELETE FROM theme_versions WHERE id = ? → 必须因 RESTRICT 失败
 	// 这是 codex 第二轮指出的缺口：themes 上的 RESTRICT 只挡删包，挡不住删版本
 }
+
+func TestCurrentVersionTriggers(t *testing.T) {
+	db := newTestDB(t)
+	// 1. current_version_id 指向他主题的版本 → 触发器 ABORT
+	// 2. current_version_id 指向 status='disabled' 的版本 → 触发器 ABORT
+	// 3. 删除仍是某主题 current_version_id 的版本（且无任何快照引用）→ 触发器 ABORT
+	//    第 3 条是快照外键覆盖不到的空窗：当前版本可能还没被发布过
+}
+
+func TestDefaultThemeInvariant(t *testing.T) {
+	db := newTestDB(t)
+	// SyncBuiltin 后：is_default=1 的行唯一，且 scope='catalog'、enabled=1、
+	// current_version_id 指向 active 版本。破坏该不变量后启动断言必须失败。
+}
 ```
 
 `ErrNotFound`、`NewStore` 与 `newTestDB` 辅助函数一并在本任务中定义（`newTestDB` 建临时 SQLite 库并执行 `migrations/*.sql`，写法照抄 `internal/admin/sqlstore_test.go`；注意必须开启 `PRAGMA foreign_keys = ON`，否则 `RESTRICT` 不生效，测试会假通过）。
@@ -1277,6 +1309,8 @@ var builtinFS embed.FS
 ```
 
 `SyncBuiltin` 遍历 `BuiltinPackages()`，逐个 `Compile` 后 `Store.UpsertVersion(ctx, pkg.Manifest.ID, compiled, "builtin", "builtin", now)`。在 `internal/app/run.go` 迁移执行之后、HTTP 服务启动之前调用一次，失败则启动失败（内置主题不合规属于构建缺陷，不应静默降级）。
+
+同步完成后**断言默认主题不变量**：`is_default = 1` 的行唯一，且 `scope='catalog'`、`enabled=1`、`current_version_id` 指向 active 版本。不成立则启动失败——回落目标自身不可用的话，`Publish` 的回落只是把问题推后一步。
 
 - [ ] **Step 5: 写幂等性集成测试并运行**
 
@@ -1468,7 +1502,7 @@ func TestPublishRejectsForeignPrivateTheme(t *testing.T) {
 
 - [ ] **Step 3: 实现**
 
-`Publish` 事务内调用 Task 9 的**同一个** eligibility 谓词取版本，写入 `published_snapshots.theme_version_id` 列与快照 payload 两处。谓词不成立则回落默认主题（而不是报错——避免用户被他人的下架操作卡住发布）。`Preview` 用同样逻辑（预览取当前版本，不落库）。
+`Publish` 事务内调用 Task 9 的**同一个** eligibility 谓词取版本，写入 `published_snapshots.theme_version_id` 列与快照 payload 两处。谓词不成立则回落默认主题（而不是报错——避免用户被他人的下架操作卡住发布）；**若默认主题本身也不可用**（不变量被破坏），则明确返回 `503` 并附可诊断信息，不要静默产出引用空版本的快照。`Preview` 用同样逻辑（预览取当前版本，不落库）。
 
 不要在这里另写一份判定 SQL：列表与发布各写一份正是第二轮评审里"能选、发布却静默回落"的成因。
 
@@ -1561,16 +1595,19 @@ git commit -m "feat: load theme css from content-addressed stylesheet links"
 
 - [ ] **Step 3b: 恶意主题视觉隔离 E2E**
 
-造一个只用于测试的主题夹具，用四种手段尝试遮挡根外 UI，全部必须失败：
+造一个只用于测试的主题夹具（**直接构造编译产物注入，绕过校验器**——目的是验证 wrapper 这道边界本身，而不是验证校验器能拦住它们），用以下手段尝试遮挡 wrapper 之外的 UI，全部必须失败：
 
 ```css
-[data-nx="page-root"]::after { content: ""; position: fixed; inset: 0; background: red; pointer-events: none; z-index: 50; }
+[data-nx="page-root"]::after { content: ""; position: fixed; inset: 0; background: red; }
 [data-nx="site-card"] { position: absolute; top: -9999px; height: 20000px; }
 [data-nx="site-card"] { box-shadow: 0 0 0 9999px rgba(255,0,0,1); }
 [data-nx="page-root"] { filter: invert(1); }
+[data-nx="page-root"] { width: 300vw; height: 300vh; }
+/* 试图废掉边界本身 */
+[data-nx="page-root"] { transform: none !important; contain: none !important; z-index: 2147483647 !important; }
 ```
 
-断言：`[data-nx-protected]` 的源码链接在四种情形下都可见且可点击（用 Playwright 的可见性与命中测试，不只查 DOM 存在）。这条直接验证 spec §5.3 (2) 的视觉包含机制真的成立——它是本设计里最容易被实现细节悄悄破坏的一环。
+断言：`[data-nx-protected]` 的源码链接在每种情形下都可见且可点击（用 Playwright 的可见性与命中测试，不只查 DOM 存在）。最后一条尤其关键——它验证边界确实在主题够不到的 wrapper 上，而不是在主题能覆盖的根上。这是本设计里最容易被实现细节悄悄破坏的一环（第二轮方案就是栽在这里）。
 
 - [ ] **Step 4: 运行** — `make e2e`，Expected: PASS。
 
@@ -1628,7 +1665,7 @@ git commit -m "chore: tighten style and font CSP after self-hosting theme assets
 - `make check`、`go test -race ./...`、`make build`、`make test-contract`、`make test-mock`、`make e2e` 全绿。
 - `web/src/themes/packages/`、`web/src/themes/manifest.ts`、`web/src/lib/themeResolve.ts` 已删除，`rg 'themes/packages'` 无结果。
 - 6 个内置主题全部经服务端校验器编译并入库；公开页视觉与迁移前一致，**§6.4 记录的实现方式变更除外**，且这些变更已写进 `docs/theme-api.md`。
-- 主题作用域封闭：`data-theme` 只出现在 `[data-nx="page-root"]` 上，`rg 'documentElement.*data-theme' web/src` 无结果；`[data-nx-protected]` 位于主题根之外；恶意主题夹具的四种遮挡手段全部失效。
-- 已发布快照携带 `themeVersionId` 并写入 `published_snapshots.theme_version_id` 列；删除仍被引用的主题包**或版本行**都被 `RESTRICT` 拒绝。
-- 归属与可见性：触发器拒绝 `scope`/`owner_id` 错配；列表/预览/发布复用同一个 eligibility 谓词；跨租户主题不会进入他人快照。
+- 主题作用域封闭：`data-theme` 只出现在 `[data-nx="page-root"]` 上，`rg 'documentElement.*data-theme' web/src` 无结果；`[data-nx-protected]` 位于宿主 wrapper 之外；恶意主题夹具的全部遮挡手段（含试图覆盖 `transform`/`contain`/`z-index`）均失效。
+- 已发布快照携带 `themeVersionId` 并写入 `published_snapshots.theme_version_id` 列；删除仍被引用的主题包、被快照引用的版本、以及仍是当前版本的版本，三者都被拒绝。
+- 归属与可见性：触发器拒绝 `scope`/`owner_id` 错配与非法 `current_version_id`；列表/预览/发布复用同一个 eligibility 谓词；跨租户主题不会进入他人快照；默认主题不变量在启动时被断言。
 - `docs/theme-api.md` 存在且钩子清单与 `internal/themes/hooks.go` 一致。

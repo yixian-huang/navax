@@ -137,14 +137,26 @@ LICENSE  README.md
 
 - 根选择器之后只允许后代（空格）与子代（`>`）组合符；出现 `+` 或 `~` 一律拒绝；
 - 每个选择器的 **subject**（最右侧被样式化的复合选择器）必须是根自身或其后代；
-- `:is()` / `:where()` / `:has()` / `:not()` 内部递归应用同一规则，不得借嵌套绕过。
-- 隔离测试须覆盖：根后代、根自身、根后兄弟（拒绝）、逗号分隔的选择器列表中混入越界项（整条拒绝）、`:is()` 嵌套越界。
+- **递归覆盖所有 selector-list 参数**，而不是枚举几个伪类：`:is()` / `:where()` / `:has()` / `:not()` 之外，`:nth-child(… of <selector-list>)` / `:nth-last-child(… of …)` 同样含选择器列表，必须一并下钻。规则写成"任何接受 selector-list 的语法位置都递归套用"，新伪类才不会自动成为缺口。
+- **先规范化再比较**：所有元素名、类名、属性名、伪类/函数名必须先按 CSS 语法**解码转义**并做 ASCII 小写规范化，再执行白名单/黑名单判断。否则 `h\74ml`、`[cl\61ss*="w-11"]`、`.intern\61 l` 都能绕过。用 AST 不会自动带来规范化——这必须显式实现并测试。
+- **拒绝 CSS nesting 与命名空间选择器**（`&`、`@nest`、`ns|el`、`*|body`）：v1 不承担它们的作用域语义，直接拒绝并给出明确提示。
+- 隔离测试须覆盖：根后代（放行）、根自身（放行）、根后兄弟 `+`/`~`（拒绝）、逗号列表中混入越界项（整条拒绝）、`:is()` 嵌套越界（拒绝）、`:nth-child(2 of [data-nx="page-root"] + footer)`（拒绝）、转义标识符（`h\74ml`、`[cl\61ss*=…]`，拒绝）、命名空间选择器（拒绝）、CSS nesting（拒绝）。
 
-**(2) 视觉包含：根必须建立包含块与独立层叠上下文。** DOM 封闭不等于视觉封闭。`position: relative` **不会**为 `position: fixed` 的后代建立包含块（只有 `transform` / `filter` / `perspective` / `will-change` / `contain` 会），所以根内的 fixed 覆盖层仍会铺满整个视口——在 `/app/themes` 预览时就会盖住整个已登录应用。绝对定位、超大 `box-shadow`、`filter` 的越界绘制同理。因此：
+**(2) 视觉包含：边界在主题选不到的宿主 wrapper 上。** DOM 封闭不等于视觉封闭。`position: relative` **不会**为 `position: fixed` 的后代建立包含块，所以根内的 fixed 覆盖层会铺满整个视口——在 `/app/themes` 预览时就盖住整个已登录应用；绝对定位、超大 `box-shadow`、`filter` 的越界绘制同理。
 
-- 主题根设 `transform: translateZ(0)`，使其成为后代 fixed 元素的包含块，并建立独立层叠上下文——根内任何 `z-index`（上限 50）都被压在根这一层内，无法与根外元素比较层级；
-- 受保护区域（页脚）在 DOM 上位于根之后，且置于更高层（`position: relative; z-index: 100`），因此永远绘制在主题之上；
-- 浏览器测试用一个"恶意主题"夹具验证：`position: fixed` 全屏、绝对定位溢出、巨型 `box-shadow`、`filter` 四种手段都无法遮挡根外 UI 与源码链接。
+关键在于**边界元素本身必须在主题够不到的地方**。把包含机制放在主题根自己身上是错的：主题可以选中根（`[data-nx="page-root"]` 是合法钩子）并写 `transform: none !important` 把它废掉；按声明检查 `position`/`pointer-events`/`z-index` 同样能被拆分规则、条件规则或 `var()` 抵消。因此结构是三层：
+
+```
+[data-nx-frame]                     ← 宿主 wrapper：contain: paint（主题永远选不到它）
+  └─ [data-nx="page-root"][data-theme]   ← 主题根：主题 CSS 的作用域上界
+[data-nx-protected]                 ← 受保护区域：wrapper 之外的兄弟
+```
+
+- wrapper 上的 `contain: paint` 一个属性同时给出三件事：成为绝对/固定定位后代的**包含块**、建立**独立层叠上下文**、把后代的绘制**裁剪**在自己的盒内（`translateZ(0)` 只给前两件，不裁剪，所以阴影与 filter 仍能溢出）。
+- wrapper 不是登记钩子，且所有主题选择器都被前缀到 `[data-theme=…]` 的作用域内，主题**在语法上无法命中 wrapper**——包含机制因此不可被覆盖。这也是为什么边界必须放在这一层而不是主题根上。
+- 受保护区域是 wrapper 的兄弟，不在被裁剪的绘制范围内，天然不会被遮挡。
+- 由此，`z-index ≤ 50` 与 `position: fixed` 须带 `pointer-events: none` 这两条规则降级为**纵深防御**，不再是边界本身——边界只有 wrapper 一处，可证明、可测试。
+- 浏览器测试用"恶意主题"夹具验证：`position: fixed` 全屏、负偏移绝对定位、巨型 `box-shadow`、`filter`、视口单位尺寸、以及**主题试图在根上覆盖 `transform`/`contain`/`z-index`（含 `!important` 与 `var()` 形式）**，全部不得遮挡 wrapper 之外的 UI 与源码链接。
 - 主题 CSS **禁止选择 `html`、`body`**。全屏装饰效果改用 `[data-nx="page-root"]::before/::after`（主题根设为 `position: relative`，其内的 `position: fixed` 覆盖层仍须 `pointer-events: none`）。
 - `/app/themes` 预览把主题根限定在预览容器内，管理与编辑 UI 不受主题影响。
 
@@ -180,16 +192,17 @@ LICENSE  README.md
 |---|---|
 | `@import` 一律拒绝 | 任意外部加载 |
 | URL token 只允许 `url("asset:…")` 与 `data:image/png\|jpeg\|webp`（≤ 8 KB，按解码后 magic bytes 复核） | 访客 IP 不外泄；`data:image/svg+xml` **一并拒绝**，与资产层拒绝 SVG 保持一致 |
-| `image-set()` / `-webkit-image-set()` 一律拒绝 | 它接受**字符串**形式的地址（`image-set("https://…" 1x)`），不产生 URL token，扫描 token 挡不住。v1 直接禁用，需要多倍图的主题用 `@media` 分辨率查询替代 |
-| 声明值中出现形如 URL 的字符串字面量（含 `://`、以 `//` 开头、或 `\` 转义拼接）一律拒绝 | 堵住字符串形式的资源地址 |
+| **值中的函数走正向白名单**：只放行 `var` `calc` `min` `max` `clamp` `rgb` `rgba` `hsl` `hsla` `oklch` `oklab` `color-mix` `linear-gradient` `radial-gradient` `conic-gradient` 及其 `repeating-` 变体 `cubic-bezier` `steps` `translate*` `scale*` `rotate*` `skew*` `matrix*` `blur` `brightness` `contrast` `drop-shadow` `grayscale` `hue-rotate` `invert` `opacity` `saturate` `sepia` `format` `local`，以及受限的 `url`。**其余函数一律拒绝** | 这是本表唯一真正封闭的形态。枚举式拒绝挡不住 `src("https://…")`（CSS Values 4 的 url-like 函数，取字符串参数）、`image()`、`cross-fade()`、`element()`、`paint()`，也挡不住未来新增的同类函数。`image-set()` / `-webkit-image-set()` 因不在白名单而自然被拒 |
+| 声明值中出现形如 URL 的字符串字面量（含 `://`、以 `//` 开头、或经转义拼接后成立）一律拒绝 | 白名单之外的第二道：堵住字符串形式的资源地址 |
+| 函数名先解码转义并 ASCII 小写规范化后再匹配白名单 | `\73 rc(…)` 与 `SRC(…)` 都必须命中同一条规则 |
 | 自定义属性（`--*`）的值走**与普通声明相同**的完整校验 | `--x: url(https://…)` 再 `background: var(--x)` 是等价的外链通道 |
 | `@font-face` 的 `src` 必须是 `url("asset:…")`，且其 `font-family` 需被 `tokens.font` 引用 | 同上 + 防悬空字体 |
 | 选择器命中 `html` / `body` 一律拒绝 | 主题不得越出主题根（§5.3） |
 | 根选择器之后出现 `+` / `~`，或 subject 不在根内 | 选择器逃逸（§5.3 (1)）|
+| CSS nesting（`&` / `@nest`）与命名空间选择器（`ns\|el`） | v1 不承担其作用域语义（§5.3 (1)）|
 | `font` 简写中引用包内字体 | 简写解析歧义，v1 不承担（§6.1）|
+| `z-index` ≤ 50、`position: fixed` 须带 `pointer-events: none` | **纵深防御，不是边界**——真正的边界是 §5.3 (2) 的 wrapper `contain: paint` |
 | 伪元素 `content` 只允许 `""` 与 `none` | 挡掉文本注入与钓鱼文案 |
-| `position: fixed` 必须同时声明 `pointer-events: none` | 防全屏覆盖层劫持点击 |
-| `z-index` ≤ 50 | 宿主导航栏、弹窗、Toast 永远在上层 |
 | at-rule 白名单：`@media` `@supports` `@keyframes` `@font-face`，其余拒绝（含 `@layer`） | 未知语义面；`@layer` 层序全局不可隔离 |
 | 禁 `behavior`、`-moz-binding`、`expression()` | 老式脚本注入面 |
 | 命中 `[data-nx-protected]` 的规则拒绝 | 许可证义务 |
@@ -294,7 +307,34 @@ BEGIN
 END;
 ```
 
-`current_version_id` 同样无法补外键。因此**写入路径必须在同一事务内校验**：目标版本存在、`theme_id` 等于本行、`status = 'active'`。该校验有专门的回归测试（写入一个属于别的主题的 version_id 必须失败）。
+`current_version_id` 同样无法补外键，**只靠应用层校验不够**——绕过服务层的任何写入都会留下悬空指针。用触发器把它变成数据库级不变量，三条：
+
+```sql
+-- 1. current_version_id 必须存在、属于本主题、且处于 active
+CREATE TRIGGER themes_current_version_valid BEFORE UPDATE OF current_version_id ON themes
+WHEN NEW.current_version_id IS NOT NULL
+BEGIN
+  SELECT RAISE(ABORT, 'current_version_id must reference an active version of this theme')
+  WHERE NOT EXISTS (
+    SELECT 1 FROM theme_versions
+    WHERE id = NEW.current_version_id AND theme_id = NEW.id AND status = 'active'
+  );
+END;
+
+-- 2. 仍被 themes.current_version_id 引用的版本不得删除
+--    （published_snapshots 的外键只覆盖"已发布过"的版本，当前版本可能尚未被任何快照引用）
+CREATE TRIGGER theme_versions_current_guard BEFORE DELETE ON theme_versions
+BEGIN
+  SELECT RAISE(ABORT, 'cannot delete a theme current version')
+  WHERE EXISTS (SELECT 1 FROM themes WHERE current_version_id = OLD.id);
+END;
+```
+
+第三条是**清理条件**：物理清理版本时除"无快照引用"外，必须同时排除"是某主题的当前版本"。两个条件缺一个就会出现主题突然失去 eligibility 或悬空指针。
+
+**默认主题不变量。** 回落目标本身必须是可用的，否则回落只是把问题推后一步。要求：`is_default = 1` 的行唯一（既有 `idx_themes_single_default` 已保证）、`scope = 'catalog'`、`enabled = 1`、且其 `current_version_id` 指向 active 版本。启动时 `SyncBuiltin` 之后断言该不变量，不成立则启动失败。若运行期该不变量被破坏而 `Publish` 需要回落，则**明确报错**（`503` + 可诊断信息），不静默产出一个引用空版本的快照。
+
+**用户删除语义。** `themes.owner_id ON DELETE CASCADE` 与 `theme_versions.theme_id ON DELETE RESTRICT` 相冲突：只要私有主题有任何版本行，删用户就会被版本外键挡住而整体失败——即使没有任何快照引用。因此约定：删除账号前必须**先事务化清理其私有主题**（无快照引用的版本连同主题一并删除；仍被快照引用的主题保留并转为墓碑：`enabled = 0`，`owner_id` 保持不变以维持触发器不变量，公开页继续可用）。子项目 A 不创建私有主题，因此没有实际数据，但该清理步骤是**子项目 B 的前置项**，B 落地私有安装时必须同时接入账号删除流程并补集成测试。
 
 ### 7.2 包 ID 与 slug 分离
 
@@ -343,7 +383,7 @@ eligible(themeId, actor) :=
 
 ### 8.1.1 生命周期与撤销语义
 
-- **被快照引用的版本不得物理删除**，由两条外键共同保证：`theme_versions.theme_id → themes` 用 `ON DELETE RESTRICT`（挡删包），`published_snapshots.theme_version_id → theme_versions` 也用 `ON DELETE RESTRICT`（挡删版本）。只有后者才真正兑现这条承诺——把 versionId 藏在 `payload_json` 里数据库管不着。卸载主题走软删除（`themes.enabled = 0`），版本行与资产保留，已发布页面继续可用。物理清理只能针对无任何快照引用的版本，属于后续维护任务，不在 A 范围。
+- **被引用的版本不得物理删除**，三道共同保证：`theme_versions.theme_id → themes` 的 `ON DELETE RESTRICT`（挡删包）、`published_snapshots.theme_version_id → theme_versions` 的 `ON DELETE RESTRICT`（挡删已发布版本）、以及 `theme_versions_current_guard` 触发器（挡删尚未被任何快照引用的**当前版本**）。第二道才真正兑现"快照引用不可毁"——把 versionId 只藏在 `payload_json` 里数据库管不着；第三道补的是"当前版本可能还没被发布过"这个缺口。卸载主题走软删除（`themes.enabled = 0`），版本行与资产保留，已发布页面继续可用。物理清理必须同时满足"无快照引用"且"不是任何主题的当前版本"，属于后续维护任务，不在 A 范围。
 - **`status='disabled'` 的版本**：公开 CSS/资产端点对它返回 `410 Gone`（不是 404，语义上是"曾存在、已撤销"）；解析路径把引用它的页面回落到默认主题版本。
 - **撤销与长缓存的关系**：CSS URL 是内容寻址的，`immutable` 一年缓存只对"这个 versionId 的字节"成立，而撤销的生效路径是**让页面不再引用它**——公开页的快照响应走 ETag/短缓存，回落后浏览器根本不会再请求被撤销的 URL。因此 kill switch 不依赖缓存清除。代价是：已在某个访客浏览器缓存中的旧 CSS，若该访客在回落生效前打开过页面，那一次访问无法追回——这是可接受的，也须在文档中写明，不要宣称"即时全局撤销"。
 
@@ -384,11 +424,12 @@ GET /api/v1/public/themes/{versionId}/assets/{path}
 ## 9. 测试策略
 
 - **校验器表驱动单测**：每条拒绝规则至少一个正例与一个反例，含转义、注释、嵌套、字符串形式 URL、`var()` 间接等绕过尝试；6 个迁移后的内置主题作为「必须通过」的黄金语料。
-- **选择器隔离测试**：根后代（放行）、根自身（放行）、根后兄弟 `+`/`~`（拒绝）、逗号列表中混入越界项（整条拒绝）、`:is()`/`:has()` 嵌套越界（拒绝）。
-- **视觉隔离浏览器测试**：一个"恶意主题"夹具用 `position: fixed` 全屏、绝对定位溢出、巨型 `box-shadow`、`filter` 四种手段尝试遮挡根外 UI 与源码链接，全部必须失败。
+- **选择器隔离测试**：根后代（放行）、根自身（放行）、根后兄弟 `+`/`~`（拒绝）、逗号列表中混入越界项（整条拒绝）、`:is()`/`:has()` 嵌套越界（拒绝）、`:nth-child(… of <list>)` 越界（拒绝）、转义标识符 `h\74ml` 与 `[cl\61ss*=…]`（拒绝）、命名空间选择器与 CSS nesting（拒绝）。
+- **函数白名单测试**：`src("https://…")`、`image()`、`cross-fade()`、`element()`、`paint()`、`image-set()` 全部拒绝；转义与大小写变体（`\73 rc(…)`、`SRC(…)`）命中同一规则；白名单内函数（渐变、`color-mix`、滤镜）放行。
+- **视觉隔离浏览器测试**：一个"恶意主题"夹具用 `position: fixed` 全屏、负偏移绝对定位、巨型 `box-shadow`、`filter`、视口单位尺寸，以及在主题根上覆盖 `transform`/`contain`/`z-index`（含 `!important` 与 `var()` 形式）尝试遮挡 wrapper 之外的 UI 与源码链接，全部必须失败。
 - **命名空间测试**：两个主题声明同名 `@keyframes` 与同名 `font-family` 互不干扰；多词 family、带引号/不带引号写法、令牌与 `@font-face` 的族名一致。
 - **编译确定性**：同一输入两次编译 `content_hash` 一致。
-- **SQLite 集成测试**：内置主题 upsert 幂等（连续两次启动不产生新版本行）；归属触发器拒绝 `scope`/`owner_id` 不匹配的行；`current_version_id` 指向他主题的版本必须写入失败；删除被快照引用的 `theme_versions` 行必须被 `RESTRICT` 拒绝；公开 CSS 与资产端点的 200/404/410/ETag/304。
+- **SQLite 集成测试**：内置主题 upsert 幂等（连续两次启动不产生新版本行）；归属触发器拒绝 `scope`/`owner_id` 不匹配的行；`current_version_id` 指向他主题或非 active 版本必须被触发器拒绝；删除被快照引用的版本、以及删除仍是当前版本的版本，都必须失败；默认主题不变量在启动断言中成立、破坏后 `Publish` 明确报错而非静默；公开 CSS 与资产端点的 200/404/410/ETag/304。
 - **eligibility 一致性**：私有主题 `enabled=0`、当前版本 `status='disabled'` 两种情形下，列表、预览、发布三处行为一致。
 - **跨租户回归**：用户 A 的页面引用用户 B 的私有主题 → 发布后快照落到默认主题。
 - **契约测试**：`tests/contract/` 覆盖两个新公开端点与 `GET /api/v1/themes` 扩展字段。
@@ -430,8 +471,16 @@ GitHub 一键导入：服务端解析 ref → commit sha，从 `codeload.github.
 **第二轮**（同日，针对修订版）：`request_changes`，6 major，均为新问题、非重复。全部核实成立并已改写：
 
 1. **选择器逃逸**——`[data-nx="page-root"] + footer` 加前缀后仍命中根外兄弟。已加基于 AST 的 subject 包含规则（§5.3 (1)）。
-2. **视觉逃逸**——`position: relative` 不为 fixed 后代建立包含块，覆盖层仍能铺满视口。已要求主题根 `transform: translateZ(0)` 建立包含块与独立层叠上下文，受保护区域置于更高层（§5.3 (2)）。
+2. **视觉逃逸**——`position: relative` 不为 fixed 后代建立包含块，覆盖层仍能铺满视口。当轮的处置（主题根 `transform: translateZ(0)`）**已在第三轮被推翻**，最终方案见下方第三轮第 2 条。
 3. **快照引用无外键**——`published_snapshots` 只有 `payload_json`，`RESTRICT` 挡删包不挡删版本。已增列 `theme_version_id` 外键（§7.1、§8.1.1）。
 4. **可见性谓词自相矛盾**——私有分支漏了 `enabled=1`，导致列表可选、发布静默回落。已统一为单一 `eligible` 谓词（§8.1）。
 5. **`image-set()` 字符串形式与 `var()` 间接绕过 URL token 扫描**。已改为语义级白名单：禁 `image-set()`、禁 URL 形态字符串字面量、自定义属性值走同等校验（§6.2）。
 6. **字体重命名未覆盖 `font` 简写与令牌生成**。已明确三处引用面并在 v1 禁止 `font` 简写引用包内字体（§6.1）。
+
+**第三轮**（同日）：`request_changes`，4 major + 1 minor，仍为新问题。全部核实成立并已改写——其中第 2 条推翻了第二轮的方案：
+
+1. **选择器规则不完整**——只枚举了四个伪类，漏 `:nth-child(… of <list>)`；未要求解码转义（`h\74ml`、`[cl\61ss*=…]` 可绕过）；未定义 CSS nesting 与命名空间选择器。已改为"任何接受 selector-list 的语法位置递归套用" + 显式规范化 + 拒绝 nesting/命名空间（§5.3 (1)）。
+2. **`translateZ(0)` 方案不成立**——它不裁剪越界绘制，且主题能选中根自身用 `transform: none !important` 把包含块废掉。已把边界上移到**主题在语法上选不到的宿主 wrapper**，用 `contain: paint` 一次性提供包含块、层叠上下文与绘制裁剪；`z-index ≤ 50` 与 `pointer-events` 两条规则随之降级为纵深防御（§5.3 (2)、§6.2）。
+3. **`src()` 等 url-like 函数漏网**——枚举式拒绝形态本身就是错的。已改为**函数正向白名单**，白名单外一律拒绝（§6.2）。
+4. **`current_version_id` 无数据库级约束、清理条件会造成悬空、默认回落主题自身未要求 eligible**。已加两个触发器、补全清理条件、定义默认主题不变量与启动断言，回落不可用时明确报错（§7.1、§8.1.1）。
+5. **（minor）用户删除时 `CASCADE` 与版本 `RESTRICT` 冲突**。已定义账号删除前置清理与墓碑策略，并声明为子项目 B 的前置项（§7.1）。
