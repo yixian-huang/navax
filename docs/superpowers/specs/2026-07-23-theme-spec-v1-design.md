@@ -53,11 +53,13 @@
 **信任边界在服务端。** 内置主题、GitHub 导入、zip 上传三条来源走同一条管线：
 
 ```
-拉取 → 解析 manifest → 校验令牌 → 解析并校验 CSS → 编译（选择器加作用域、asset() 重写）
-     → 校验资产（magic bytes + 体积） → 计算 content_hash → 落库为不可变版本
+拉取 → 解析 manifest → 校验令牌 → 解析并校验 CSS → 编译（选择器加作用域、全局名命名空间化、
+     资产 URL 重写） → 校验资产（magic bytes + 体积） → 计算 content_hash → 落库为不可变版本
 ```
 
 浏览器只拿到已编译产物，前端不做任何安全决策。
+
+**作用域封闭在主题根。** 主题 CSS 只能触达 `[data-nx="page-root"]` 的后代；宿主的应用外壳、管理界面与受许可证保护的元素都在这个根之外（§5.3）。这是整套安全模型的地基——令牌与规则都建立在"主题够不到宿主 DOM"之上。
 
 **版本不可变，快照锁版本。** `theme_versions` 一行 = 一个来源版本的编译产物，永不改写。发布快照记录 `themeVersionId`，公开页据此从内容寻址 URL 取样式。
 
@@ -113,21 +115,31 @@ LICENSE  README.md
 - `version`：语义化版本。
 - `mode`：`light | dark | both`；`vibe`：`serious | cute`（沿用现有选择器分组）。
 - `swatches`：三个 hex，供选择器预览。
-- `tier`：`1 | 2 | 3`。宿主拒绝加载超出自身允许级别的包。
-- `tokens.color.*`：OKLCH 三通道，正则 `^\d(\.\d+)? \d(\.\d+)? \d{1,3}(\.\d+)?$`，沿用现有格式，现有 6 个主题可一比一映射。
-- **必填令牌组**：`color.background`、`color.foreground`、`color.primary`、`color.accent` 的完整档位，以及 `font` 四族。
-- **可选令牌组**：`radius`、`elevation` 缺失时回落基线值，因此最小主题只写颜色即可运行。
+- `tier`：`1 | 2 | 3`。字段在 v1 即冻结，但**子项目 A 的校验器只接受 `tier: 1`**，`2`/`3` 一律拒绝并提示"宿主暂不支持该能力级别"。tier 2 的语义随子项目 C 发布，tier 3 的入口、权限与隔离语义**尚未定义，不构成任何跨版本兼容承诺**。
+- `tokens.color.*`：OKLCH 三通道。除形状正则外还须做数值范围校验：L ∈ [0, 1]、C ∈ [0, 0.5]、H ∈ [0, 360)。仅靠正则会放行 `9 9 999` 这类合法形状但不可用的值。
+- **必填令牌组**：`color.background`、`color.foreground`、`color.primary`、`color.accent` 四组各至少一个档位，以及 `font` 四族。
+- **可选令牌组**：`radius`、`elevation` 缺失时回落基线值。因此一个最小可用主题需要写的是**颜色四组 + 字体四族**，其余可省。
 - `font.*` 只能是系统字体名，或包内 `@font-face` 声明的 family（校验器交叉检查）；字符白名单，防注入。
 
-### 5.3 稳定选择器契约
+### 5.3 主题根与稳定选择器契约
 
-现状问题：`terminal` 主题选 `.material-card`、`.hairline` 等内部实现类名，任何组件重构都会打碎第三方主题。规范必须冻结一层公共钩子。
+**主题根不是 `<html>`。** 现有实现把 `data-theme` 设在 `document.documentElement` 上，且 `/app/themes` 预览页也走同一条路径——这意味着第三方 CSS 会作用于**整个已登录应用**，包括表单、按钮、管理界面。仅禁止直接命中 `[data-nx-protected]` 不足以补救：主题可以隐藏、裁剪或覆盖它的任意祖先。
 
-- 渲染组件挂 `data-nx="site-card" | "category-tab" | "search-box" | "clock" | …`，清单写入 `docs/theme-api.md`，每个钩子标注 `stable` 或 `experimental`。
-- 主题 CSS 只允许选择：`data-nx` 钩子、标准 HTML 元素与伪元素、主题自己的私有 CSS 变量。命中未登记的内部类名 → **校验失败并给出明确报错**，不静默忽略。
-- `[data-nx-protected]` 标记 AGPL §13 源码链接等必须可见的元素。命中它的规则一律拒绝；运行时再以一条 `!important` 规则兜底强制其可见。这是许可证义务，双保险。
+因此规范规定：
 
-`data-nx` 钩子清单的初版从现有 6 个主题实际用到的选择器反推，确保迁移无损。
+- 公开页与预览页各自渲染一个**主题根**元素 `[data-nx="page-root"]`，`data-theme` 设在它上面，而不是 `<html>`。
+- 所有主题 CSS 被编译到该根的后代作用域内，主题无法触达根之外的任何 DOM。
+- **`[data-nx-protected]` 元素必须位于主题根之外**（AGPL §13 源码链接从 `PublicShell` 的内容区移到主题根外的外层容器）。这样"始终可见"由 DOM 结构保证，而不是靠规则拉黑。
+- 主题 CSS **禁止选择 `html`、`body`**。全屏装饰效果改用 `[data-nx="page-root"]::before/::after`（主题根设为 `position: relative`，其内的 `position: fixed` 覆盖层仍须 `pointer-events: none`）。
+- `/app/themes` 预览把主题根限定在预览容器内，管理与编辑 UI 不受主题影响。
+
+在此之上，冻结一层公共钩子（现状问题：`terminal` 主题选 `.material-card`、`.hairline` 等内部实现类名，任何组件重构都会打碎第三方主题）：
+
+- 渲染组件挂 `data-nx="page-root" | "site-card" | "category-tab" | "search-box" | "clock" | …`，清单写入 `docs/theme-api.md`，每个钩子标注 `stable` 或 `experimental`。
+- 主题 CSS 只允许选择：`data-nx` 钩子、主题根内的标准 HTML 元素与伪元素、主题自己的私有 CSS 变量。命中未登记的内部类名（含 `[class*="w-11"]` 这类对 Tailwind 原子类的属性匹配）→ **校验失败并给出明确报错**，不静默忽略。
+- 命中 `[data-nx-protected]` 的规则仍然拒绝，运行时再加一条 `!important` 兜底——在"位于主题根之外"之上的第三道保险。
+
+`data-nx` 钩子清单的初版从现有 6 个主题实际用到的选择器反推。**但迁移不是无损的**，差异见 §6.4。
 
 ## 6. CSS 校验与编译
 
@@ -135,9 +147,10 @@ LICENSE  README.md
 
 ### 6.1 编译
 
-- 作者不写作用域，编译器统一添加：所有选择器改写为 `[data-theme="<packageId>"] …`，`:root` 改写为 `[data-theme="<packageId>"]`。
+- 作者不写作用域，编译器统一添加：所有选择器改写为 `[data-theme="<packageId>"] …`；`:root` 与 `[data-nx="page-root"]` 改写为 `[data-theme="<packageId>"]` 自身。
 - 迁移内置主题时删除手写的 `[data-theme="terminal"]` 前缀。
-- `asset("fonts/x.woff2")` 重写为同源路径 `/api/v1/public/themes/{versionId}/assets/fonts/x.woff2`。
+- **全局名一律命名空间化**（选择器前缀不隔离这些名字）：`@keyframes` 名、`@font-face` 的 `font-family` 名都加 `<packageId>-` 前缀，并同步重写所有引用它们的 `animation` / `animation-name` / `font-family` 值。`@layer` 在 v1 直接禁用——它的层序是全局的，无法靠改名隔离。
+- 资产引用语法**唯一**：`url("asset:<包内路径>")`。编译器遍历 CSS 中**每一个 URL token**（含 `image-set()`、`cursor`、`@font-face` 的 `src` 等嵌套位置），逐个重写为同源路径 `/api/v1/public/themes/{versionId}/assets/<路径>`。不按属性名或字符串匹配做特判。
 - 输出规范化 CSS，与 manifest、资产一并计算 SHA-256 作为 `content_hash`；同一输入编译结果必须逐字节一致。
 
 ### 6.2 拒绝规则
@@ -145,21 +158,35 @@ LICENSE  README.md
 | 规则 | 理由 |
 |---|---|
 | `@import` 一律拒绝 | 任意外部加载 |
-| `url()` 只允许 `asset("…")` 与小体积 `data:image/*` | 访客 IP 不外泄 |
-| `@font-face` 的 `src` 必须是 `asset()`，且其 `font-family` 需被 `tokens.font` 引用 | 同上 + 防悬空字体 |
+| URL token 只允许 `url("asset:…")` 与 `data:image/png\|jpeg\|webp`（≤ 8 KB，按解码后 magic bytes 复核） | 访客 IP 不外泄；`data:image/svg+xml` **一并拒绝**，与资产层拒绝 SVG 保持一致 |
+| `@font-face` 的 `src` 必须是 `url("asset:…")`，且其 `font-family` 需被 `tokens.font` 引用 | 同上 + 防悬空字体 |
+| 选择器命中 `html` / `body` 一律拒绝 | 主题不得越出主题根（§5.3） |
 | 伪元素 `content` 只允许 `""` 与 `none` | 挡掉文本注入与钓鱼文案 |
 | `position: fixed` 必须同时声明 `pointer-events: none` | 防全屏覆盖层劫持点击 |
 | `z-index` ≤ 50 | 宿主导航栏、弹窗、Toast 永远在上层 |
-| at-rule 白名单：`@media` `@supports` `@keyframes` `@font-face` `@layer`，其余拒绝 | 未知语义面 |
+| at-rule 白名单：`@media` `@supports` `@keyframes` `@font-face`，其余拒绝（含 `@layer`） | 未知语义面；`@layer` 层序全局不可隔离 |
 | 禁 `behavior`、`-moz-binding`、`expression()` | 老式脚本注入面 |
 | 命中 `[data-nx-protected]` 的规则拒绝 | 许可证义务 |
 | CSS ≤ 256 KB；单个资产 ≤ 512 KB；整包 ≤ 4 MB | 体积预算 |
 
-规则从真实主题反推：`terminal` 的扫描线正是 `body::after` 全屏 `position: fixed`，规范允许该效果，仅强制 `pointer-events: none` 与空 `content`，迁移时原样通过。
-
 ### 6.3 资产校验
 
 按 magic bytes 判定真实类型（`wOF2`、PNG、JPEG、WebP），拒绝声明与内容不符者；沿用现有策略**拒绝 SVG**。体积上限见上表。中文字体通常超出 512 KB 上限，规范中明确要求作者自行子集化。
+
+### 6.4 内置主题迁移差异（不是无损迁移）
+
+现有 6 个主题并非都能原样通过上述规则。逐条列出并给出处置，**实现时先产出符合最终规则的 `theme.css` 黄金文件，再用它们证明规则可实施**：
+
+| 主题 | 现状 | 冲突规则 | 处置 |
+|---|---|---|---|
+| `terminal` | `body::after` 全屏扫描线，`content: ''`、`position: fixed`、`pointer-events: none`、`z-index: 1` | 禁选 `body` | 选择器改为 `[data-nx="page-root"]::after`，其余原样通过 |
+| `sakura` | `body::before` 全屏柔光 | 禁选 `body` | 同上，改 `[data-nx="page-root"]::before` |
+| `sakura` | `content: '✿'` 装饰字符 | `content` 只允许空 | 改用 `background-image: url("asset:deco/blossom.png")` 或 mask 实现，视觉等价；**记录为实现方式变更** |
+| `sakura` | `[class*="relative"]`、`[class*="w-11"]` 等对 Tailwind 原子类的属性匹配 | 只允许登记钩子 | 为受影响元素补 `data-nx` 钩子并改写选择器；补不出对应语义的，删除该条规则并记录视觉降级 |
+| `slate` / `slate-dark` | `url("data:image/svg+xml,…")` 噪点纹理 | 拒绝 SVG（含 data URL） | 改为 `assets/noise.png`（或纯 CSS 渐变）；**记录为实现方式变更** |
+| 全部 | 手写 `[data-theme="<id>"]` 前缀 | 编译器统一加作用域 | 迁移时删除前缀 |
+
+上表就是 `docs/theme-api.md`「迁移映射」小节的初始内容。
 
 ## 7. 存储与加载
 
@@ -181,7 +208,9 @@ ALTER TABLE themes ADD COLUMN spec_version INTEGER NOT NULL DEFAULT 1;
 
 CREATE TABLE theme_versions (
   id            TEXT PRIMARY KEY,
-  theme_id      TEXT NOT NULL REFERENCES themes(id) ON DELETE CASCADE,
+  -- RESTRICT 而非 CASCADE：已发布快照按 version_id 引用编译产物，
+  -- 删包不得静默毁掉线上公开页的样式。删除路径必须先处理引用（见 §7.5）。
+  theme_id      TEXT NOT NULL REFERENCES themes(id) ON DELETE RESTRICT,
   version       TEXT NOT NULL,
   source_ref    TEXT NOT NULL DEFAULT '',   -- commit sha / 上传摘要 / 'builtin'
   manifest_json TEXT NOT NULL,
@@ -212,6 +241,26 @@ CREATE UNIQUE INDEX idx_themes_catalog_slug ON themes(slug) WHERE scope = 'catal
 CREATE UNIQUE INDEX idx_themes_private_slug ON themes(owner_id, slug) WHERE scope = 'private';
 ```
 
+**归属约束。** SQLite 无法对已有表补 `CHECK`，而 `scope` 与 `owner_id` 必须成对成立（否则 `owner_id IS NULL` 的私有主题会因 NULL 在唯一索引中互不相等而绕过 slug 唯一性）。用一对触发器强制该不变量，插入与更新各一个：
+
+```sql
+CREATE TRIGGER themes_scope_owner_insert BEFORE INSERT ON themes
+BEGIN
+  SELECT RAISE(ABORT, 'catalog theme must have null owner_id; private theme must have owner_id')
+  WHERE NOT ((NEW.scope = 'catalog' AND NEW.owner_id IS NULL)
+          OR (NEW.scope = 'private' AND NEW.owner_id IS NOT NULL));
+END;
+
+CREATE TRIGGER themes_scope_owner_update BEFORE UPDATE ON themes
+BEGIN
+  SELECT RAISE(ABORT, 'catalog theme must have null owner_id; private theme must have owner_id')
+  WHERE NOT ((NEW.scope = 'catalog' AND NEW.owner_id IS NULL)
+          OR (NEW.scope = 'private' AND NEW.owner_id IS NOT NULL));
+END;
+```
+
+`current_version_id` 同样无法补外键。因此**写入路径必须在同一事务内校验**：目标版本存在、`theme_id` 等于本行、`status = 'active'`。该校验有专门的回归测试（写入一个属于别的主题的 version_id 必须失败）。
+
 ### 7.2 包 ID 与 slug 分离
 
 `themes.id` 保持不变（内置仍为 `slate`、`sakura` 等），因此 `appearance.themeId` 与所有现存页面设置**无需迁移**。第三方包的 `id` 是不透明 ULID，manifest 中的 `id` 仅作为 slug。两个用户各自导入名为 `sakura` 的不同主题不会冲突。CSS 作用域直接使用包 ID，天然无碰撞。
@@ -229,9 +278,25 @@ CREATE UNIQUE INDEX idx_themes_private_slug ON themes(owner_id, slug) WHERE scop
 
 ## 8. API 与前端运行时
 
-### 8.1 发布锁版本
+### 8.1 发布锁版本与可见性谓词
 
 草稿只存 `themeId`。`Publish` 在同一事务内解析出当时的 `themeVersionId` 写入快照，`PublishedPage` 增加该字段。已发布页面自此与主题更新完全解耦。
+
+解析不是简单查表，必须按同一组谓词判定**该主体是否有权使用该主题**：
+
+| 调用方 | 可见的主题集合 |
+|---|---|
+| 匿名（公开页） | 不查询主题列表；只按快照里的 `themeVersionId` 取 CSS |
+| 登录用户（选择/预览/发布） | `scope='catalog' AND enabled=1` ∪ `scope='private' AND owner_id = <当前用户>` |
+| 管理员（后台目录） | 全部，含 `enabled=0` 与他人私有（只读管理，不可代为启用到自己页面） |
+
+`Publish` 事务内除解析版本外还要校验：主题对该 owner 可见、`enabled=1`、`current_version_id` 属于该主题且 `status='active'`。任一不满足 → 回落默认主题（不是报错，避免用户被别人的下架操作卡住发布）。**跨租户回归测试是必需项**：用户 A 的页面设置里塞进用户 B 的私有主题 ID，发布后快照必须落到默认主题。
+
+### 8.1.1 生命周期与撤销语义
+
+- **被快照引用的版本不得物理删除。** `theme_versions.theme_id` 用 `ON DELETE RESTRICT`；卸载主题走软删除（`themes.enabled = 0`），版本行与资产保留，已发布页面继续可用。真正的物理清理只能针对"无任何快照引用"的版本，属于后续维护任务，不在 A 范围。
+- **`status='disabled'` 的版本**：公开 CSS/资产端点对它返回 `410 Gone`（不是 404，语义上是"曾存在、已撤销"）；解析路径把引用它的页面回落到默认主题版本。
+- **撤销与长缓存的关系**：CSS URL 是内容寻址的，`immutable` 一年缓存只对"这个 versionId 的字节"成立，而撤销的生效路径是**让页面不再引用它**——公开页的快照响应走 ETag/短缓存，回落后浏览器根本不会再请求被撤销的 URL。因此 kill switch 不依赖缓存清除。代价是：已在某个访客浏览器缓存中的旧 CSS，若该访客在回落生效前打开过页面，那一次访问无法追回——这是可接受的，也须在文档中写明，不要宣称"即时全局撤销"。
 
 ### 8.2 端点
 
@@ -251,7 +316,13 @@ GET /api/v1/public/themes/{versionId}/assets/{path}
 ### 8.3 前端运行时
 
 - `ThemePackage` 由 `{ id, meta, css }` 改为 `{ id, meta, cssHref }`。
-- `themeRegistry.activate` 改为切换 `<link rel="stylesheet">`，`onload` 后再设置 `data-theme`，避免闪烁；切换时移除旧 link。
+- `data-theme` 设在主题根元素 `[data-nx="page-root"]` 上，**不再设在 `<html>`**（§5.3）。`/app/themes` 的预览把主题根限定在预览容器内。
+- `themeRegistry.activate` 是一个**原子切换状态机**，不是简单的 onload 回调：
+  - 每次切换递增一个序号；`load`/`error` 回调先比对序号，过期回调直接丢弃，避免慢请求覆盖用户较新的选择；
+  - 新 link 成功加载前**保留旧 link**（先移除会闪烁），成功后同帧移除旧 link 并更新 `data-theme`；
+  - 加载失败或超时（默认 5 秒）→ 移除失败的 link，保持当前主题不变，并向用户提示；若当前无任何主题（首次加载失败），显式回落到基线令牌；
+  - 已撤销版本返回 `410` 时走同一条失败路径。
+  - 这四条各有单测，E2E 覆盖"快速连点切换后最终状态与最后一次选择一致"。
 - 主题列表来自 `GET /api/v1/themes`；`ThemePicker`、`/app/themes`、`/admin/themes` 三处改为数据驱动。
 - 首屏不会无样式：基线令牌（slate）保留在主 CSS 中作为默认值，主题样式只做覆盖，观感与现状一致。
 
@@ -263,12 +334,14 @@ GET /api/v1/public/themes/{versionId}/assets/{path}
 
 ## 9. 测试策略
 
-- **校验器表驱动单测**：每条拒绝规则至少一个正例与一个反例，含转义、注释、嵌套等绕过尝试；6 个内置主题作为「必须通过」的黄金语料。
+- **校验器表驱动单测**：每条拒绝规则至少一个正例与一个反例，含转义、注释、嵌套等绕过尝试；6 个迁移后的内置主题作为「必须通过」的黄金语料。
+- **作用域隔离测试**：编译产物中不得出现任何能匹配主题根之外元素的选择器；两个不同主题声明同名 `@keyframes` 与同名 `font-family` 时互不干扰。
 - **编译确定性**：同一输入两次编译 `content_hash` 一致。
-- **SQLite 集成测试**：内置主题 upsert 幂等（连续两次启动不产生新版本行）；公开 CSS 与资产端点的 200/404/ETag/304。
+- **SQLite 集成测试**：内置主题 upsert 幂等（连续两次启动不产生新版本行）；归属触发器拒绝 `scope`/`owner_id` 不匹配的行；`current_version_id` 指向他主题的版本必须写入失败；公开 CSS 与资产端点的 200/404/410/ETag/304。
+- **跨租户回归**：用户 A 的页面引用用户 B 的私有主题 → 发布后快照落到默认主题。
 - **契约测试**：`tests/contract/` 覆盖两个新公开端点与 `GET /api/v1/themes` 扩展字段。
-- **快照锁版本回归**：发布 → 变更主题当前版本 → 已发布快照仍指向旧 `themeVersionId`。
-- **E2E**：公开页加载后 `<link>` 存在、`data-theme` 正确、切换主题后旧 link 被移除。
+- **快照锁版本回归**：发布 → 变更主题当前版本 → 已发布快照仍指向旧 `themeVersionId`；删除主题包必须被 `RESTRICT` 拒绝。
+- **E2E**：公开页加载后 `<link>` 存在、主题根上 `data-theme` 正确、切换主题后旧 link 被移除、快速连点后最终状态正确、页脚源码链接在任何主题下都可见。
 - **`make test-mock`**：mock handlers 补齐新端点，保持契约守卫通过。
 
 ## 10. 后续子项目
@@ -290,3 +363,14 @@ GitHub 一键导入：服务端解析 ref → commit sha，从 `codeload.github.
 | 启动时编译内置主题增加启动耗时 | 幂等 upsert，仅 6 个包，实测应在数十毫秒量级；若超预期改为构建期预编译 |
 | 新增 CSS 解析依赖 | `tdewolff/parse/v2` 纯 Go、无 CGO、无传递依赖，符合项目「不引入重型框架」的边界 |
 | 受限 CSS 表达力不足以吸引作者 | tier 2 布局能力（子项目 C）补足；先以内置主题验证令牌覆盖面 |
+| 内置主题迁移存在视觉实现变更（§6.4） | 逐条列明并在 `docs/theme-api.md` 存档；实现时先产出黄金 `theme.css` 再收紧规则，避免"规则与现实互相迁就"|
+| 主题根改造触及公开页 DOM 结构 | 与钩子契约在同一任务内完成并做浏览器冒烟；页脚源码链接的位置变更有专门 E2E 断言 |
+| 撤销无法追回已缓存的一次访问 | 内容寻址 + 快照回落使新访问立即生效；文档明确不承诺"即时全局撤销"（§8.1.1）|
+
+## 12. 评审记录
+
+2026-07-23 由 codex 独立评审（`--focus` 架构一致性 / 模块边界 / YAGNI / 安全模型），返回 `request_changes`，7 major + 3 minor。经逐条核实：
+
+- **已采纳并改写本文**：CSS 作用域越界到整个已登录应用（§5.3、§4）、多租户归属约束与可见性谓词（§7.1、§8.1）、级联删除会毁掉已发布快照（§7.1、§8.1.1）、内置主题迁移与规则冲突（§6.4）、资产引用语法歧义与 `data:image/svg+xml` 自相矛盾（§6.1、§6.2）、`@keyframes`/`font-family`/`@layer` 全局名冲突（§6.1、§6.2）、令牌必填表述矛盾与 OKLCH 数值范围（§5.2）、样式切换缺状态机（§8.3）。
+- **部分采纳**：撤销与 `immutable` 缓存的冲突——实际撤销路径是快照回落而非缓存清除，已在 §8.1.1 写清边界，不改缓存策略。
+- **未采纳**：从 v1 schema 删除 `tier` 字段（YAGNI 意见）。保留字段是明确的产品决策，但 A 阶段校验器只接受 `tier: 1`，且已在 §5.2 声明 tier 3 语义未定、不构成兼容承诺。

@@ -19,9 +19,10 @@
 - `internal/httpapi/` 只做路由、DTO、序列化；业务逻辑与事务边界放 `internal/themes` 与 `internal/navigation`。
 - 不引入 ORM、DI 框架、事件总线、Redis、队列、PostgreSQL。本计划唯一新增依赖是 `github.com/tdewolff/parse/v2`。
 - 体积上限（写成 `internal/themes` 的导出常量）：CSS ≤ 262144 字节；单个资产 ≤ 524288 字节；整包 ≤ 4194304 字节。
-- `z-index` 上限 50；`specVersion` 固定为 1。
-- 资产 MIME 白名单：`font/woff2`、`image/png`、`image/jpeg`、`image/webp`。**拒绝 SVG。**
-- 主题 CSS 中不得出现外部 URL；仅允许 `asset("…")` 与 `data:image/*`（`data:` 单条 ≤ 8192 字节）。
+- `z-index` 上限 50；`specVersion` 固定为 1；**校验器只接受 `tier: 1`**，`2`/`3` 拒绝。
+- 资产 MIME 白名单：`font/woff2`、`image/png`、`image/jpeg`、`image/webp`。**拒绝 SVG，含 `data:image/svg+xml`。**
+- 主题 CSS 中不得出现外部 URL；资产引用语法唯一：`url("asset:<包内路径>")`；`data:` 仅限 `image/png|jpeg|webp` 且单条 ≤ 8192 字节。
+- **主题 CSS 的作用域根是 `[data-nx="page-root"]`，不是 `<html>`**；禁止选择 `html`/`body`；`[data-nx-protected]` 元素位于主题根之外。
 
 ---
 
@@ -334,13 +335,16 @@ git commit -m "feat: add theme manifest parsing and token validation"
 
 ---
 
-### Task 2: `data-nx` 稳定选择器契约
+### Task 2: 主题根与 `data-nx` 稳定选择器契约
+
+> 这是整套安全模型的地基任务：把主题作用域从 `<html>` 收到公开页主题根，并把受许可证保护的元素移到该根之外。
 
 **Files:**
 - Create: `docs/theme-api.md`
 - Create: `internal/themes/hooks.go`
 - Create: `internal/themes/hooks_test.go`
-- Modify: `web/src/components/feature/PublicShell.tsx`（公开页外壳、页脚源码链接）
+- Modify: `web/src/components/feature/PublicShell.tsx`（新增主题根容器；页脚源码链接移到主题根之外）
+- Modify: `web/src/pages/app/themes/page.tsx`（预览主题根限定在预览容器内）
 - Modify: 公开页渲染站点卡片与分类的组件（用 `rg 'material-card|hairline' web/src` 定位全部使用点）
 
 **Interfaces:**
@@ -352,8 +356,14 @@ git commit -m "feat: add theme manifest parsing and token validation"
 
 - [ ] **Step 1: 盘点现有主题实际用到的选择器**
 
-Run: `rg -o '\.[a-z-]+' web/src/themes/packages/*.ts | sort -u`
-把结果记进 `docs/theme-api.md` 的「迁移映射」小节；每个内部类名必须映射到一个 `data-nx` 钩子，否则内置主题迁移会丢效果。
+```bash
+rg -o '\.[a-z-]+' web/src/themes/packages/*.ts | sort -u
+rg -o '\[class\*=[^]]*\]' web/src/themes/packages/   # sakura 用属性匹配选了 Tailwind 原子类
+rg "content: *'" web/src/themes/packages/            # sakura 的 content: '✿'
+rg -o 'url\("?data:[^;]*' web/src/themes/packages/   # slate/slate-dark 的 SVG 噪点
+```
+
+把结果记进 `docs/theme-api.md` 的「迁移映射」小节，内容以 spec §6.4 的差异表为准。每个内部类名（含 `[class*="w-11"]` 这类原子类匹配）必须映射到一个 `data-nx` 钩子；映射不出语义的记为视觉降级，不要为了迁就旧写法放宽规则。
 
 - [ ] **Step 2: 写失败测试**
 
@@ -407,11 +417,14 @@ import "sort"
 // 任何命中它的主题规则一律拒绝。
 const ProtectedAttr = "data-nx-protected"
 
+// ThemeRootHook 是主题作用域的根。data-theme 设在它上面，
+// 主题 CSS 只能触达它的后代；宿主外壳与受保护元素都在根之外。
+const ThemeRootHook = "page-root"
+
 // allowedHooks 是主题可以选择的稳定钩子。新增前先更新 docs/theme-api.md。
 var allowedHooks = []string{
 	"category-tab",
 	"clock",
-	"footer",
 	"navbar",
 	"page-root",
 	"search-box",
@@ -444,21 +457,32 @@ func IsAllowedHook(name string) bool {
 Run: `go test ./internal/themes -run 'TestAllowedHooks|TestIsAllowedHook' -v`
 Expected: PASS。
 
-- [ ] **Step 6: 前端组件挂钩子**
+- [ ] **Step 6: 重构 PublicShell 的 DOM 结构，划出主题根**
 
-给公开页渲染路径上的元素补 `data-nx` 属性（保留现有 class，不破坏 Tailwind 样式）。例：
+`PublicShell` 改为「外壳 → 主题根 → 内容」三层，页脚源码链接留在**主题根之外**：
+
+```tsx
+<div className="min-h-screen flex flex-col relative">
+  <div data-nx="page-root" data-theme={themeId} className="relative flex-1 flex flex-col">
+    {/* 导航栏、搜索、分类、站点卡片等全部内容 */}
+  </div>
+  <footer data-nx-protected className="…">
+    <a href={SOURCE_REPO_URL} …>源码</a>
+  </footer>
+</div>
+```
+
+主题根需要 `position: relative`，因为主题的全屏装饰改用 `[data-nx="page-root"]::before/::after`。
+
+- [ ] **Step 7: 其余元素挂钩子**
+
+给公开页渲染路径上的元素补 `data-nx` 属性（保留现有 class，不破坏 Tailwind 样式）：
 
 ```tsx
 <article data-nx="site-card" className="material-card …">
 ```
 
-在 `PublicShell.tsx` 的页脚源码链接上加 `data-nx-protected`：
-
-```tsx
-<a data-nx-protected href={SOURCE_REPO_URL} …>
-```
-
-并在公开页样式入口加一条兜底规则（文件：`web/src/index.css` 或等价的全局样式入口）：
+在全局样式入口（`web/src/index.css` 或等价文件）加一条兜底规则，作为 DOM 结构之外的第三道保险：
 
 ```css
 [data-nx-protected] {
@@ -469,11 +493,15 @@ Expected: PASS。
 }
 ```
 
-- [ ] **Step 7: 写 docs/theme-api.md**
+- [ ] **Step 8: 预览页主题根限定**
 
-至少包含：钩子清单表（钩子名 / 出现位置 / stable 或 experimental）、`data-nx-protected` 的含义与不可覆盖性、Step 1 的内部类名 → 钩子迁移映射、以及「experimental 钩子可能在小版本变更」的声明。
+`web/src/pages/app/themes/page.tsx` 当前调 `themeRegistry.activate(id)` 把 `data-theme` 写到 `<html>`，会让第三方 CSS 作用于整个已登录应用。改为只在预览容器上设置 `data-theme`，管理与编辑 UI 不受影响。Task 11 会把 `themeRegistry` 的实现一并改成"作用于指定根元素"。
 
-- [ ] **Step 8: 验证与提交**
+- [ ] **Step 9: 写 docs/theme-api.md**
+
+至少包含：主题根的定义与「主题够不到根之外」的说明、钩子清单表（钩子名 / 出现位置 / stable 或 experimental）、`data-nx-protected` 的含义与不可覆盖性、Step 1 的迁移映射（对齐 spec §6.4 差异表）、以及「experimental 钩子可能在小版本变更」的声明。
+
+- [ ] **Step 10: 验证与提交**
 
 ```bash
 make check
@@ -554,7 +582,7 @@ func TestValidateCSSAcceptsRealisticTheme(t *testing.T) {
 :root { --radius-lg: 22px; }
 [data-nx="site-card"] { border-radius: var(--radius-lg); box-shadow: 0 3px 10px rgb(0 0 0 / 0.08); }
 [data-nx="site-card"]:hover { transform: translateY(-2px); }
-body::after {
+[data-nx="page-root"]::after {
   content: "";
   position: fixed;
   inset: 0;
@@ -563,7 +591,7 @@ body::after {
   background-image: repeating-linear-gradient(0deg, transparent, transparent 3px, oklch(0.70 0.14 145 / 0.04) 3px);
 }
 @media (max-width: 640px) { [data-nx="site-card"] { border-radius: 14px; } }
-@font-face { font-family: "Sample Sans"; src: asset("fonts/sample.woff2") format("woff2"); }
+@font-face { font-family: "Sample Sans"; src: url("asset:fonts/sample.woff2") format("woff2"); }
 `)
 	if err := ValidateCSS(src, []string{"Sample Sans"}); err != nil {
 		t.Fatalf("ValidateCSS() error = %v, want nil", err)
@@ -577,21 +605,30 @@ func TestValidateCSSRejects(t *testing.T) {
 		wantMsg string
 	}{
 		{"@import", `@import url("https://evil.example/x.css");`, "@import"},
-		{"外部 url()", `body { background-image: url("https://evil.example/p.png"); }`, "url"},
-		{"注释绕过的外部 url()", `body { background-image: url(/*x*/"https://evil.example/p.png"); }`, "url"},
-		{"@font-face 外链", `@font-face { font-family: "X"; src: url("https://evil.example/f.woff2"); }`, "font-face"},
-		{"@font-face 族名未在令牌中引用", `@font-face { font-family: "Ghost"; src: asset("fonts/a.woff2"); }`, "font-family"},
-		{"非空 content", `body::after { content: "请登录"; }`, "content"},
-		{"attr() content", `body::after { content: attr(href); }`, "content"},
-		{"fixed 缺 pointer-events", `body::after { content: ""; position: fixed; inset: 0; }`, "pointer-events"},
+		{"外部 url()", `[data-nx="clock"] { background-image: url("https://evil.example/p.png"); }`, "url"},
+		{"注释绕过的外部 url()", `[data-nx="clock"] { background-image: url(/*x*/"https://evil.example/p.png"); }`, "url"},
+		{"image-set 里的外部 url()", `[data-nx="clock"] { background-image: image-set(url("https://evil.example/p.png") 1x); }`, "url"},
+		{"cursor 里的外部 url()", `[data-nx="clock"] { cursor: url("https://evil.example/c.cur"), auto; }`, "url"},
+		{"@font-face 外链", `@font-face { font-family: "X"; src: url("https://evil.example/f.woff2"); }`, "url"},
+		{"@font-face 族名未在令牌中引用", `@font-face { font-family: "Ghost"; src: url("asset:fonts/a.woff2"); }`, "font-family"},
+		{"选择 body", `body { background: red; }`, "body"},
+		{"选择 html", `html { background: red; }`, "html"},
+		{"非空 content", `[data-nx="page-root"]::after { content: "请登录"; }`, "content"},
+		{"装饰字符 content", `[data-nx="site-card"]::after { content: "✿"; }`, "content"},
+		{"attr() content", `[data-nx="page-root"]::after { content: attr(href); }`, "content"},
+		{"fixed 缺 pointer-events", `[data-nx="page-root"]::after { content: ""; position: fixed; inset: 0; }`, "pointer-events"},
 		{"z-index 越界", `[data-nx="navbar"] { z-index: 9999; }`, "z-index"},
-		{"未知 at-rule", `@container (min-width: 10px) { body { color: red; } }`, "at-rule"},
-		{"behavior", `body { behavior: url(x.htc); }`, "behavior"},
-		{"-moz-binding", `body { -moz-binding: url(x.xml); }`, "binding"},
-		{"expression", `body { width: expression(alert(1)); }`, "expression"},
+		{"未知 at-rule", `@container (min-width: 10px) { [data-nx="clock"] { color: red; } }`, "at-rule"},
+		{"@layer 被禁", `@layer theme { [data-nx="clock"] { color: red; } }`, "@layer"},
+		{"behavior", `[data-nx="clock"] { behavior: url(x.htc); }`, "behavior"},
+		{"-moz-binding", `[data-nx="clock"] { -moz-binding: url(x.xml); }`, "binding"},
+		{"expression", `[data-nx="clock"] { width: expression(alert(1)); }`, "expression"},
 		{"命中受保护元素", `[data-nx-protected] { display: none; }`, "data-nx-protected"},
 		{"未登记的内部类名", `.material-card { color: red; }`, "material-card"},
-		{"超大 data: URI", `body { background-image: url("data:image/png;base64,` + strings.Repeat("A", 9000) + `"); }`, "data:"},
+		{"Tailwind 原子类属性匹配", `[class*="w-11"] { width: 0; }`, "class"},
+		{"未登记的 data-nx 钩子", `[data-nx="admin-panel"] { display: none; }`, "admin-panel"},
+		{"data:image/svg+xml", `[data-nx="clock"] { background-image: url("data:image/svg+xml,%3Csvg%3E%3C/svg%3E"); }`, "svg"},
+		{"超大 data: URI", `[data-nx="clock"] { background-image: url("data:image/png;base64,` + strings.Repeat("A", 9000) + `"); }`, "data:"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -630,18 +667,23 @@ Expected: FAIL，`undefined: ValidateCSS`。
 
 1. 入口先判体积：`len(src) > MaxCSSBytes` → 报「CSS 体积超过上限」。
 2. 用 `css.NewParser(parse.NewInputString(string(src)), false)` 遍历。
-3. `AtRuleGrammar` / `BeginAtRuleGrammar`：at-rule 名小写后必须落在 `{"media","supports","keyframes","font-face","layer"}`，否则报 `不支持的 at-rule`。`@import` 单独给出更明确的报错文案。
+3. `AtRuleGrammar` / `BeginAtRuleGrammar`：at-rule 名小写后必须落在 `{"media","supports","keyframes","font-face"}`，否则报 `不支持的 at-rule`。`@import` 与 `@layer` 各自给出更明确的报错文案（`@layer` 的理由是层序全局、无法靠改名隔离）。
 4. `BeginRulesetGrammar` / `QualifiedRuleGrammar`：取 `p.Values()` 组成选择器文本并解析——
    - 含 `data-nx-protected` → 拒绝；
-   - 含类选择器且该类名不是主题私有前缀（约定 `nx-` 之外的类一律拒绝）→ 拒绝并回显类名；
-   - `[data-nx="x"]` 中的 `x` 必须 `IsAllowedHook`。
+   - 类型选择器命中 `html` / `body` → 拒绝，提示改用 `[data-nx="page-root"]`；
+   - 出现任何类选择器 → 拒绝并回显类名（主题只能用钩子，不能用类）；
+   - 出现 `[class…]` 形式的属性选择器 → 拒绝（`[class*="w-11"]` 是绕过类名限制的等价写法）；
+   - `[data-nx="x"]` 中的 `x` 必须 `IsAllowedHook`，否则拒绝并回显 `x`。
 5. `DeclarationGrammar`：`data` 是属性名，`p.Values()` 是值 token 序列——
    - 属性名命中 `behavior` / `-moz-binding` → 拒绝；值中出现 `expression(` 函数 token → 拒绝；
-   - `content`：值必须是空字符串字面量或 `none`，其余（含 `attr()`）一律拒绝；
-   - `z-index`：解析为整数且 ≤ 50，非整数值（如 `var(...)`）一律拒绝；
-   - `url` 函数 token：参数必须是 `data:image/` 开头且总长 ≤ 8192，否则拒绝；`asset(` 函数在此阶段视为合法并记录其参数（供 Task 4 重写与资产存在性检查）。
-6. 在当前 ruleset 内累积声明，ruleset 结束（`EndRulesetGrammar`）时做跨声明检查：出现 `position: fixed` 而没有 `pointer-events: none` → 拒绝。
-7. `@font-face` 块：`src` 只允许 `asset(...)`；`font-family` 的族名必须出现在传入的 `fontFamilies` 中（去引号、去首尾空格后比较）。
+   - `content`：值必须是空字符串字面量或 `none`，其余（含 `attr()` 与任何非空字面量）一律拒绝；
+   - `z-index`：解析为整数且 ≤ 50，非整数值（如 `var(...)`）一律拒绝。
+6. **URL token 统一处理**：不按属性名特判，而是在遍历值 token 时命中每一个 URL/函数 token（覆盖 `background-image`、`image-set()`、`cursor`、`@font-face` 的 `src`、`mask-image` 等所有位置），逐个判定——
+   - `url("asset:<path>")`：合法，记录 `<path>`，供 Task 4 重写与资产存在性检查；
+   - `url("data:image/png|jpeg|webp,…")`：总长 ≤ 8192 才合法；`data:image/svg+xml` 明确拒绝（与资产层拒绝 SVG 一致）；
+   - 其余一律拒绝，错误文案回显被拒的 URL 前 64 字符。
+7. 在当前 ruleset 内累积声明，ruleset 结束（`EndRulesetGrammar`）时做跨声明检查：出现 `position: fixed` 而没有 `pointer-events: none` → 拒绝。
+8. `@font-face` 块：`src` 只允许 `url("asset:…")`；`font-family` 的族名必须出现在传入的 `fontFamilies` 中（去引号、去首尾空格后比较）。
 
 所有拒绝路径统一走 `fmt.Errorf("%w: …", ErrInvalidCSS, …)`，错误文案里带上触发的选择器或属性，便于主题作者定位。
 
@@ -673,7 +715,7 @@ git commit -m "feat: add theme CSS validator with parser-driven rejection rules"
 - Consumes: Task 1 的 `Manifest`/`Tokens`，Task 3 的 `ValidateCSS`
 - Produces:
   - `func TokensCSS(m Manifest, scope string) string` — 生成 `[data-theme="<scope>"] { --… }` 变量块，缺失的 `radius`/`elevation` 用基线值补齐
-  - `func CompileCSS(src []byte, scope string) ([]byte, error)` — 选择器加作用域、`asset("p")` → `AssetBasePlaceholder + "p"`
+  - `func CompileCSS(src []byte, scope string) ([]byte, error)` — 选择器加作用域、全局名命名空间化、`url("asset:p")` → `url("<AssetBasePlaceholder>p")`
   - `const AssetBasePlaceholder = "__NAVAX_THEME_ASSET_BASE__/"`
 
 - [ ] **Step 1: 写失败测试**
@@ -705,16 +747,37 @@ func TestCompileCSSScopesSelectors(t *testing.T) {
 	}
 }
 
-func TestCompileCSSRewritesAssetCalls(t *testing.T) {
-	out, err := CompileCSS([]byte(`@font-face { font-family: "S"; src: asset("fonts/s.woff2"); }`), "s")
+func TestCompileCSSRewritesAssetURLs(t *testing.T) {
+	out, err := CompileCSS([]byte(`@font-face { font-family: "S"; src: url("asset:fonts/s.woff2"); }`), "s")
 	if err != nil {
 		t.Fatalf("CompileCSS() error = %v", err)
 	}
 	if !strings.Contains(string(out), AssetBasePlaceholder+"fonts/s.woff2") {
-		t.Fatalf("asset() not rewritten: %s", out)
+		t.Fatalf("asset url not rewritten: %s", out)
 	}
-	if strings.Contains(string(out), "asset(") {
-		t.Fatalf("asset() call left in output: %s", out)
+	if strings.Contains(string(out), "asset:") {
+		t.Fatalf("asset: scheme left in output: %s", out)
+	}
+}
+
+func TestCompileCSSNamespacesGlobalNames(t *testing.T) {
+	out, err := CompileCSS([]byte(`
+@keyframes pulse { from { opacity: 0; } to { opacity: 1; } }
+[data-nx="clock"] { animation: pulse 2s infinite; }
+@font-face { font-family: "Sample Sans"; src: url("asset:fonts/s.woff2"); }
+[data-nx="clock"] { font-family: "Sample Sans", sans-serif; }`), "sakura")
+	if err != nil {
+		t.Fatalf("CompileCSS() error = %v", err)
+	}
+	got := string(out)
+	for _, want := range []string{"@keyframes sakura-pulse", "animation: sakura-pulse", `"sakura-Sample Sans"`} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("missing %q in:\n%s", want, got)
+		}
+	}
+	// keyframes 内部的 from/to 不加作用域前缀
+	if strings.Contains(got, `[data-theme="sakura"] from`) {
+		t.Fatalf("keyframe selectors must not be scoped: %s", got)
 	}
 }
 
@@ -790,11 +853,14 @@ func TokensCSS(m Manifest, scope string) string {
 
 复用 Task 3 的解析遍历，改为输出模式：
 
-- 每个 ruleset 的选择器列表逐个前缀化：`:root` → `[data-theme="<scope>"]`；其余 `sel` → `[data-theme="<scope>"] sel`；逗号分隔的多选择器分别处理。
-- `@media` / `@supports` / `@layer` 内部的 ruleset 同样前缀化（这是测试里 `strings.Count(...) != 2` 要覆盖的点）。
-- `@keyframes` 内部的 `from`/`to`/百分比选择器**不**加前缀；`@keyframes` 名加 `<scope>-` 前缀，并同步改写引用它的 `animation-name` / `animation` 值，防跨主题串扰。
-- `@font-face` 不加前缀。
-- `asset("p")` → `url("<AssetBasePlaceholder>p")`。
+- 每个 ruleset 的选择器列表逐个前缀化：`:root` 与 `[data-nx="page-root"]` → `[data-theme="<scope>"]` 自身；其余 `sel` → `[data-theme="<scope>"] sel`；逗号分隔的多选择器分别处理。
+- `@media` / `@supports` 内部的 ruleset 同样前缀化（这是测试里 `strings.Count(...) != 2` 要覆盖的点）。
+- **全局名命名空间化**（选择器前缀不隔离它们）：
+  - `@keyframes` 名加 `<scope>-` 前缀，并同步改写引用它的 `animation-name` / `animation` 值；`@keyframes` 内部的 `from`/`to`/百分比选择器**不**加前缀；
+  - `@font-face` 的 `font-family` 名加 `<scope>-` 前缀，并同步改写所有 `font-family` / `font` 简写中对该族名的引用；系统字体名不动；
+  - `@layer` 已在校验阶段拒绝，编译期无需处理。
+- `@font-face` 规则本身不加选择器前缀。
+- `url("asset:p")` → `url("<AssetBasePlaceholder>p")`，遍历所有 URL token 位置（含 `image-set()`、`cursor`）。
 - 输出规范化（统一缩进与分号），保证同输入逐字节一致。
 
 - [ ] **Step 5: 运行测试确认通过**
@@ -856,7 +922,7 @@ func TestCompileProducesStableVersionID(t *testing.T) {
 
 func TestCompileRejectsCSSReferencingMissingAsset(t *testing.T) {
 	pkg := samplePackage(t)
-	pkg.CSS = []byte(`@font-face { font-family: "Sample Sans"; src: asset("fonts/missing.woff2"); }`)
+	pkg.CSS = []byte(`@font-face { font-family: "Sample Sans"; src: url("asset:fonts/missing.woff2"); }`)
 	if _, err := Compile(pkg, "sample"); err == nil || !strings.Contains(err.Error(), "missing.woff2") {
 		t.Fatalf("error = %v, want missing asset rejection", err)
 	}
@@ -899,7 +965,7 @@ func samplePackage(t *testing.T) Package {
 	}
 	return Package{
 		Manifest: manifest,
-		CSS:      []byte(`@font-face { font-family: "Sample Sans"; src: asset("fonts/sample.woff2"); }`),
+		CSS:      []byte(`@font-face { font-family: "Sample Sans"; src: url("asset:fonts/sample.woff2"); }`),
 		Assets:   []Asset{asset},
 	}
 }
@@ -916,7 +982,7 @@ Expected: FAIL，`undefined: ValidateAsset` / `undefined: Compile`。
 
 1. 校验资产总体积 ≤ `MaxPackageBytes`，逐个 `ValidateAsset`。
 2. `ValidateCSS(pkg.CSS, fontFamilies(pkg.Manifest))`。
-3. 交叉检查：CSS 中出现的每个 `asset("p")` 都必须在 `pkg.Assets` 中有 `Path == p`，否则报错并回显路径。
+3. 交叉检查：CSS 中出现的每个 `url("asset:p")` 都必须在 `pkg.Assets` 中有 `Path == p`，否则报错并回显路径。
 4. `TokensCSS(manifest, packageID) + CompileCSS(pkg.CSS, packageID)` 拼接为最终 CSS（令牌块在前，保证主题 CSS 能覆盖令牌）。
 5. `ContentHash = sha256(canonicalJSON(manifest) || finalCSS || 每个资产的 "path\x00sha256\n"（按 path 排序）)`，十六进制。
 6. `VersionID = "v" + ContentHash[:32]`。
@@ -956,7 +1022,11 @@ git commit -m "feat: validate theme assets and compile packages to immutable ver
 
 - [ ] **Step 1: 写迁移**
 
-`migrations/0014_theme_packages.sql`，内容严格照 spec §7.1（含 `UPDATE themes SET slug = id WHERE slug = '';` 必须在两个唯一索引之前执行）。
+`migrations/0014_theme_packages.sql`，内容严格照 spec §7.1，三处易错点：
+
+1. `UPDATE themes SET slug = id WHERE slug = '';` 必须在两个唯一索引之前执行，否则既有行的空串 slug 会冲突。
+2. `theme_versions.theme_id` 用 `ON DELETE RESTRICT`（**不是 CASCADE**）——已发布快照按 version_id 引用编译产物，删包不得毁掉线上样式。
+3. SQLite 不能给已有表补 `CHECK`，`scope`/`owner_id` 的配对不变量用 `themes_scope_owner_insert` / `themes_scope_owner_update` 两个 `BEFORE` 触发器实现（照抄 spec §7.1 的 SQL）。缺了它，`owner_id IS NULL` 的私有主题会因 NULL 在唯一索引中互不相等而绕过 slug 唯一性。
 
 - [ ] **Step 2: 写失败测试**
 
@@ -1053,7 +1123,28 @@ func TestResolvePackageVersionFallsBack(t *testing.T) {
 }
 ```
 
-`ErrNotFound`、`NewStore` 与 `newTestDB` 辅助函数一并在本任务中定义（`newTestDB` 建临时 SQLite 库并执行 `migrations/*.sql`，写法照抄 `internal/admin/sqlstore_test.go`）。
+再补三个约束回归测试（对应 codex 评审指出的隔离与生命周期漏洞）：
+
+```go
+func TestThemesScopeOwnerTriggers(t *testing.T) {
+	db := newTestDB(t)
+	// scope='private' 且 owner_id IS NULL → 必须被触发器 ABORT
+	// scope='catalog' 且 owner_id 非空 → 必须被触发器 ABORT
+	// 合法组合 → 成功
+}
+
+func TestUpsertVersionRejectsForeignVersionPointer(t *testing.T) {
+	db := newTestDB(t)
+	// 构造属于主题 A 的 version，尝试把它写进主题 B 的 current_version_id → 必须失败
+}
+
+func TestDeleteThemeWithVersionsIsRestricted(t *testing.T) {
+	db := newTestDB(t)
+	// 已有 theme_versions 行的主题执行 DELETE → 必须因 RESTRICT 失败
+}
+```
+
+`ErrNotFound`、`NewStore` 与 `newTestDB` 辅助函数一并在本任务中定义（`newTestDB` 建临时 SQLite 库并执行 `migrations/*.sql`，写法照抄 `internal/admin/sqlstore_test.go`；注意必须开启 `PRAGMA foreign_keys = ON`，否则 `RESTRICT` 不生效，测试会假通过）。
 
 - [ ] **Step 3: 运行测试确认失败**
 
@@ -1121,15 +1212,26 @@ func TestBuiltinPackagesCompile(t *testing.T) {
 Run: `go test ./internal/themes -run TestBuiltinPackages -v`
 Expected: FAIL，`undefined: BuiltinPackages`。
 
-- [ ] **Step 3: 逐个迁移主题**
+- [ ] **Step 3: 逐个迁移主题（不是无损迁移）**
 
 对每个 `web/src/themes/packages/<id>.ts`：
 
 - `meta` → `theme.json` 的 `name/subtitle/description/swatches/vibe`（`subtitle`、`description` 作为 `name` 之外的展示字段一并放进 manifest，字段名沿用现有 API 响应）。
 - CSS 中的 `[data-theme="<id>"] { --… }` 令牌块 → `theme.json` 的 `tokens`。
 - CSS 中的视觉覆盖规则 → `theme.css`，**去掉手写的 `[data-theme="<id>"]` 前缀**，并把内部类名换成 Task 2 登记的 `data-nx` 钩子。
-- `terminal` 的 `body::after` 扫描线：确认 `content: ""` 与 `pointer-events: none` 齐备（原实现已有），`z-index: 1` 合规，可原样保留。
+
+按 spec §6.4 的差异表逐条处置，**不要为了让旧写法通过而放宽规则**：
+
+| 主题 | 现状 | 处置 |
+|---|---|---|
+| `terminal` | `body::after` 扫描线 | 选择器改 `[data-nx="page-root"]::after`；`content: ""`、`pointer-events: none`、`z-index: 1` 原实现已合规 |
+| `sakura` | `body::before` 全屏柔光 | 改 `[data-nx="page-root"]::before` |
+| `sakura` | `content: '✿'` | 改 `background-image: url("asset:deco/blossom.png")`（需新增该资产）或 mask 实现 |
+| `sakura` | `[class*="relative"]`、`[class*="w-11"]` | 换 `data-nx` 钩子；补不出语义的删除该规则并在 `docs/theme-api.md` 记为视觉降级 |
+| `slate` / `slate-dark` | `url("data:image/svg+xml,…")` 噪点 | 改 `assets/noise.png` 或纯 CSS 渐变 |
+
 - 每迁移完一个就跑 `go test ./internal/themes -run TestBuiltinPackages/<id> -v`。
+- 迁移完成后把每处实现方式变更与视觉降级补进 `docs/theme-api.md` 的迁移映射小节。
 
 - [ ] **Step 4: 实现 builtin.go 与启动同步**
 
@@ -1184,7 +1286,7 @@ git commit -m "feat: ship builtin themes through the theme spec pipeline"
 
 - [ ] **Step 1: 写失败测试**
 
-`internal/httpapi/themes_test.go`：已知 versionId 返回 200、`Content-Type: text/css; charset=utf-8`、`Cache-Control: public, max-age=31536000, immutable`、ETag 为 content hash；带 `If-None-Match` 返回 304；未知 versionId 返回 404；资产路径含 `..` 返回 404；未登记路径返回 404。
+`internal/httpapi/themes_test.go`：已知 versionId 返回 200、`Content-Type: text/css; charset=utf-8`、`Cache-Control: public, max-age=31536000, immutable`、ETag 为 content hash；带 `If-None-Match` 返回 304；未知 versionId 返回 404；`status='disabled'` 的版本返回 **410 Gone**（语义是"曾存在、已撤销"，与 404 区分）；资产路径含 `..` 返回 404；未登记路径返回 404。
 
 - [ ] **Step 2: 运行测试确认失败**
 
@@ -1228,13 +1330,16 @@ git commit -m "feat: serve immutable theme css and assets"
 
 - [ ] **Step 1: 写失败测试**
 
-在 `internal/catalog/service_test.go` 断言 `Themes()` 返回的每一项都带非空 `CurrentVersionID`，且 `CSSHref == "/api/v1/public/themes/" + CurrentVersionID + ".css"`。
+在 `internal/catalog/service_test.go` 断言：
+
+- `Themes()` 返回的每一项都带非空 `CurrentVersionID`，且 `CSSHref == "/api/v1/public/themes/" + CurrentVersionID + ".css"`；
+- **可见性谓词**（spec §8.1）——匿名/普通用户/管理员三种主体各自可见的集合正确：普通用户看到 `scope='catalog' AND enabled=1` 加上自己的私有主题，看不到他人私有主题；管理员看到全部。子项目 A 尚不能创建私有主题，测试直接向表里插入一行 `scope='private'` 的夹具来覆盖这条边界，**不要等到 B 才补**——谓词写错的代价是跨租户泄露。
 
 - [ ] **Step 2: 运行确认失败** — `go test ./internal/catalog -v`
 
 - [ ] **Step 3: 实现**
 
-`catalog.Service.Themes` 的 SQL 从 `themes` 联 `theme_versions` 取当前版本；`themeData` 补齐新字段；`api/openapi.yaml` 的 `ThemesResponse` 同步。
+`catalog.Service.Themes` 的 SQL 从 `themes` 联 `theme_versions` 取当前版本，并按调用主体施加可见性谓词；`themeData` 补齐新字段；`api/openapi.yaml` 的 `ThemesResponse` 同步。
 
 - [ ] **Step 4: 运行验证** — `go test -race ./internal/catalog ./internal/httpapi && make test-contract`
 
@@ -1306,9 +1411,27 @@ func TestPublishFallsBackForUnknownTheme(t *testing.T) {
 
 - [ ] **Step 2: 运行确认失败** — `go test ./internal/navigation -run TestPublish -v`
 
+补一条跨租户回归（codex 评审指出的授权缺口）：
+
+```go
+func TestPublishRejectsForeignPrivateTheme(t *testing.T) {
+	env := newNavigationTestEnv(t)
+	foreign := env.seedPrivateTheme(t, env.otherUserID) // 属于另一个用户的私有主题
+	pageID := env.seedPageWithTheme(t, foreign)
+
+	published, err := env.store.Publish(t.Context(), env.actor, pageID, 1, "https://nav.ax", time.Now().UTC())
+	if err != nil {
+		t.Fatalf("Publish() error = %v", err)
+	}
+	if published.Page.ThemeVersionID != env.slateVersionID {
+		t.Fatalf("cross-tenant theme leaked into snapshot: %q", published.Page.ThemeVersionID)
+	}
+}
+```
+
 - [ ] **Step 3: 实现**
 
-`Publish` 事务内调用解析器取版本并写入快照 JSON；`Preview` 用同样逻辑（预览取当前版本，不落库）。
+`Publish` 事务内调用解析器取版本并写入快照 JSON。解析必须校验：主题对该 owner 可见（catalog 且 enabled，或 owner 是自己）、`current_version_id` 属于该主题且 `status='active'`。任一不满足则回落默认主题（而不是报错——避免用户被他人的下架操作卡住发布）。`Preview` 用同样逻辑（预览取当前版本，不落库）。
 
 - [ ] **Step 4: 运行验证** — `go test -race ./internal/navigation && make test-contract`
 
@@ -1330,12 +1453,17 @@ git commit -m "feat: lock theme version into published snapshots"
 - Delete: `web/src/themes/packages/`、`web/src/themes/manifest.ts`、`web/src/lib/themeResolve.ts`
 
 **Interfaces:**
-- Consumes: Task 9 的 `GET /api/v1/themes` 新字段、Task 10 的快照 `themeVersionId`
-- Produces: `ThemePackage = { id: string; meta: ThemeMeta; cssHref: string }`；`themeRegistry.activate(id)` 切换 `<link>`
+- Consumes: Task 9 的 `GET /api/v1/themes` 新字段、Task 10 的快照 `themeVersionId`、Task 2 的主题根 DOM 结构
+- Produces: `ThemePackage = { id: string; meta: ThemeMeta; cssHref: string }`；`themeRegistry.activate(id, root: HTMLElement)` 切换 `<link>` 并在 **root** 上设置 `data-theme`
 
-- [ ] **Step 1: 改类型与 registry**
+- [ ] **Step 1: 改类型与 registry，实现原子切换状态机**
 
-`activate` 改为：创建 `<link rel="stylesheet" data-theme-style="<id>">`，`onload` 后设置 `document.documentElement.dataset.theme = id` 并移除旧 link；`deactivate` 移除 link 与属性。
+`activate(id, root)` 不是简单的 onload 回调，四条行为各写一个单测：
+
+1. **序号防竞态**：模块内维护一个自增 `switchSeq`，每次 `activate` 递增并捕获当前值；`load`/`error` 回调先比对序号，过期回调直接 `return`，避免慢请求覆盖用户更新的选择。
+2. **先加载后替换**：新 link 成功加载前保留旧 link（先移除会闪烁），成功后同一帧内移除旧 link 并设置 `root.dataset.theme = id`。
+3. **失败与超时**：`error` 或 5 秒超时 → 移除失败的 link，保持当前主题不变并提示用户；若当前无任何主题（首次加载失败），显式回落基线令牌。已撤销版本返回 `410` 走同一条失败路径。
+4. **`data-theme` 设在传入的 root 上，不再是 `document.documentElement`**；`deactivate(root)` 移除 link 与该 root 上的属性。
 
 - [ ] **Step 2: 三处 UI 改数据驱动**
 
@@ -1354,7 +1482,13 @@ rg 'themeResolve|themes/packages' web/src   # 必须无结果
 make check
 make build
 ```
-浏览器冒烟：加载态、空态、错误态、移动端、键盘导航、深色主题；确认切主题时无样式闪烁、旧 `<link>` 被移除、页脚源码链接始终可见。
+浏览器冒烟：加载态、空态、错误态、移动端、键盘导航、深色主题；并逐项确认——
+
+- 切主题时无样式闪烁，旧 `<link>` 被移除；
+- 快速连点多个主题后，最终生效的是最后一次点击；
+- 断网/请求失败时保持当前主题并给出提示，不出现裸样式；
+- `/app/themes` 预览时管理与编辑 UI 不受主题影响（`data-theme` 只在预览容器上）；
+- 页脚源码链接在任何主题下都可见（它在主题根之外）。
 
 - [ ] **Step 5: 提交**
 
@@ -1384,7 +1518,7 @@ git commit -m "feat: load theme css from content-addressed stylesheet links"
 
 - [ ] **Step 3: E2E 断言**
 
-在 guest 规格中断言公开页存在 `link[data-theme-style]` 且 `html[data-theme]` 与快照主题一致。
+在 guest 规格中断言：公开页存在 `link[data-theme-style]`；`[data-nx="page-root"][data-theme]` 与快照主题一致（**不是 `html[data-theme]`**）；`[data-nx-protected]` 的源码链接可见且位于主题根之外。
 
 - [ ] **Step 4: 运行** — `make e2e`，Expected: PASS。
 
@@ -1441,6 +1575,8 @@ git commit -m "chore: tighten style and font CSP after self-hosting theme assets
 
 - `make check`、`go test -race ./...`、`make build`、`make test-contract`、`make test-mock`、`make e2e` 全绿。
 - `web/src/themes/packages/`、`web/src/themes/manifest.ts`、`web/src/lib/themeResolve.ts` 已删除，`rg 'themes/packages'` 无结果。
-- 6 个内置主题全部经服务端校验器编译并入库，公开页视觉与迁移前一致。
-- 已发布快照携带 `themeVersionId`，主题版本变更不影响既有快照。
+- 6 个内置主题全部经服务端校验器编译并入库；公开页视觉与迁移前一致，**§6.4 记录的实现方式变更除外**，且这些变更已写进 `docs/theme-api.md`。
+- 主题作用域封闭：`data-theme` 只出现在 `[data-nx="page-root"]` 上，`rg 'documentElement.*data-theme' web/src` 无结果；`[data-nx-protected]` 位于主题根之外。
+- 已发布快照携带 `themeVersionId`，主题版本变更不影响既有快照；删除仍被引用的主题包被 `RESTRICT` 拒绝。
+- 归属与可见性：触发器拒绝 `scope`/`owner_id` 错配；跨租户主题不会进入他人快照。
 - `docs/theme-api.md` 存在且钩子清单与 `internal/themes/hooks.go` 一致。
