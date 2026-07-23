@@ -28,6 +28,7 @@ var allowedHooks = []string{
 	"divider-gradient", // .hairline-gradient
 	"greeting",
 	"nav-brand",   // header nav a[href="/"]
+	"nav-cta",     // 导航栏主行动按钮（登录）
 	"nav-link",    // header nav 内的其余链接
 	"nav-tagline", // header p[class*="tracking"]
 	"navbar",

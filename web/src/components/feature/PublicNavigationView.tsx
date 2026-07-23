@@ -221,17 +221,17 @@ export default function PublicNavigationView({
     return (
       <PublicShell showSearch={false}>
         <div className="mx-auto max-w-4xl px-6 md:px-8 pt-16 md:pt-24 pb-24">
-          <div className="skeleton h-4 w-32 rounded mb-5" />
-          <div className="skeleton h-12 w-80 rounded-lg mb-14" />
-          <div className="skeleton h-16 w-full rounded-2xl mb-16" />
+          <div data-nx="skeleton" className="skeleton h-4 w-32 rounded mb-5" />
+          <div data-nx="skeleton" className="skeleton h-12 w-80 rounded-lg mb-14" />
+          <div data-nx="skeleton" className="skeleton h-16 w-full rounded-2xl mb-16" />
           <div className="flex gap-6 mb-10">
             {Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="skeleton h-5 w-20 rounded" />
+              <div key={i} data-nx="skeleton" className="skeleton h-5 w-20 rounded" />
             ))}
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
             {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="skeleton h-24 rounded-xl" />
+              <div key={i} data-nx="skeleton" className="skeleton h-24 rounded-xl" />
             ))}
           </div>
         </div>

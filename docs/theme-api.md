@@ -29,8 +29,9 @@
 | `page-root` | 主题根，全屏装饰用它 | stable |
 | `navbar` | 顶部导航栏 | stable |
 | `nav-brand` | 导航栏品牌链接 | stable |
-| `nav-link` | 导航栏其余链接 | stable |
-| `nav-tagline` | 导航栏标语文字 | experimental |
+| `nav-link` | 导航栏普通链接（发现等） | stable |
+| `nav-cta` | 导航栏主行动按钮（登录） | stable |
+| `nav-tagline` | 导航栏标语文字 | experimental ⚠️ |
 | `search-box` | 搜索表单容器 | stable |
 | `search-input` | 搜索输入框 | stable |
 | `category-tablist` | 分类标签栏容器 | stable |
@@ -38,16 +39,40 @@
 | `site-grid` | 站点卡片网格容器（错峰入场动画的父级） | stable |
 | `site-card` | 站点卡片 | stable |
 | `site-card-title` | 卡片标题 | stable |
-| `site-card-desc` | 卡片描述 | stable |
+| `site-card-desc` | 卡片描述 | experimental ⚠️ |
 | `site-card-icon` | 卡片图标容器 | stable |
 | `section-title` | 区块标题 | stable |
-| `divider` | 细分隔线 | experimental |
+| `divider` | 细分隔线 | experimental ⚠️ |
 | `divider-gradient` | 渐变分隔线 | experimental |
 | `clock` | 时钟 | stable |
 | `greeting` | 问候语 | stable |
 | `skeleton` | 骨架屏占位 | experimental |
 
 标 `experimental` 的钩子可能在小版本中变更或移除，变更会记录在本文件。
+
+**⚠️ 标记的钩子当前在公开页没有挂载点**（`nav-tagline`、`site-card-desc`、`divider`）。
+它们是已登记的契约，校验器会放行，但页面上暂时不存在对应元素，因此针对它们的
+规则不会有任何视觉效果。这不是 bug，是如实告知——不写明的话你会得到一条编译
+通过却永远不生效的规则，而且没有任何报错。
+
+### 2.1 主题根上的状态属性
+
+主题根除了 `data-theme`，还会按页面状态带上：
+
+| 属性 | 含义 |
+|---|---|
+| `data-wallpaper="true"` | 当前页面设置了壁纸背景 |
+| `data-wallpaper-tone="light\|dark"` | 壁纸的明暗取样结果 |
+
+它们在**主题根自身**上，不是祖先。所以要写成复合选择器：
+
+```css
+/* 对：命中根自身 */
+[data-nx="page-root"][data-wallpaper] [data-nx="site-card"] { … }
+
+/* 错：后代形式永远不匹配，且不会报错 */
+[data-wallpaper] [data-nx="site-card"] { … }
+```
 
 ## 3. 资产
 
@@ -70,7 +95,7 @@
 | `[role="tablist"]` / `[role="tablist"] button` | `[data-nx="category-tablist"]` / `[data-nx="category-tab"]` |
 | `form` / `form input` | `[data-nx="search-box"]` / `[data-nx="search-input"]` |
 | `header nav a[href="/"]` | `[data-nx="nav-brand"]` |
-| `header nav a[href="/login"]` | `[data-nx="nav-link"]` |
+| `header nav a[href="/login"]` | `[data-nx="nav-cta"]` |
 | `header p[class*="tracking"]` | `[data-nx="nav-tagline"]` |
 | `.skeleton` | `[data-nx="skeleton"]` |
 | `body::before` / `body::after` | `[data-nx="page-root"]::before` / `::after` |
@@ -78,14 +103,21 @@
 
 ### 4.1 实现方式变更与视觉降级
 
-迁移**不是无损的**。以下差异是规则与安全模型的必然结果，不是疏漏：
+迁移**不是无损的**。下表是 6 个主题迁移后的实际结果（不是预估），差异都是规则与
+安全模型的必然结果：
 
-| 主题 | 旧实现 | 新实现 | 原因 |
+| 主题 | 变更 | 类型 | 说明 |
 |---|---|---|---|
-| `sakura` | `content: '✿'` 装饰字符 | 改用 `background-image: url("asset:…")` 或 mask | 伪元素 `content` 只允许空字符串——非空 content 是文本注入与钓鱼文案的通道 |
-| `slate` / `slate-dark` | `url("data:image/svg+xml,…")` 噪点纹理 | 改用 `assets/noise.png` 或纯 CSS 渐变 | SVG 一律拒绝，`data:` 形式也不例外 |
-| `sakura` | `footer a:hover` 页脚链接样式 | **移除** | 页脚是受保护区域，位于主题根之外，主题不再能触达 |
-| 全部 | `body` / `html` 选择器 | `[data-nx="page-root"]` | 主题不得越出主题根 |
+| `slate` / `slate-dark` | SVG `feTurbulence` 噪点 → 三层重复渐变叠加的纯 CSS 颗粒 | 实现方式变更 | SVG 一律拒绝。质感近似但不等价：CSS 颗粒是规则网格，缺少真随机噪声的无序感 |
+| `slate` / `slate-dark` | 壁纸态下 `.site-card-domain` 的墨色规则 | 移除 | 卡片域名行无对应钩子，回落全局样式 |
+| `slate` / `slate-dark` | `.wallpaper-ink-scope` 系列重复规则 | 移除 | 内部类名，无钩子 |
+| `sakura` | `.material-card::after { content: '✿' }` 悬停花瓣（含旋转/放大过渡） | 移除 | `content` 只允许 `""`/`none`，且本次不引入资产 |
+| `sakura` | `footer a:hover` | 移除 | 页脚在主题根之外 |
+| `sakura` | `[role="tablist"] + div` / `~ div[class*="relative"]` 的 `display:none` | 移除 | **本次唯一有功能性后果的降级**：sakura 下原本被隐藏的分类栏后续元素现在会显示 |
+| `sakura` | `.rise-in` 入场动画 | 移除 | 宿主通用动画，不属主题契约 |
+| `sakura` | `@keyframes gentleFloat` 原本复用宿主全局定义 | 实现方式变更 | 编译器会把引用重写为 `sakura-gentleFloat`，故包内自带同名 keyframes，行为等价 |
+| `noir` / `orbit` / `terminal` | 仅选择器改名 | 无降级 | 视觉不变 |
+| 全部 | `body` / `html` 选择器 | 实现方式变更 | 改为 `[data-nx="page-root"]`，配合宿主 wrapper 的 `contain: paint` |
 
 ## 5. 被拒绝的写法
 

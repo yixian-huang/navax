@@ -12,6 +12,13 @@ import (
 	"github.com/yixian-huang/navax/internal/database"
 )
 
+// 版本状态。端点据此区分 404（从未存在）与 410（曾存在、已撤销），
+// 因此这两个值必须由一处定义，不能在存储层和 handler 里各写一份字面量。
+const (
+	VersionStatusActive   = "active"
+	VersionStatusDisabled = "disabled"
+)
+
 // ErrNotFound 表示请求的主题版本或资产不存在。
 var ErrNotFound = errors.New("theme resource not found")
 
@@ -105,7 +112,7 @@ func (s *Store) UpsertVersion(ctx context.Context, packageID string, compiled Co
 
 		// 撤销过的版本不因一次重新导入而复活：撤销是运维动作，静默回滚它会让
 		// kill switch 形同虚设。触发器也会拦，但这里给出可读的原因。
-		if status != "active" {
+		if status != VersionStatusActive {
 			return fmt.Errorf("themes: version %s of theme %s is %s and cannot become current", versionID, packageID, status)
 		}
 

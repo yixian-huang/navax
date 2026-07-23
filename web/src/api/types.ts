@@ -280,6 +280,7 @@ export type PublishedPage = PublishedPageContract;
 export interface Theme {
   id: string;
   name: string;
+  subtitle?: string;
   version?: string;
   author: string;
   description?: string;
@@ -287,6 +288,15 @@ export interface Theme {
   preview: string;
   enabled?: boolean;
   default?: boolean;
+  /** 当前版本 ID，由编译产物的内容哈希派生，因此不可变。 */
+  currentVersionId: string;
+  /** 该版本编译产物的地址，内容寻址、可长缓存。 */
+  cssHref: string;
+  /** 能力级别；当前宿主只接受 1。 */
+  tier: number;
+  scope: 'catalog' | 'private';
+  vibe: 'serious' | 'cute';
+  swatches: [string, string, string];
   /** @deprecated 使用 default。 */
   isDefault?: boolean;
   /** @deprecated 使用 enabled。 */
