@@ -270,6 +270,11 @@ export interface PublishedPageContract {
   settings: PageSettings;
   categories: Category[];
   subdomain?: string | null;
+  /**
+   * 发布时锁定的主题版本。快照据此取样式，因此主题后续更新或下架都不会
+   * 改变已发布页面。迁移前发布的旧快照没有这个字段，读取时回落默认主题。
+   */
+  themeVersionId?: string;
   publishedAt: string;
   etag: string;
 }
