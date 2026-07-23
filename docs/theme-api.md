@@ -36,6 +36,7 @@
 | `search-input` | 搜索输入框 | stable |
 | `category-tablist` | 分类标签栏容器 | stable |
 | `category-tab` | 单个分类标签 | stable |
+| `category-indicator` | 标签栏下方的动画下划线指示器 | stable |
 | `site-grid` | 站点卡片网格容器（错峰入场动画的父级） | stable |
 | `site-card` | 站点卡片 | stable |
 | `site-card-title` | 卡片标题 | stable |
@@ -77,7 +78,8 @@
 ## 3. 资产
 
 - 包内资产放 `assets/`，在 CSS 中用 `url("asset:fonts/x.woff2")` 引用，编译器会重写成同源路径。
-- 允许的类型：`woff2`、`png`、`jpeg`、`webp`。**SVG 一律拒绝**，包括 `data:image/svg+xml`。
+- 允许的**资产文件**类型：`woff2`、`png`、`jpeg`、`webp`。**`.svg` 文件一律拒绝**——它可被直接导航，那是文档上下文，脚本会执行。
+- **CSS 里的 `data:image/svg+xml` 允许**（≤ 8 KB）。`url()` 中的 SVG 处于图片上下文，浏览器以 secure static mode 加载：脚本不执行、外部资源不加载。仍会额外净化，含 `<script>`、`<foreignObject>`、`<use>`、`<image>`、事件处理器或 `javascript:` 的一律拒绝。噪点、纹理这类需求用它。
 - 单个资产 ≤ 512 KB，整包 ≤ 4 MB，CSS ≤ 256 KB。中文字体请自行子集化。
 
 ## 4. 迁移映射（内置主题）
@@ -108,16 +110,19 @@
 
 | 主题 | 变更 | 类型 | 说明 |
 |---|---|---|---|
-| `slate` / `slate-dark` | SVG `feTurbulence` 噪点 → 三层重复渐变叠加的纯 CSS 颗粒 | 实现方式变更 | SVG 一律拒绝。质感近似但不等价：CSS 颗粒是规则网格，缺少真随机噪声的无序感 |
-| `slate` / `slate-dark` | 壁纸态下 `.site-card-domain` 的墨色规则 | 移除 | 卡片域名行无对应钩子，回落全局样式 |
-| `slate` / `slate-dark` | `.wallpaper-ink-scope` 系列重复规则 | 移除 | 内部类名，无钩子 |
-| `sakura` | `.material-card::after { content: '✿' }` 悬停花瓣（含旋转/放大过渡） | 移除 | `content` 只允许 `""`/`none`，且本次不引入资产 |
-| `sakura` | `footer a:hover` | 移除 | 页脚在主题根之外 |
-| `sakura` | `[role="tablist"] + div` / `~ div[class*="relative"]` 的 `display:none` | 移除 | **本次唯一有功能性后果的降级**：sakura 下原本被隐藏的分类栏后续元素现在会显示 |
+| `sakura` | `footer a:hover` | 移除 | 页脚是受保护区域，位于主题根之外，主题不再能触达 |
 | `sakura` | `.rise-in` 入场动画 | 移除 | 宿主通用动画，不属主题契约 |
 | `sakura` | `@keyframes gentleFloat` 原本复用宿主全局定义 | 实现方式变更 | 编译器会把引用重写为 `sakura-gentleFloat`，故包内自带同名 keyframes，行为等价 |
-| `noir` / `orbit` / `terminal` | 仅选择器改名 | 无降级 | 视觉不变 |
+| `slate` / `slate-dark` | 壁纸态下 `.site-card-domain` 与 `.wallpaper-ink-scope` 的规则 | 移除 | 内部类名，无对应钩子 |
 | 全部 | `body` / `html` 选择器 | 实现方式变更 | 改为 `[data-nx="page-root"]`，配合宿主 wrapper 的 `contain: paint` |
+
+初版迁移时还有三处降级，后来通过放宽规则或补钩子**已全部恢复**，保留在此作为规则演进的记录：
+
+| 主题 | 初版降级 | 恢复方式 |
+|---|---|---|
+| `sakura` | `content: '✿'` 悬停花瓣被删 | `content` 规则从「只允许空」放宽为「符号/标点类目且 ≤ 2 字符」——限制的目标是不能成词，而不是不能有内容 |
+| `slate` / `slate-dark` | SVG `feTurbulence` 噪点退化为 CSS 渐变 | 区分图片上下文与文档上下文：CSS 里的 `data:image/svg+xml` 放行并净化，`.svg` 资产文件仍拒绝 |
+| `sakura` | 隐藏分类栏下划线指示器的规则被删 | 补 `category-indicator` 钩子——这是正当的主题需求（胶囊标签不需要下划线），缺的只是一个钩子 |
 
 ## 5. 被拒绝的写法
 
@@ -130,7 +135,7 @@
 - 主题根之后使用 `+` / `~`，或选择器 subject 落在根外
 - 类选择器与 `[class*="…"]` 属性匹配
 - CSS nesting（`&`、`@nest`）与命名空间选择器（`ns|el`）
-- 非空伪元素 `content`
+- 伪元素 `content` 含字母或文字，或超过 2 个字符（装饰性符号与标点可用，如 `✿ · → ★`）
 - `behavior`、`-moz-binding`、`expression()`
 
 标识符在比较前会先解码 CSS 转义并做 ASCII 小写规范化——`h\74ml` 等同于 `html`，不能借此绕过。

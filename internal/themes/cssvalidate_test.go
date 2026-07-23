@@ -60,8 +60,11 @@ func TestValidateCSSRejects(t *testing.T) {
 		{"未登记的 data-nx 钩子", `[data-nx="admin-panel"] { display: none; }`, "admin-panel"},
 		{"命名空间选择器", `*|body { background: red; }`, "命名空间"},
 		{"CSS nesting", `[data-nx="clock"] { & + footer { display: none; } }`, "嵌套"},
-		{"非空 content", `[data-nx="page-root"]::after { content: "请登录"; }`, "content"},
-		{"装饰字符 content", `[data-nx="site-card"]::after { content: "✿"; }`, "content"},
+		{"成词的 content", `[data-nx="page-root"]::after { content: "请登录"; }`, "content"},
+		{"英文成词 content", `[data-nx="page-root"]::after { content: "Login"; }`, "content"},
+		{"假名成词 content", `[data-nx="page-root"]::after { content: "ログイン"; }`, "content"},
+		{"符号但超长 content", `[data-nx="site-card"]::after { content: "✿✿✿"; }`, "content"},
+		{"符号夹字母 content", `[data-nx="site-card"]::after { content: "✿a"; }`, "content"},
 		{"attr() content", `[data-nx="page-root"]::after { content: attr(href); }`, "content"},
 		{"fixed 缺 pointer-events", `[data-nx="page-root"]::after { content: ""; position: fixed; inset: 0; }`, "pointer-events"},
 		{"z-index 越界", `[data-nx="navbar"] { z-index: 9999; }`, "z-index"},
@@ -86,7 +89,6 @@ func TestValidateCSSRejects(t *testing.T) {
 			 [data-nx="clock"] { font: bold 12px "Sample Sans"; }`,
 			"font",
 		},
-		{"data:image/svg+xml", `[data-nx="clock"] { background-image: url("data:image/svg+xml,%3Csvg%3E%3C/svg%3E"); }`, "svg"},
 		{"超大 data: URI", `[data-nx="clock"] { background-image: url("data:image/png;base64,` + strings.Repeat("A", 9000) + `"); }`, "data:"},
 	}
 	for _, tc := range tests {
@@ -126,5 +128,62 @@ func TestDecodeCSSIdent(t *testing.T) {
 		if got := decodeCSSIdent(tc.raw); got != tc.want {
 			t.Fatalf("decodeCSSIdent(%q) = %q, want %q", tc.raw, got, tc.want)
 		}
+	}
+}
+
+// content 的规则目标是「不能成词」，而不是「不能有内容」。
+//
+// 伪元素 content 会继承宿主的点击行为，但主题控制不了 href——URL 由页面
+// 主人配置。因此真正的残余风险是视觉欺骗，而任何语言的可读短语都需要
+// 字母或表意文字。限定在符号/标点类目且长度 ≤ 2，就堵死了成词，同时把
+// 作者从「为一个字符打包一张 PNG」里解放出来。
+func TestValidateCSSAllowsDecorativeContent(t *testing.T) {
+	for _, glyph := range []string{"", "✿", "·", "→", "★", "✕", "◆", "»", "✿·"} {
+		t.Run(glyph, func(t *testing.T) {
+			src := []byte(`[data-nx="site-card"]::after { content: "` + glyph + `"; }`)
+			if err := ValidateCSS(src, sampleFonts); err != nil {
+				t.Fatalf("ValidateCSS(content: %q) error = %v, want nil", glyph, err)
+			}
+		})
+	}
+}
+
+// CSS url() 里的 SVG 处于图片上下文，浏览器以 secure static mode 加载：
+// 脚本不执行、外部资源不加载。会执行脚本的是把 SVG 当文档加载（直接导航、
+// iframe、内联），那条路对应的是资产文件，仍然一律拒绝。
+func TestValidateCSSAllowsInlineSVGDataURI(t *testing.T) {
+	noise := `[data-nx="page-root"]::after {
+		content: "";
+		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='0.9'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+	}`
+	if err := ValidateCSS([]byte(noise), sampleFonts); err != nil {
+		t.Fatalf("ValidateCSS() error = %v, want nil", err)
+	}
+}
+
+func TestValidateCSSRejectsDangerousSVGDataURI(t *testing.T) {
+	tests := []struct {
+		name    string
+		svg     string
+		wantMsg string
+	}{
+		{"内联脚本", `%3Csvg%3E%3Cscript%3Ealert(1)%3C/script%3E%3C/svg%3E`, "script"},
+		{"foreignObject", `%3Csvg%3E%3CforeignObject%3E%3C/foreignObject%3E%3C/svg%3E`, "foreignobject"},
+		{"外部 use", `%3Csvg%3E%3Cuse href='https://evil.example/x'/%3E%3C/svg%3E`, "use"},
+		{"外部 image", `%3Csvg%3E%3Cimage href='https://evil.example/x.png'/%3E%3C/svg%3E`, "image"},
+		{"事件处理器", `%3Csvg onload='alert(1)'%3E%3C/svg%3E`, "on"},
+		{"未编码的脚本", `<svg><script>alert(1)</script></svg>`, "script"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			src := []byte(`[data-nx="clock"] { background-image: url("data:image/svg+xml,` + tc.svg + `"); }`)
+			err := ValidateCSS(src, sampleFonts)
+			if err == nil {
+				t.Fatal("ValidateCSS() expected error, got nil")
+			}
+			if !strings.Contains(strings.ToLower(err.Error()), tc.wantMsg) {
+				t.Fatalf("error = %q, want to mention %q", err, tc.wantMsg)
+			}
+		})
 	}
 }

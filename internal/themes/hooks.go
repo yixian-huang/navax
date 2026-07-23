@@ -21,8 +21,9 @@ const ProtectedAttr = "data-nx-protected"
 // 用到的选择器反推（见 docs/theme-api.md 的迁移映射）。
 // 新增前先更新 docs/theme-api.md。
 var allowedHooks = []string{
-	"category-tab",     // [role="tablist"] button
-	"category-tablist", // [role="tablist"]
+	"category-indicator", // 标签栏下方的动画下划线指示器
+	"category-tab",       // [role="tablist"] button
+	"category-tablist",   // [role="tablist"]
 	"clock",
 	"divider",          // .hairline
 	"divider-gradient", // .hairline-gradient

@@ -3,6 +3,7 @@ package themes
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 	"unicode"
@@ -433,23 +434,132 @@ func validateDataURI(property, value string) error {
 		}
 	}
 	if strings.HasPrefix(lower, "data:image/svg") {
-		return invalidCSS("属性 %s 不允许 svg —— 与资产层拒绝 SVG 保持一致", property)
+		return validateInlineSVG(property, value)
 	}
-	return invalidCSS("属性 %s 的 data: URI 只允许 image/png、image/jpeg、image/webp", property)
+	return invalidCSS("属性 %s 的 data: URI 只允许 image/png、image/jpeg、image/webp、image/svg+xml", property)
 }
 
-func validateContent(values []css.Token) error {
-	meaningful := meaningfulTokens(values)
-	if len(meaningful) == 1 {
-		token := meaningful[0]
-		if token.TokenType == css.StringToken && unquote(string(token.Data)) == "" {
-			return nil
-		}
-		if token.TokenType == css.IdentToken && decodeCSSIdent(string(token.Data)) == "none" {
-			return nil
+// svgDangerousPatterns 是内联 SVG 的拒绝特征。
+//
+// CSS url() 里的 SVG 处于图片上下文，浏览器以 secure static mode 加载：
+// 脚本不执行、外部资源不加载。所以这一层是纵深防御而非唯一防线——真正
+// 危险的是把 SVG 当**文档**加载（直接导航、iframe、内联），那条路对应的
+// 是资产文件，仍然一律拒绝（见 ValidateAsset）。
+var svgDangerousPatterns = []struct {
+	needle string
+	reason string
+}{
+	{"<script", "内联 script"},
+	{"<foreignobject", "foreignObject（可嵌入 HTML）"},
+	{"<use", "use（可引用外部文档）"},
+	{"<image", "image（可引用外部资源）"},
+	{"<iframe", "iframe"},
+	{"<!entity", "实体声明（可用于实体扩展攻击）"},
+	{"<!doctype", "DOCTYPE 声明"},
+	{"javascript:", "javascript: 伪协议"},
+}
+
+// validateInlineSVG 净化内联 SVG。先做百分号解码，否则 %3Cscript%3E
+// 这类编码写法会从字面匹配下溜过去。
+func validateInlineSVG(property, value string) error {
+	payload := value
+	if index := strings.Index(payload, ","); index >= 0 {
+		payload = payload[index+1:]
+	}
+	decoded, err := url.QueryUnescape(payload)
+	if err != nil {
+		// 解不开就按原文查，宁可误拒也不放过。
+		decoded = payload
+	}
+	lowered := strings.ToLower(decoded)
+
+	for _, pattern := range svgDangerousPatterns {
+		if strings.Contains(lowered, pattern.needle) {
+			return invalidCSS("属性 %s 的内联 svg 含 %s，不允许", property, pattern.reason)
 		}
 	}
-	return invalidCSS(`伪元素 content 只允许 "" 与 none —— 非空 content 是文本注入与钓鱼文案的通道`)
+	// 事件处理器属性：on 开头且后跟等号的写法一律拒绝。
+	for index := 0; index+2 < len(lowered); index++ {
+		if lowered[index:index+2] != "on" {
+			continue
+		}
+		if index > 0 && (isASCIILetter(lowered[index-1]) || lowered[index-1] == '-') {
+			continue
+		}
+		rest := lowered[index+2:]
+		end := 0
+		for end < len(rest) && isASCIILetter(rest[end]) {
+			end++
+		}
+		if end > 0 && strings.HasPrefix(strings.TrimSpace(rest[end:]), "=") {
+			return invalidCSS("属性 %s 的内联 svg 含事件处理器 on%s，不允许", property, rest[:end])
+		}
+	}
+	if !strings.Contains(lowered, "<svg") {
+		return invalidCSS("属性 %s 的 data:image/svg+xml 内容不是 svg", property)
+	}
+	return nil
+}
+
+func isASCIILetter(c byte) bool {
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+}
+
+// MaxDecorativeContentRunes 是装饰性 content 允许的码位上限。
+const MaxDecorativeContentRunes = 2
+
+// validateContent 的目标是「不能成词」，而不是「不能有内容」。
+//
+// 伪元素 content 会继承宿主的点击行为，但主题控制不了 href——URL 由页面
+// 主人配置，所以「主题作者构造钓鱼链接」这条路走不通。真正的残余风险是
+// 视觉欺骗，而任何语言的可读短语都需要字母或表意文字。因此规则是：只允许
+// 符号与标点类目、且长度 ≤ 2。`✿ · → ★` 可用，`请登录` / `Login` /
+// `ログイン` 一个都写不出来。
+//
+// 代价是作者不必再为一个装饰字符打包一张 PNG。
+func validateContent(values []css.Token) error {
+	meaningful := meaningfulTokens(values)
+	if len(meaningful) != 1 {
+		return invalidCSS(`伪元素 content 只允许 none 或单个字符串字面量`)
+	}
+	token := meaningful[0]
+	if token.TokenType == css.IdentToken && decodeCSSIdent(string(token.Data)) == "none" {
+		return nil
+	}
+	if token.TokenType != css.StringToken {
+		return invalidCSS(`伪元素 content 只允许 none 或字符串字面量（attr()、counter() 等一律拒绝）`)
+	}
+	return validateDecorativeText(unquote(string(token.Data)))
+}
+
+func validateDecorativeText(text string) error {
+	if text == "" {
+		return nil
+	}
+	count := 0
+	for _, r := range text {
+		count++
+		if count > MaxDecorativeContentRunes {
+			return invalidCSS("伪元素 content 最多 %d 个字符 —— 更长的文本可用于构造误导文案", MaxDecorativeContentRunes)
+		}
+		if !isDecorativeRune(r) {
+			return invalidCSS("伪元素 content 只允许符号与标点（如 ✿ · → ★），不允许字母或文字 %q —— 否则可以构造误导文案", string(r))
+		}
+	}
+	return nil
+}
+
+// isDecorativeRune 判断码位是否属于「装饰」范畴：符号或标点，且不是任何
+// 文字系统的字符。变体选择符与零宽连接符一并放行，否则 emoji 序列会被
+// 长度规则误伤。
+func isDecorativeRune(r rune) bool {
+	switch {
+	case unicode.IsLetter(r), unicode.IsDigit(r), unicode.IsSpace(r):
+		return false
+	case r == 0x200D, r == 0xFE0E, r == 0xFE0F:
+		return true
+	}
+	return unicode.IsSymbol(r) || unicode.IsPunct(r)
 }
 
 func validateZIndex(values []css.Token) error {
