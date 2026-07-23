@@ -11,6 +11,7 @@ import (
 	"github.com/yixian-huang/navax/internal/database"
 	"github.com/yixian-huang/navax/internal/navigation"
 	"github.com/yixian-huang/navax/internal/security"
+	themespkg "github.com/yixian-huang/navax/internal/themes"
 )
 
 func newTestService(t *testing.T) (*Service, *sql.DB) {
@@ -46,28 +47,38 @@ func TestConfigReadsSeededSettings(t *testing.T) {
 
 func TestThemesReturnsEnabledSeeded(t *testing.T) {
 	service, db := newTestService(t)
+	// 主题只有编译出当前版本后才可用——没有版本就没有样式可供应，
+	// 列进来只会让用户选中一个取不到 CSS 的主题。
+	if err := themespkg.SyncBuiltin(context.Background(), themespkg.NewStore(db), time.Now().UTC()); err != nil {
+		t.Fatalf("SyncBuiltin() error = %v", err)
+	}
 
-	themes, err := service.Themes(context.Background())
+	list, err := service.Themes(context.Background(), "")
 	if err != nil {
 		t.Fatalf("Themes() error = %v", err)
 	}
-	if len(themes) == 0 {
+	if len(list) == 0 {
 		t.Fatal("Themes() 应返回已启用的种子主题")
 	}
-	if !themes[0].Default {
-		t.Fatalf("默认主题应排在首位, got %+v", themes[0])
+	if !list[0].Default {
+		t.Fatalf("默认主题应排在首位, got %+v", list[0])
+	}
+	for _, theme := range list {
+		if theme.CurrentVersionID == "" || theme.CSSHref == "" {
+			t.Fatalf("主题缺少版本或样式地址: %+v", theme)
+		}
 	}
 
 	// 停用一个主题后不应再出现。
 	if _, err := db.Exec("UPDATE themes SET enabled = 0 WHERE id = 'noir'"); err != nil {
 		t.Fatal(err)
 	}
-	after, err := service.Themes(context.Background())
+	after, err := service.Themes(context.Background(), "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(after) != len(themes)-1 {
-		t.Fatalf("停用后主题数应减一: before=%d after=%d", len(themes), len(after))
+	if len(after) != len(list)-1 {
+		t.Fatalf("停用后主题数应减一: before=%d after=%d", len(list), len(after))
 	}
 	for _, theme := range after {
 		if theme.ID == "noir" {

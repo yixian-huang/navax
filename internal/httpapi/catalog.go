@@ -31,7 +31,13 @@ func (h *CatalogHandler) config(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *CatalogHandler) themes(w http.ResponseWriter, r *http.Request) {
-	themes, err := h.service.Themes(r.Context())
+	// 端点本身不要求登录，但如果请求恰好带着有效会话，就把该用户能用的
+	// 私有主题一并返回。谓词与发布共用，因此列表与发布结果必然一致。
+	actorID := ""
+	if session, ok := SessionFromContext(r.Context()); ok {
+		actorID = session.User.ID
+	}
+	themes, err := h.service.Themes(r.Context(), actorID)
 	if err != nil {
 		WriteError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "读取主题失败", nil)
 		return

@@ -3,12 +3,14 @@ package analytics
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"testing"
 	"time"
 
 	"github.com/yixian-huang/navax/internal/auth"
 	"github.com/yixian-huang/navax/internal/database"
 	"github.com/yixian-huang/navax/internal/navigation"
+	"github.com/yixian-huang/navax/internal/themes"
 )
 
 func TestBrowserType(t *testing.T) {
@@ -59,7 +61,16 @@ func TestRecordAndReadPrivacyPreservingAnalytics(t *testing.T) {
 		t.Fatal(err)
 	}
 	actor := navigation.Actor{UserID: session.User.ID, Username: session.User.Username, Role: session.User.Role}
-	navigationService := navigation.NewService(navigation.NewSQLStore(db))
+	// 这条链路要发布页面，因此需要主题版本解析；没有它发布会明确报错。
+	themeStore := themes.NewStore(db)
+	if err := themes.SyncBuiltin(context.Background(), themeStore, time.Now().UTC()); err != nil {
+		t.Fatalf("SyncBuiltin() error = %v", err)
+	}
+	navigationStore := navigation.NewSQLStore(db)
+	navigationStore.SetThemeVersionResolver(func(ctx context.Context, tx *sql.Tx, themeID, actorID string) (string, error) {
+		return themes.ResolveEligibleVersion(ctx, tx, themeID, actorID)
+	})
+	navigationService := navigation.NewService(navigationStore)
 	page, err := navigationService.CurrentPage(ctx, actor, navigation.PageKindPersonal)
 	if err != nil {
 		t.Fatal(err)

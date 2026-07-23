@@ -96,6 +96,7 @@ type InvitationCreated struct {
 type Theme struct {
 	ID          string
 	Name        string
+	Subtitle    string
 	Version     string
 	Author      string
 	Description string
@@ -103,6 +104,14 @@ type Theme struct {
 	Preview     string
 	Enabled     bool
 	Default     bool
+	// 主题规范 v1 字段。CurrentVersionID 由编译产物的内容哈希派生，
+	// CSSHref 据它拼出，两者共同让前端拿到可长缓存的样式表地址。
+	CurrentVersionID string
+	CSSHref          string
+	Tier             int
+	Scope            string
+	Vibe             string
+	Swatches         [3]string
 }
 
 type ThemePatch struct {

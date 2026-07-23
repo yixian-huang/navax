@@ -17,9 +17,24 @@ import (
 
 type SQLStore struct {
 	db *sql.DB
+	// resolveThemeVersion 在发布事务内把 themeId 解析成锁定的主题版本。
+	// 用函数类型注入而不是直接依赖 themes 包，是为了让本包保持对主题实现
+	// 的无知；run.go 负责接线。
+	resolveThemeVersion ThemeVersionResolver
 }
 
+// ThemeVersionResolver 在给定事务上解析出某主体可用的主题版本。
+// 必须在发布事务内执行：解析与写快照之间若隔着事务边界，主题在这个空档
+// 被撤销就会留下一条指向已撤销版本的快照。
+type ThemeVersionResolver func(ctx context.Context, tx *sql.Tx, themeID, actorID string) (string, error)
+
 func NewSQLStore(db *sql.DB) *SQLStore { return &SQLStore{db: db} }
+
+// SetThemeVersionResolver 接线主题解析。未设置时发布会明确报错，而不是
+// 悄悄写出一条没有主题版本的快照。
+func (s *SQLStore) SetThemeVersionResolver(resolve ThemeVersionResolver) {
+	s.resolveThemeVersion = resolve
+}
 
 type queryer interface {
 	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
@@ -567,16 +582,26 @@ func (s *SQLStore) Publish(ctx context.Context, actor Actor, pageID string, expe
 		if err := attachApprovedSubdomain(ctx, tx, page, &published); err != nil {
 			return err
 		}
+		if s.resolveThemeVersion == nil {
+			return fmt.Errorf("navigation: theme version resolver is not wired")
+		}
+		// 锁定当时的主题版本。之后主题更新、下架或被别人删除，这份快照
+		// 都指向同一份编译产物，公开页不会因此变样。
+		themeVersionID, err := s.resolveThemeVersion(ctx, tx, page.Settings.Appearance.ThemeID, actor.UserID)
+		if err != nil {
+			return err
+		}
+		published.ThemeVersionID = themeVersionID
 		published.ETag = makeETag(published)
 		payload, err := json.Marshal(published)
 		if err != nil {
 			return fmt.Errorf("encode published navigation snapshot: %w", err)
 		}
 		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO published_snapshots(id, page_id, draft_revision, slug, visibility, payload_json, etag, published_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			INSERT INTO published_snapshots(id, page_id, draft_revision, slug, visibility, payload_json, etag, published_at, theme_version_id)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			snapshotID, pageID, page.DraftRevision, page.Publication.Slug, page.Publication.Visibility,
-			string(payload), published.ETag, dbTime(now),
+			string(payload), published.ETag, dbTime(now), themeVersionID,
 		); err != nil {
 			return mapWriteError(err)
 		}
