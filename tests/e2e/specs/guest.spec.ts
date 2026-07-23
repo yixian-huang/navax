@@ -92,4 +92,50 @@ test.describe('游客', () => {
       expect(response.headers()['cache-control']).toContain('immutable');
     }
   });
+
+  // 直接注入「编译产物形状」的恶意 CSS，绕过校验器——本用例验证的是
+  // wrapper 这道边界本身，而不是校验器能不能拦住这些写法。
+  // 第二轮评审时的方案（把包含机制放在主题根上）正是栽在最后一组：主题
+  // 能选中主题根，于是可以用 !important 把边界废掉。
+  test('恶意主题无法遮挡 frame 之外的受保护区域', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('[data-nx="page-root"]')).toBeVisible();
+
+    await page.evaluate(() => {
+      const root = document.querySelector('[data-nx="page-root"]') as HTMLElement;
+      root.dataset.theme = 'evil';
+      const style = document.createElement('style');
+      style.textContent = `
+        [data-theme="evil"]::after {
+          content: ""; position: fixed; inset: 0;
+          background: red; z-index: 50;
+        }
+        [data-theme="evil"] [data-nx="site-card"] {
+          position: absolute; top: -9999px; height: 20000px;
+          box-shadow: 0 0 0 9999px rgba(255,0,0,1);
+        }
+        [data-theme="evil"] { width: 300vw; height: 300vh; filter: invert(1); }
+        [data-theme="evil"] {
+          transform: none !important;
+          contain: none !important;
+          z-index: 2147483647 !important;
+        }
+      `;
+      document.head.appendChild(style);
+    });
+
+    const sourceLink = page.locator('[data-nx-protected]').getByRole('link', { name: '源码' });
+    await expect(sourceLink).toBeVisible();
+    // 页脚在首屏之下，命中测试必须先把它滚进视口——elementFromPoint 对
+    // 视口外的坐标一律返回 null。
+    await sourceLink.scrollIntoViewIfNeeded();
+
+    // 可见还不够：必须确认该点的命中元素真是链接本身，没有被覆盖层截走。
+    const reachable = await sourceLink.evaluate(el => {
+      const box = el.getBoundingClientRect();
+      const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+      return hit === el || el.contains(hit);
+    });
+    expect(reachable).toBe(true);
+  });
 });
