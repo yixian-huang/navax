@@ -136,14 +136,34 @@ export default function PublicShell({
       )}
 
       {/*
+        Host frame — the theme isolation boundary (docs/theme-api.md §1).
+
+        `contain: paint` makes this element a containing block for positioned
+        descendants, a stacking context, AND a paint clip in one property.
+        Themes cannot select it (it is not a registered data-nx hook and every
+        theme selector is scoped under [data-theme=…]), so the boundary cannot
+        be disabled by a theme rule.
+
+        Consequence: fixed descendants resolve against this box, so the navbar
+        below is `sticky`, not `fixed` — a fixed navbar would stop pinning.
+      */}
+      <div data-nx-frame className="relative flex-1 flex flex-col" style={{ contain: 'paint' }}>
+        <div
+          data-nx="page-root"
+          className="relative flex-1 flex flex-col"
+          data-wallpaper={hasBackground ? 'true' : undefined}
+          data-wallpaper-tone={hasBackground ? tone : undefined}
+        >
+      {/*
         Navbar transparency strategy:
         - No wallpaper: transparent → solid glass on scroll (unchanged).
         - Wallpaper: stay open over the photo; use type contrast, not a frosted bar.
           Only after scroll, a *light* frost appears so content doesn't collide.
       */}
       <header
+        data-nx="navbar"
         className={cn(
-          'fixed top-0 left-0 right-0 z-50 transition-all duration-300',
+          'sticky top-0 left-0 right-0 z-50 transition-all duration-300',
           hasBackground
             ? (scrolled
               ? 'bg-background-50/40 backdrop-blur-md border-b border-background-200/25'
@@ -160,6 +180,7 @@ export default function PublicShell({
         )}>
           <Link
             to="/"
+            data-nx="nav-brand"
             className="group flex items-center rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-400/50"
             aria-label="nav.ax 首页"
           >
@@ -169,6 +190,7 @@ export default function PublicShell({
           <div className="flex items-center gap-1.5">
             <Link
               to="/discover"
+              data-nx="nav-link"
               className={cn(
                 'h-9 px-3 flex items-center text-xs transition-colors duration-200 whitespace-nowrap',
                 hasBackground
@@ -180,6 +202,7 @@ export default function PublicShell({
             </Link>
             <Link
               to="/login"
+              data-nx="nav-link"
               className={cn(
                 'h-9 px-3 flex items-center text-xs transition-colors duration-200 whitespace-nowrap',
                 hasBackground
@@ -193,14 +216,19 @@ export default function PublicShell({
         </nav>
       </header>
 
-      {/* Spacer to compensate for fixed navbar */}
-      <div className="h-16 flex-shrink-0 relative z-10" />
-
       <main className={cn('flex-1 relative z-10', hasBackground && 'wallpaper-ink-scope')}>
         {children}
       </main>
+        </div>
+      </div>
 
-      <footer className="mt-auto relative z-10">
+      {/*
+        Protected region — AGPL §13 source link must always be reachable.
+        It lives OUTSIDE the host frame, so no theme can select it (rules are
+        scoped under the theme root) and none can paint over it (paint
+        containment clips theme drawing to the frame box).
+      */}
+      <footer data-nx-protected className="mt-auto relative z-10">
         <div className="mx-auto max-w-4xl px-6 md:px-8 py-8">
           {/*
             Wallpaper footer: no frost, no glowing text-shadow.

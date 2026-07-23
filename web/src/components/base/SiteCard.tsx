@@ -159,6 +159,9 @@ function CardWrapper({
         onKeyDown={handleKeyDown}
         onContextMenu={onContextMenu}
         tabIndex={0}
+        // Stable theme hook (docs/theme-api.md) — themes select this, never
+        // the internal class names, which are free to change.
+        data-nx="site-card"
         className={cn(
           'group cursor-pointer min-w-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-400/50',
           className,
@@ -185,11 +188,11 @@ export default function SiteCard({ site, density, onOpen, onEdit, onDelete, sear
         {...shared}
         className="site-card-list flex items-center gap-2.5 px-2.5 py-2 rounded-lg transition-colors duration-200 focus-visible:outline-offset-[-2px] hover:bg-background-100/60"
       >
-        <span className="site-card-favicon flex h-8 w-8 flex-shrink-0 items-center justify-center">
+        <span data-nx="site-card-icon" className="site-card-favicon flex h-8 w-8 flex-shrink-0 items-center justify-center">
           <SiteIcon site={site} size={18} />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="site-card-title block text-sm font-medium text-foreground-800 truncate group-hover:text-accent-500 transition-colors duration-200">
+          <span data-nx="site-card-title" className="site-card-title block text-sm font-medium text-foreground-800 truncate group-hover:text-accent-500 transition-colors duration-200">
             <HighlightText text={site.title} query={q} />
           </span>
           <span className="site-card-list-domain block text-[11px] truncate max-w-full text-foreground-400 font-mono">
@@ -205,7 +208,7 @@ export default function SiteCard({ site, density, onOpen, onEdit, onDelete, sear
     return (
       <CardWrapper {...shared} className="material-card flex flex-col items-center gap-1.5 p-2 min-h-[3.75rem]">
         <SiteIcon site={site} size={22} />
-        <span className="site-card-title text-[10px] font-medium text-foreground-700 text-center line-clamp-2 w-full leading-tight group-hover:text-accent-500 transition-colors duration-200">
+        <span data-nx="site-card-title" className="site-card-title text-[10px] font-medium text-foreground-700 text-center line-clamp-2 w-full leading-tight group-hover:text-accent-500 transition-colors duration-200">
           <HighlightText text={site.title} query={q} />
         </span>
       </CardWrapper>
@@ -218,11 +221,11 @@ export default function SiteCard({ site, density, onOpen, onEdit, onDelete, sear
       {...shared}
       className="material-card site-card-comfortable flex items-center gap-2.5 px-2.5 py-2 min-h-[3.25rem]"
     >
-      <span className="site-card-favicon flex h-7 w-7 flex-shrink-0 items-center justify-center">
+      <span data-nx="site-card-icon" className="site-card-favicon flex h-7 w-7 flex-shrink-0 items-center justify-center">
         <SiteIcon site={site} size={28} />
       </span>
       <div className="min-w-0 flex-1 flex items-center gap-1.5">
-        <h3 className="site-card-title min-w-0 flex-1 text-[13px] font-semibold text-foreground-900 line-clamp-1 group-hover:text-accent-500 transition-colors duration-200">
+        <h3 data-nx="site-card-title" className="site-card-title min-w-0 flex-1 text-[13px] font-semibold text-foreground-900 line-clamp-1 group-hover:text-accent-500 transition-colors duration-200">
           <HighlightText text={site.title} query={q} />
         </h3>
         <i className="ri-arrow-right-up-line text-sm text-foreground-300 opacity-0 -translate-x-0.5 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300 flex-shrink-0" />

@@ -477,6 +477,21 @@ body {
   50% { transform: translateY(-2px); }
 }
 
+/*
+ * ---- Protected region backstop (AGPL §13) ----
+ * Third-party themes cannot reach this element: it sits outside the host
+ * frame and every theme selector is scoped under the theme root. This rule
+ * is the third layer of defence, kept deliberately blunt so that a future
+ * refactor which accidentally moves the footer inside the frame still fails
+ * safe rather than silently hiding the source link.
+ */
+[data-nx-protected] {
+  display: revert !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
 /* ---- Subtle hairline divider ---- */
 .hairline {
   height: 1px;

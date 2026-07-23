@@ -179,6 +179,7 @@ export default function SearchBar({
 
   return (
     <form
+      data-nx="search-box"
       onSubmit={handleSubmit}
       // When open, lift above following page sections. Parent wrappers that use
       // rise-in (transform) also need their own z-index — see SearchSection.
@@ -207,6 +208,7 @@ export default function SearchBar({
           </div>
 
           <input
+            data-nx="search-input"
             type="text"
             value={value}
             onChange={e => onChange(e.target.value)}
