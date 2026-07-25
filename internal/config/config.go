@@ -38,6 +38,12 @@ type Config struct {
 	// TrustedProxies lists CIDRs/IPs of reverse proxies whose X-Forwarded-For
 	// may be trusted to derive the real client IP. Empty ⇒ trust none (use RemoteAddr).
 	TrustedProxies []netip.Prefix
+	// ThemePrivateQuota 是单个用户可持有的私有主题上限（含已卸载但仍被历史发布引用的）。
+	ThemePrivateQuota int
+	// ThemeImportHosts 是 GitHub 导入允许的额外主机名，用于自建 GitHub Enterprise 镜像。
+	ThemeImportHosts []string
+	// GitHubToken 提升导入拉取的匿名限流额度，留空则匿名调用 GitHub API。
+	GitHubToken string
 }
 
 // Load reads and validates environment configuration.
@@ -99,6 +105,18 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	themePrivateQuota, err := envInt("NAVAX_THEME_PRIVATE_QUOTA", 10)
+	if err != nil {
+		return Config{}, err
+	}
+	var themeImportHosts []string
+	if hosts := strings.TrimSpace(os.Getenv("NAVAX_THEME_IMPORT_HOSTS")); hosts != "" {
+		for _, host := range strings.Split(hosts, ",") {
+			if host = strings.TrimSpace(host); host != "" {
+				themeImportHosts = append(themeImportHosts, host)
+			}
+		}
+	}
 
 	return Config{
 		Addr:              env("NAVAX_ADDR", defaultAddr),
@@ -114,7 +132,23 @@ func Load() (Config, error) {
 		UpdateManifestURL: strings.TrimSpace(os.Getenv("NAVAX_UPDATE_MANIFEST_URL")),
 		UpdatePublicKey:   updatePublicKey,
 		TrustedProxies:    trustedProxies,
+		ThemePrivateQuota: themePrivateQuota,
+		ThemeImportHosts:  themeImportHosts,
+		GitHubToken:       strings.TrimSpace(os.Getenv("NAVAX_GITHUB_TOKEN")),
 	}, nil
+}
+
+// envInt 解析一个必须为正整数的环境变量；为空则回落到 fallback。
+func envInt(name string, fallback int) (int, error) {
+	raw := strings.TrimSpace(os.Getenv(name))
+	if raw == "" {
+		return fallback, nil
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value < 1 {
+		return 0, fmt.Errorf("%s 必须是正整数: %q", name, raw)
+	}
+	return value, nil
 }
 
 // parseTrustedProxies accepts a comma-separated list of CIDRs or bare IPs.
