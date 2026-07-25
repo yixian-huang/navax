@@ -5,6 +5,8 @@ import (
 	"archive/zip"
 	"bytes"
 	"compress/gzip"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -158,6 +160,12 @@ func stripTopLevelDir(files map[string][]byte) map[string][]byte {
 		stripped[strings.TrimPrefix(name, prefix)] = data
 	}
 	return stripped
+}
+
+// ContentDigest 给上传内容一个稳定标识,记入 source_ref。
+func ContentDigest(data []byte) string {
+	sum := sha256.Sum256(data)
+	return "sha256:" + hex.EncodeToString(sum[:])[:16]
 }
 
 // PackageFromFiles 从解包结果组装 Package:白名单提取 theme.json / theme.css /
