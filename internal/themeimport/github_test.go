@@ -239,3 +239,32 @@ func TestFetchTarballMapsUpstreamFailures(t *testing.T) {
 		t.Fatalf("err = %v, want ErrUpstream", err)
 	}
 }
+
+// TestResolveHeadSHAResolvesWithoutDownload 确认更新检查只打 commits API,
+// 不触碰 codeload——否则每次检查都要付一次完整 tarball 下载的代价。
+func TestResolveHeadSHAResolvesWithoutDownload(t *testing.T) {
+	transport := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if r.URL.Host != "api.github.com" {
+			t.Fatalf("must only hit api.github.com, got %s", r.URL.Host)
+		}
+		if r.URL.Path != "/repos/alice/lilac/commits/HEAD" {
+			t.Fatalf("path = %s", r.URL.Path)
+		}
+		return respond(200, `{"sha":"`+strings.Repeat("a", 40)+`"}`), nil
+	})
+	client := NewGitHubClient(publicResolver("api.github.com"), transport, nil, "")
+	sha, err := client.ResolveHeadSHA(context.Background(), "https://github.com/alice/lilac", "")
+	if err != nil || sha != strings.Repeat("a", 40) {
+		t.Fatalf("sha = %q, err = %v", sha, err)
+	}
+}
+
+func TestResolveHeadSHARejectsDisallowedHost(t *testing.T) {
+	client := NewGitHubClient(publicResolver(), roundTripFunc(func(*http.Request) (*http.Response, error) {
+		t.Fatal("must not reach network")
+		return nil, nil
+	}), nil, "")
+	if _, err := client.ResolveHeadSHA(context.Background(), "https://evil.example.com/a/b", ""); !errors.Is(err, ErrHostNotAllowed) {
+		t.Fatalf("err = %v, want ErrHostNotAllowed", err)
+	}
+}

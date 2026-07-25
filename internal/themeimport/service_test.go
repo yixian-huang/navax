@@ -10,6 +10,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/yixian-huang/navax/internal/database"
@@ -268,5 +269,70 @@ func TestUninstallDelegates(t *testing.T) {
 	}
 	if _, err := service.Uninstall(context.Background(), "usr_svc_0001", installed.ThemeID); !errors.Is(err, themes.ErrNotFound) {
 		t.Fatalf("second uninstall err = %v", err)
+	}
+}
+
+// TestCheckUpdateDetectsNewCommit 用假 transport 装一个 github 主题
+// (source_ref = 旧 sha),再让 check 返回新 sha,断言 HasUpdate 与两个 sha
+// 都对得上。
+func TestCheckUpdateDetectsNewCommit(t *testing.T) {
+	service, _, _ := newServiceDB(t)
+	tarball := makeSampleTarGz(t)
+	oldSha := strings.Repeat("a", 40)
+	newSha := strings.Repeat("b", 40)
+	service.github = NewGitHubClient(publicResolver("api.github.com", "codeload.github.com"), roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.Host {
+		case "api.github.com":
+			return respond(200, `{"sha":"`+oldSha+`"}`), nil
+		case "codeload.github.com":
+			return &http.Response{StatusCode: 200, Body: io.NopCloser(bytes.NewReader(tarball)), Header: http.Header{}}, nil
+		}
+		t.Fatalf("host %s", r.URL.Host)
+		return nil, nil
+	}), nil, "")
+	installed, err := service.ImportGitHub(context.Background(), "usr_svc_0001", "https://github.com/e2e/lilac", "main")
+	if err != nil {
+		t.Fatalf("ImportGitHub: %v", err)
+	}
+	// 现在让 api 返回新 sha。
+	service.github = NewGitHubClient(publicResolver("api.github.com"), roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		return respond(200, `{"sha":"`+newSha+`"}`), nil
+	}), nil, "")
+	status, err := service.CheckUpdate(context.Background(), "usr_svc_0001", installed.ThemeID)
+	if err != nil {
+		t.Fatalf("CheckUpdate: %v", err)
+	}
+	if status.SourceType != "github" || !status.HasUpdate || status.CurrentSha != oldSha || status.LatestSha != newSha {
+		t.Fatalf("unexpected status: %+v", status)
+	}
+}
+
+// TestCheckUpdateUploadHasNoUpstream 确认 upload 来源没有 upstream 可比对,
+// 直接返回 HasUpdate=false 而不去碰网络。
+func TestCheckUpdateUploadHasNoUpstream(t *testing.T) {
+	service, _, _ := newServiceDB(t)
+	installed, err := service.ImportZip(context.Background(), "usr_svc_0001", sampleZip(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	status, err := service.CheckUpdate(context.Background(), "usr_svc_0001", installed.ThemeID)
+	if err != nil {
+		t.Fatalf("CheckUpdate: %v", err)
+	}
+	if status.SourceType != "upload" || status.HasUpdate {
+		t.Fatalf("upload theme must have no update: %+v", status)
+	}
+}
+
+// TestCheckUpdateForeignThemeNotFound 确认非本人查询别人私有主题的更新状态
+// 统一报 ErrNotFound(防枚举),不泄露主题是否存在。
+func TestCheckUpdateForeignThemeNotFound(t *testing.T) {
+	service, _, _ := newServiceDB(t)
+	installed, err := service.ImportZip(context.Background(), "usr_svc_0001", sampleZip(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.CheckUpdate(context.Background(), "usr_other", installed.ThemeID); !errors.Is(err, themes.ErrNotFound) {
+		t.Fatalf("foreign check want ErrNotFound, got %v", err)
 	}
 }

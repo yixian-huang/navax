@@ -145,6 +145,27 @@ func (c *GitHubClient) FetchTarball(ctx context.Context, rawURL, ref string) (Fe
 	return Fetched{Data: data, SHA: sha, CanonicalURL: canonical}, nil
 }
 
+// ResolveHeadSHA 解析仓库某 ref 的 commit sha,但不下载 tarball——供更新检查用。
+// github.com 走 api.github.com/commits;缺省 ref 用默认分支 HEAD。追加白名单主机
+// 没有等价的 commits API,直接把 ref 原样返回(调用方据此判断是否要求显式 ref)。
+func (c *GitHubClient) ResolveHeadSHA(ctx context.Context, rawURL, ref string) (string, error) {
+	owner, repo, host, err := parseRepoURL(rawURL, c.extraHosts)
+	if err != nil {
+		return "", err
+	}
+	if host != "github.com" {
+		if strings.TrimSpace(ref) == "" {
+			return "", fmt.Errorf("%w: 该主机需要显式 ref", ErrHostNotAllowed)
+		}
+		return ref, nil
+	}
+	refPath := "HEAD"
+	if strings.TrimSpace(ref) != "" {
+		refPath = ref
+	}
+	return c.resolveSHA(ctx, owner, repo, refPath)
+}
+
 func parseRepoURL(rawURL string, extras map[string]bool) (owner, repo, host string, err error) {
 	parsed, parseErr := url.Parse(strings.TrimSpace(rawURL))
 	if parseErr != nil || parsed.Scheme != "https" || parsed.User != nil {

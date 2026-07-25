@@ -96,6 +96,31 @@ func (s *Service) ImportGitHub(ctx context.Context, ownerID, repoURL, ref string
 	return s.install(ctx, ownerID, pkg, "github", fetched.CanonicalURL, fetched.SHA)
 }
 
+// UpdateStatus 是更新检查结果。upload 来源无 upstream,HasUpdate 恒 false。
+type UpdateStatus struct {
+	SourceType string `json:"sourceType"`
+	HasUpdate  bool   `json:"hasUpdate"`
+	CurrentSha string `json:"currentSha"`
+	LatestSha  string `json:"latestSha"`
+}
+
+// CheckUpdate 检查某 owner 的私有主题有无 upstream 新版(只查不升)。
+// 仅 github 来源做网络解析;upload 来源直接返回无更新。
+func (s *Service) CheckUpdate(ctx context.Context, ownerID, themeID string) (UpdateStatus, error) {
+	sourceType, sourceURL, currentRef, err := s.store.PrivateThemeSource(ctx, ownerID, themeID)
+	if err != nil {
+		return UpdateStatus{}, err
+	}
+	if sourceType != "github" {
+		return UpdateStatus{SourceType: sourceType}, nil
+	}
+	latest, err := s.github.ResolveHeadSHA(ctx, sourceURL, "")
+	if err != nil {
+		return UpdateStatus{}, err
+	}
+	return UpdateStatus{SourceType: "github", HasUpdate: latest != currentRef, CurrentSha: currentRef, LatestSha: latest}, nil
+}
+
 // Uninstall 转发到 store(removed=false 表示墓碑)。
 func (s *Service) Uninstall(ctx context.Context, ownerID, themeID string) (bool, error) {
 	return s.store.UninstallPrivate(ctx, ownerID, themeID, s.now().UTC())
