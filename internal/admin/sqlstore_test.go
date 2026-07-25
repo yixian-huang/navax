@@ -385,3 +385,47 @@ func TestUpdateThemeRejectsDisablingDefaultVersion(t *testing.T) {
 		t.Fatalf("err = %v, want ErrDefaultThemeVersion", err)
 	}
 }
+
+// TestUpdateThemeRejectsCombinedPromoteAndDisable 覆盖一次 PATCH 同时把某主题提升为默认、
+// 又停用其当前版本的矛盾组合：如果放行，会让"即将成为默认"的主题失去可用版本
+// （sqlstore 事务内的守卫只读了事务开头的旧 currentDefault，会被绕过）。必须在
+// service 层跨字段前置拒绝，且不产生任何副作用（该主题版本仍 active、未被设为默认）。
+func TestUpdateThemeRejectsCombinedPromoteAndDisable(t *testing.T) {
+	ctx := context.Background()
+	db, err := database.OpenAndMigrate(ctx, database.Config{Path: ":memory:", MaxOpenConns: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	if err := themes.SyncBuiltin(ctx, themes.NewStore(db), time.Now().UTC()); err != nil {
+		t.Fatalf("SyncBuiltin() error = %v", err)
+	}
+	service := NewService(NewSQLStore(db))
+	service.now = func() time.Time { return time.Date(2026, 7, 25, 12, 0, 0, 0, time.UTC) }
+	actor := Actor{ID: "usr_admin_b2a", Username: "admin", Role: "admin", Status: "active"}
+
+	promote, disabled := true, "disabled"
+	// sakura 非默认；同一 patch 想把它提升为默认、又停用它的当前版本——自相矛盾，必须拒绝。
+	if _, err := service.UpdateTheme(ctx, actor, "sakura", ThemePatch{Default: &promote, Status: &disabled, RequestID: "req"}); !errors.Is(err, ErrDefaultThemeVersion) {
+		t.Fatalf("err = %v, want ErrDefaultThemeVersion", err)
+	}
+	// 无副作用：sakura 版本仍 active，未被设为默认；slate 仍是默认主题。
+	var sakuraStatus string
+	var sakuraDefault bool
+	if err := db.QueryRow(`
+		SELECT theme_versions.status, themes.is_default
+		FROM themes JOIN theme_versions ON theme_versions.id = themes.current_version_id
+		WHERE themes.id = 'sakura'`).Scan(&sakuraStatus, &sakuraDefault); err != nil {
+		t.Fatal(err)
+	}
+	if sakuraStatus != "active" || sakuraDefault {
+		t.Fatalf("sakura should be untouched: status=%q is_default=%v", sakuraStatus, sakuraDefault)
+	}
+	var slateDefault bool
+	if err := db.QueryRow(`SELECT is_default FROM themes WHERE id = 'slate'`).Scan(&slateDefault); err != nil {
+		t.Fatal(err)
+	}
+	if !slateDefault {
+		t.Fatal("slate should remain the default theme")
+	}
+}
