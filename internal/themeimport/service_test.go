@@ -121,8 +121,9 @@ func newService(t *testing.T) (*Service, *themes.Store) {
 }
 
 func TestImportZipInstallsPrivateTheme(t *testing.T) {
-	service, store := newService(t)
-	installed, err := service.ImportZip(context.Background(), "usr_svc_0001", sampleZip(t))
+	service, store, db := newServiceDB(t)
+	zipData := sampleZip(t)
+	installed, err := service.ImportZip(context.Background(), "usr_svc_0001", zipData)
 	if err != nil {
 		t.Fatalf("ImportZip() error = %v", err)
 	}
@@ -131,6 +132,22 @@ func TestImportZipInstallsPrivateTheme(t *testing.T) {
 	}
 	if got, err := store.ResolveEligibleVersion(context.Background(), installed.ThemeID, "usr_svc_0001"); err != nil || got != installed.VersionID {
 		t.Fatalf("resolve = %q, %v", got, err)
+	}
+	// source_ref/source_url/source_type 是导入来源的唯一记录,换位传参编译器
+	// 不会报错(两个同型 string 参数),必须靠断言实际落库值来防回归。
+	var sourceRef string
+	if err := db.QueryRow(`SELECT source_ref FROM theme_versions WHERE id = ?`, installed.VersionID).Scan(&sourceRef); err != nil {
+		t.Fatalf("query source_ref: %v", err)
+	}
+	if want := themes.ContentDigest(zipData); sourceRef != want {
+		t.Fatalf("source_ref = %q, want %q", sourceRef, want)
+	}
+	var sourceType, sourceURL string
+	if err := db.QueryRow(`SELECT source_type, source_url FROM themes WHERE id = ?`, installed.ThemeID).Scan(&sourceType, &sourceURL); err != nil {
+		t.Fatalf("query source_type/source_url: %v", err)
+	}
+	if sourceType != "upload" || sourceURL != "" {
+		t.Fatalf("source_type = %q, source_url = %q, want %q, %q", sourceType, sourceURL, "upload", "")
 	}
 }
 
@@ -193,7 +210,7 @@ func TestImportZipClassifiesFailures(t *testing.T) {
 
 func TestImportGitHubUsesFetchedTarball(t *testing.T) {
 	// 假 transport 返回内存 tarball(用 Task 1 的 tar 构造逻辑等价物)。
-	service, _ := newService(t)
+	service, _, db := newServiceDB(t)
 	tarball := makeSampleTarGz(t)
 	sha := "cccccccccccccccccccccccccccccccccccccccc"
 	service.github = NewGitHubClient(publicResolver("codeload.github.com"), roundTripFunc(func(r *http.Request) (*http.Response, error) {
@@ -205,6 +222,22 @@ func TestImportGitHubUsesFetchedTarball(t *testing.T) {
 	}
 	if installed.Slug != "lilac" {
 		t.Fatalf("installed = %+v", installed)
+	}
+	// source_ref 锁定 sha,source_url/source_type 记录规范化仓库地址与来源
+	// 类型——同 zip 分支,靠实际落库值防止 sourceURL/sourceRef 换位的回归。
+	var sourceRef string
+	if err := db.QueryRow(`SELECT source_ref FROM theme_versions WHERE id = ?`, installed.VersionID).Scan(&sourceRef); err != nil {
+		t.Fatalf("query source_ref: %v", err)
+	}
+	if sourceRef != sha {
+		t.Fatalf("source_ref = %q, want %q", sourceRef, sha)
+	}
+	var sourceType, sourceURL string
+	if err := db.QueryRow(`SELECT source_type, source_url FROM themes WHERE id = ?`, installed.ThemeID).Scan(&sourceType, &sourceURL); err != nil {
+		t.Fatalf("query source_type/source_url: %v", err)
+	}
+	if sourceType != "github" || sourceURL != "https://github.com/e2e/lilac" {
+		t.Fatalf("source_type = %q, source_url = %q, want %q, %q", sourceType, sourceURL, "github", "https://github.com/e2e/lilac")
 	}
 }
 
