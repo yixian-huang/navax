@@ -2311,6 +2311,7 @@ components:
         settings: { $ref: '#/components/schemas/PageSettings' }
         categories: { type: array, items: { $ref: '#/components/schemas/PublicCategory' } }
         subdomain: { type: [string, 'null'] }
+        themeVersionId: { $ref: '#/components/schemas/ThemeVersionId' }
         publishedAt: { $ref: '#/components/schemas/Timestamp' }
         etag: { type: string }
     Theme:
