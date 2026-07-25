@@ -18,6 +18,8 @@ export interface ThemeMeta {
   scope?: 'catalog' | 'private';
   sourceType?: 'builtin' | 'github' | 'upload';
   sourceUrl?: string;
+  ownerName?: string;
+  status?: 'active' | 'disabled';
 }
 
 export interface ThemePackage {
@@ -94,6 +96,8 @@ export function themeDisplayFromApi(theme: Theme): ThemePackage {
       scope: theme.scope,
       sourceType: theme.sourceType,
       sourceUrl: theme.sourceUrl,
+      ownerName: theme.ownerName,
+      status: theme.status,
     },
   };
 }

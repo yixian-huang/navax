@@ -585,7 +585,7 @@ export function useUpdateAdminSettings() {
 export function useUpdateAdminThemeState() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ themeId, data }: { themeId: string; data: { enabled?: boolean; default?: boolean } }) =>
+    mutationFn: ({ themeId, data }: { themeId: string; data: { enabled?: boolean; default?: boolean; status?: 'active' | 'disabled' } }) =>
       adminApi.updateThemeState(themeId, data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'themes'] }),
   });
