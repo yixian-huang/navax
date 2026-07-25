@@ -62,6 +62,42 @@ func TestSyncBuiltinServesEveryBuiltinTheme(t *testing.T) {
 	}
 }
 
+// UpsertVersion 必须把 manifest 的展示元数据回写 themes 行——否则列表 API
+// 永远吐迁移种子的旧文案（slate 行 mode='both' vs manifest 'light' 一类漂移）。
+func TestSyncBuiltinWritesBackManifestMetadata(t *testing.T) {
+	db := newTestDB(t)
+	store := NewStore(db)
+	if err := SyncBuiltin(t.Context(), store, time.Now().UTC()); err != nil {
+		t.Fatalf("SyncBuiltin() error = %v", err)
+	}
+	packages, err := BuiltinPackages()
+	if err != nil {
+		t.Fatalf("BuiltinPackages() error = %v", err)
+	}
+	for _, pkg := range packages {
+		var name, description, mode, version string
+		var specVersion int
+		if err := db.QueryRow(`SELECT name, description, mode, version, spec_version FROM themes WHERE id = ?`,
+			pkg.Manifest.ID).Scan(&name, &description, &mode, &version, &specVersion); err != nil {
+			t.Fatalf("read %s: %v", pkg.Manifest.ID, err)
+		}
+		if name != pkg.Manifest.Name || mode != pkg.Manifest.Mode || version != pkg.Manifest.Version || specVersion != pkg.Manifest.SpecVersion {
+			t.Fatalf("%s 行元数据与 manifest 漂移: name=%q mode=%q version=%q spec=%d", pkg.Manifest.ID, name, mode, version, specVersion)
+		}
+		if description != pkg.Manifest.Description {
+			t.Fatalf("%s description = %q, want %q", pkg.Manifest.ID, description, pkg.Manifest.Description)
+		}
+	}
+	// 内置包都没有 preview.png，preview 列保持空串。
+	var preview string
+	if err := db.QueryRow(`SELECT preview FROM themes WHERE id = 'slate'`).Scan(&preview); err != nil {
+		t.Fatal(err)
+	}
+	if preview != "" {
+		t.Fatalf("slate preview = %q, want empty", preview)
+	}
+}
+
 // 回落目标自身不可用时必须响亮失败，否则发布会静默产出取不到样式的快照。
 func TestAssertDefaultThemeUsableDetectsBrokenFallback(t *testing.T) {
 	db := newTestDB(t)
