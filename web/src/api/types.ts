@@ -281,9 +281,6 @@ export interface PublishedPageContract {
   etag: string;
 }
 
-/** 前端使用的公开/预览页面模型（与契约一致）。 */
-export type PublishedPage = PublishedPageContract;
-
 export interface Theme {
   id: string;
   name: string;
