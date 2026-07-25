@@ -27,6 +27,15 @@ var (
 
 var shaPattern = regexp.MustCompile(`^[0-9a-f]{40}$`)
 
+// githubTokenHosts 是允许附加 Authorization 头的主机集合。token 只在
+// 请求这些官方 GitHub 主机时下发,绝不外泄给 extraHosts 白名单里的
+// 自建 Gitea 等第三方主机。
+var githubTokenHosts = map[string]bool{
+	"github.com":          true,
+	"api.github.com":      true,
+	"codeload.github.com": true,
+}
+
 // Fetched 是一次拉取的产物。SHA 对 GitHub 是解析后的 commit sha;
 // 对 Gitea 兼容主机是调用方显式给出的 ref(这些主机不做 API 解析)。
 type Fetched struct {
@@ -74,7 +83,7 @@ func (c *GitHubClient) FetchTarball(ctx context.Context, rawURL, ref string) (Fe
 		if strings.TrimSpace(ref) == "" {
 			return Fetched{}, fmt.Errorf("%w: 该主机需要显式 ref", ErrHostNotAllowed)
 		}
-		data, err := c.download(ctx, "https://"+host+"/"+owner+"/"+repo+"/archive/"+url.PathEscape(ref)+".tar.gz")
+		data, err := c.download(ctx, "https://"+host+"/"+url.PathEscape(owner)+"/"+url.PathEscape(repo)+"/archive/"+url.PathEscape(ref)+".tar.gz")
 		if err != nil {
 			return Fetched{}, err
 		}
@@ -92,7 +101,7 @@ func (c *GitHubClient) FetchTarball(ctx context.Context, rawURL, ref string) (Fe
 		}
 		sha = resolved
 	}
-	data, err := c.download(ctx, "https://codeload.github.com/"+owner+"/"+repo+"/tar.gz/"+sha)
+	data, err := c.download(ctx, "https://codeload.github.com/"+url.PathEscape(owner)+"/"+url.PathEscape(repo)+"/tar.gz/"+sha)
 	if err != nil {
 		return Fetched{}, err
 	}
@@ -113,6 +122,9 @@ func parseRepoURL(rawURL string, extras map[string]bool) (owner, repo, host stri
 		return "", "", "", fmt.Errorf("%w: 地址需为 https://%s/{owner}/{repo}", ErrHostNotAllowed, host)
 	}
 	repo = strings.TrimSuffix(segments[1], ".git")
+	if repo == "" {
+		return "", "", "", fmt.Errorf("%w: 地址需为 https://%s/{owner}/{repo}", ErrHostNotAllowed, host)
+	}
 	return segments[0], repo, host, nil
 }
 
@@ -140,7 +152,7 @@ func (c *GitHubClient) get(ctx context.Context, target string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrUpstream, err)
 	}
-	if c.token != "" {
+	if c.token != "" && githubTokenHosts[strings.ToLower(request.URL.Hostname())] {
 		request.Header.Set("Authorization", "Bearer "+c.token)
 	}
 	response, err := c.client.Do(request)

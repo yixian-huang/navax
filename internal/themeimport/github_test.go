@@ -96,6 +96,7 @@ func TestFetchTarballRejectsDisallowedHostAndScheme(t *testing.T) {
 		"http://github.com/alice/lilac",            // 非 https
 		"https://github.com/alice",                 // 缺 repo 段
 		"https://user:pass@github.com/alice/lilac", // 内嵌凭据
+		"https://github.com/alice/.git",            // 裁剪 .git 后 repo 段为空
 	} {
 		if _, err := client.FetchTarball(context.Background(), target, "main"); !errors.Is(err, ErrHostNotAllowed) {
 			t.Fatalf("%s err = %v, want ErrHostNotAllowed", target, err)
@@ -118,6 +119,57 @@ func TestFetchTarballGiteaCompatibleHost(t *testing.T) {
 	// Gitea 兼容主机必须显式 ref。
 	if _, err := client.FetchTarball(context.Background(), "https://git.example.com/alice/lilac", ""); err == nil {
 		t.Fatal("empty ref on gitea-compatible host must fail")
+	}
+}
+
+// TestFetchTarballScopesTokenToGitHubHosts 确认 token 不会外泄给 extraHosts
+// 白名单里的第三方主机(如自建 Gitea),仅在请求官方 GitHub 主机时下发。
+func TestFetchTarballScopesTokenToGitHubHosts(t *testing.T) {
+	transport := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.Host {
+		case "git.example.com":
+			if got := r.Header.Get("Authorization"); got != "" {
+				t.Fatalf("extraHost authorization header = %q, want empty", got)
+			}
+			return respond(200, "x"), nil
+		case "codeload.github.com":
+			if got := r.Header.Get("Authorization"); got != "Bearer tok123" {
+				t.Fatalf("github authorization header = %q, want Bearer tok123", got)
+			}
+			return respond(200, "y"), nil
+		}
+		t.Fatalf("unexpected host %s", r.URL.Host)
+		return nil, nil
+	})
+	client := NewGitHubClient(publicResolver("git.example.com", "codeload.github.com"), transport, []string{"git.example.com"}, "tok123")
+
+	if _, err := client.FetchTarball(context.Background(), "https://git.example.com/alice/lilac", "v1.2.0"); err != nil {
+		t.Fatalf("extraHost FetchTarball() error = %v", err)
+	}
+	sha := strings.Repeat("c", 40)
+	if _, err := client.FetchTarball(context.Background(), "https://github.com/alice/lilac", sha); err != nil {
+		t.Fatalf("github FetchTarball() error = %v", err)
+	}
+}
+
+// TestFetchTarballEscapesRepoPathSegments 确认 owner/repo 拼进下载 URL 前会
+// 转义:未转义时,已解码的 "#" 之类字符会在 http.NewRequestWithContext 内部
+// 再次 Parse 时被当成 Fragment 分隔符,截断请求路径。
+func TestFetchTarballEscapesRepoPathSegments(t *testing.T) {
+	sha := strings.Repeat("d", 40)
+	wantPath := "/alice/li#lac/tar.gz/" + sha
+	transport := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if r.URL.Host != "codeload.github.com" {
+			t.Fatalf("unexpected host %s", r.URL.Host)
+		}
+		if r.URL.Path != wantPath {
+			t.Fatalf("path = %q, want %q", r.URL.Path, wantPath)
+		}
+		return respond(200, "z"), nil
+	})
+	client := NewGitHubClient(publicResolver("codeload.github.com"), transport, nil, "")
+	if _, err := client.FetchTarball(context.Background(), "https://github.com/alice/li%23lac", sha); err != nil {
+		t.Fatalf("FetchTarball() error = %v", err)
 	}
 }
 
