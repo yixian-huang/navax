@@ -1,6 +1,7 @@
 package contract
 
 import (
+	"archive/zip"
 	"bytes"
 	"fmt"
 	"image"
@@ -360,6 +361,72 @@ func TestAPIContract(t *testing.T) {
 		mustStatus(t, sessions, http.StatusOK, "会话列表")
 	})
 
+	t.Run("主题导入与私有安装", func(t *testing.T) {
+		// zip 导入 → 201 且响应过 Theme schema 校验。
+		imported := user.uploadMultipart(t, "/api/v1/me/themes/import", nil, "file", "lilac.zip", buildThemeZip(t, "lilac"))
+		mustStatus(t, imported, http.StatusCreated, "导入主题")
+		importedID := stringField(t, imported.data(), "id", "导入主题 ID")
+
+		// 列表出现(带会话)。
+		list := user.call(t, http.MethodGet, "/api/v1/themes", nil)
+		mustStatus(t, list, http.StatusOK, "含私有主题的列表")
+		if !strings.Contains(string(list.body), importedID) {
+			t.Fatalf("列表缺少导入的主题 %s", importedID)
+		}
+
+		// 应用到自己的页面并发布，公开读锁定其版本。PUT /settings 是全量替换
+		// （PageSettingsUpdate = PageSettings 全字段 + expectedRevision），
+		// 因此要在取回的完整 settings 上原地改 themeId，再补上 expectedRevision。
+		page := user.call(t, http.MethodGet, "/api/v1/pages/current?scope=personal", nil)
+		mustStatus(t, page, http.StatusOK, "用户页面(应用主题前)")
+		settings, ok := page.data()["settings"].(map[string]any)
+		if !ok {
+			t.Fatalf("用户页面缺少 settings: %v", page.data())
+		}
+		appearance, ok := settings["appearance"].(map[string]any)
+		if !ok {
+			t.Fatalf("用户页面缺少 appearance: %v", settings)
+		}
+		appearance["themeId"] = importedID
+		settings["expectedRevision"] = numberField(t, page.data(), "draftRevision", "应用主题前修订号")
+		updated := user.call(t, http.MethodPut, fmt.Sprintf("/api/v1/pages/%s/settings", userPageID), settings)
+		mustStatus(t, updated, http.StatusOK, "应用私有主题")
+
+		refreshed := user.call(t, http.MethodGet, "/api/v1/pages/current?scope=personal", nil)
+		publishRevision := numberField(t, refreshed.data(), "draftRevision", "应用主题后修订号")
+		published := user.call(t, http.MethodPost, fmt.Sprintf("/api/v1/pages/%s/publish", userPageID),
+			map[string]any{"expectedRevision": publishRevision}, withHeader("Idempotency-Key", "contract-theme-import-0001"))
+		mustStatus(t, published, http.StatusOK, "发布私有主题页面")
+
+		// 配额 = 2:第二个成功,第三个 409。
+		second := user.uploadMultipart(t, "/api/v1/me/themes/import", nil, "file", "second.zip", buildThemeZip(t, "second"))
+		mustStatus(t, second, http.StatusCreated, "第二个私有主题")
+		secondID := stringField(t, second.data(), "id", "第二主题 ID")
+		third := user.uploadMultipart(t, "/api/v1/me/themes/import", nil, "file", "third.zip", buildThemeZip(t, "third"))
+		mustStatus(t, third, http.StatusConflict, "配额 409")
+
+		// 同 slug 重复导入 = 升级,不占额度。
+		again := user.uploadMultipart(t, "/api/v1/me/themes/import", nil, "file", "lilac2.zip", buildThemeZip(t, "lilac"))
+		mustStatus(t, again, http.StatusCreated, "重复导入即升级")
+
+		// dry-run:坏包 200 + valid=false。
+		invalid := user.uploadMultipart(t, "/api/v1/themes/validate", nil, "file", "bad.zip", []byte("not a zip"))
+		mustStatus(t, invalid, http.StatusOK, "校验坏包")
+		if valid, _ := invalid.data()["valid"].(bool); valid {
+			t.Fatal("坏包 valid 应为 false")
+		}
+
+		// 卸载未被引用的第二主题 → 204;再删 → 404。
+		removed := user.call(t, http.MethodDelete, "/api/v1/me/themes/"+secondID, nil)
+		mustStatus(t, removed, http.StatusNoContent, "卸载私有主题")
+		missing := user.call(t, http.MethodDelete, "/api/v1/me/themes/"+secondID, nil)
+		mustStatus(t, missing, http.StatusNotFound, "重复卸载 404")
+
+		// 坏包导入 → 422。
+		bad := user.uploadMultipart(t, "/api/v1/me/themes/import", nil, "file", "bad.zip", []byte("not a zip"))
+		mustStatus(t, bad, http.StatusUnprocessableEntity, "坏包 422")
+	})
+
 	t.Run("公开目录与发现", func(t *testing.T) {
 		directory := guest.call(t, http.MethodGet, "/api/v1/public/directory", nil)
 		mustStatus(t, directory, http.StatusOK, "公开目录")
@@ -460,4 +527,46 @@ func contentOrderFromPage(t *testing.T, page map[string]any) []map[string]any {
 		order = append(order, map[string]any{"id": categoryID, "siteIds": siteIDs})
 	}
 	return order
+}
+
+// buildThemeZip 现场构造一个最小合法主题包：manifest 字面量与
+// internal/themeimport/service_test.go 的 sampleManifest 同款（颜色四组 +
+// 字体四族 + 三个 swatch + tier 1），仅 id 由参数 slug 决定，css 一行合法
+// 规则，两者不一致时以 service_test.go 那份为准。
+func buildThemeZip(t *testing.T, slug string) []byte {
+	t.Helper()
+	manifest := fmt.Sprintf(`{
+  "specVersion": 1, "id": %q, "name": "Contract Theme", "version": "1.0.0",
+  "author": "e2e", "license": "MIT", "mode": "light", "vibe": "serious",
+  "swatches": ["#f5f3ff", "#8b5cf6", "#1e1b4b"], "tier": 1,
+  "tokens": {
+    "font": { "heading": "system-ui", "body": "system-ui", "label": "system-ui", "mono": "monospace" },
+    "color": {
+      "background": { "50": "0.985 0.010 300" },
+      "foreground": { "900": "0.210 0.040 300" },
+      "primary":    { "500": "0.585 0.200 300" },
+      "accent":     { "500": "0.700 0.150 160" }
+    }
+  }
+}`, slug)
+
+	var buffer bytes.Buffer
+	writer := zip.NewWriter(&buffer)
+	entries := map[string][]byte{
+		"theme.json": []byte(manifest),
+		"theme.css":  []byte(`[data-nx="site-card"] { border-radius: var(--radius-md); }`),
+	}
+	for name, data := range entries {
+		entry, err := writer.Create(name)
+		if err != nil {
+			t.Fatalf("创建 zip 条目 %s: %v", name, err)
+		}
+		if _, err := entry.Write(data); err != nil {
+			t.Fatalf("写入 zip 条目 %s: %v", name, err)
+		}
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("关闭 zip writer: %v", err)
+	}
+	return buffer.Bytes()
 }

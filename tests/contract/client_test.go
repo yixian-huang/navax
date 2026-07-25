@@ -136,58 +136,66 @@ func (c *apiClient) call(t *testing.T, method, path string, body any, opts ...ca
 	return result
 }
 
-// uploadPNG 以 multipart/form-data 上传一张最小 PNG，只校验响应（multipart
-// 请求体不做契约请求校验）。
-func (c *apiClient) uploadPNG(t *testing.T, kind string, png []byte) apiResult {
+// uploadMultipart 以 multipart/form-data 向任意端点上传字段与一个文件，只
+// 校验响应（multipart 请求体不做契约请求校验）。
+func (c *apiClient) uploadMultipart(t *testing.T, path string, fields map[string]string, fileField, filename string, content []byte) apiResult {
 	t.Helper()
 
 	var buffer bytes.Buffer
 	writer := multipart.NewWriter(&buffer)
-	if err := writer.WriteField("kind", kind); err != nil {
-		t.Fatalf("写入 kind 字段: %v", err)
+	for key, value := range fields {
+		if err := writer.WriteField(key, value); err != nil {
+			t.Fatalf("写入字段 %s: %v", key, err)
+		}
 	}
-	part, err := writer.CreateFormFile("file", "background.png")
+	part, err := writer.CreateFormFile(fileField, filename)
 	if err != nil {
-		t.Fatalf("创建 file 字段: %v", err)
+		t.Fatalf("创建 %s 字段: %v", fileField, err)
 	}
-	if _, err := part.Write(png); err != nil {
-		t.Fatalf("写入 PNG 内容: %v", err)
+	if _, err := part.Write(content); err != nil {
+		t.Fatalf("写入文件内容: %v", err)
 	}
 	if err := writer.Close(); err != nil {
 		t.Fatalf("关闭 multipart writer: %v", err)
 	}
 
-	request, err := http.NewRequest(http.MethodPost, baseURL+"/api/v1/assets", &buffer)
+	request, err := http.NewRequest(http.MethodPost, baseURL+path, &buffer)
 	if err != nil {
-		t.Fatalf("构造上传请求: %v", err)
+		t.Fatalf("构造上传请求 %s: %v", path, err)
 	}
 	request.Header.Set("Content-Type", writer.FormDataContentType())
 	request.Header.Set("Origin", baseURL)
 
 	response, err := c.http.Do(request)
 	if err != nil {
-		t.Fatalf("上传请求: %v", err)
+		t.Fatalf("上传请求 %s: %v", path, err)
 	}
 	defer response.Body.Close()
 	responseBody, err := io.ReadAll(response.Body)
 	if err != nil {
-		t.Fatalf("读取上传响应: %v", err)
+		t.Fatalf("读取上传响应 %s: %v", path, err)
 	}
 
 	response.Body = io.NopCloser(bytes.NewReader(responseBody))
 	if ok, validationErrs := apiValidator.ValidateHttpResponse(request, response); !ok {
-		reportValidationErrors(t, "响应", http.MethodPost, "/api/v1/assets", validationErrs)
+		reportValidationErrors(t, "响应", http.MethodPost, path, validationErrs)
 	}
 
 	result := apiResult{status: response.StatusCode, header: response.Header, body: responseBody}
 	if strings.Contains(response.Header.Get("Content-Type"), "application/json") && len(responseBody) > 0 {
 		var parsed map[string]any
 		if err := json.Unmarshal(responseBody, &parsed); err != nil {
-			t.Fatalf("解析上传响应 JSON: %v\n%s", err, responseBody)
+			t.Fatalf("解析上传响应 JSON %s: %v\n%s", path, err, responseBody)
 		}
 		result.json = parsed
 	}
 	return result
+}
+
+// uploadPNG 是 uploadMultipart 的薄封装：上传一张最小 PNG 到资源端点。
+func (c *apiClient) uploadPNG(t *testing.T, kind string, png []byte) apiResult {
+	t.Helper()
+	return c.uploadMultipart(t, "/api/v1/assets", map[string]string{"kind": kind}, "file", "background.png", png)
 }
 
 func reportValidationErrors(t *testing.T, kind, method, path string, validationErrs []*verrors.ValidationError) {

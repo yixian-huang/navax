@@ -1876,8 +1876,12 @@ components:
     Id: { type: string, minLength: 8, maxLength: 64 }
     ThemeId:
       type: string
-      description: 主题包 slug，如 slate、slate-dark。
-      pattern: '^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$'
+      description: |
+        目录主题的 slug（如 slate、slate-dark），或私有主题的不透明行 ID
+        （identity.New 生成的 thm_<32 位十六进制> ——两个用户可同名安装
+        同一 slug 而不冲突，见设计 §7.2）。两种形状共用同一字段，故正则
+        同时接纳连字符 slug 与下划线分隔的前缀 ID。
+      pattern: '^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$'
       minLength: 1
       maxLength: 64
     Timestamp: { type: string, format: date-time }

@@ -174,7 +174,7 @@ func Run(ctx context.Context, cfg config.Config, build BuildInfo) error {
 	linkPreviewHandler := httpapi.NewLinkPreviewHandler(linkpreview.NewService())
 	directoryAdminHandler := httpapi.NewDirectoryAdminHandler(authService, directoryadmin.NewService(directoryadmin.NewSQLStore(db)))
 	catalogService := catalog.NewService(db)
-	catalogHandler := httpapi.NewCatalogHandler(catalogService)
+	catalogHandler := httpapi.NewCatalogHandler(catalogService, authService)
 	themeImportHandler := httpapi.NewThemeImportHandler(themeImportService, catalogService)
 	analyticsKey, err := security.LoadOrCreateKey(filepath.Join(cfg.DataDir, "analytics.key"), 32)
 	if err != nil {
