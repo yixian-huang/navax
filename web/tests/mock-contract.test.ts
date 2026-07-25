@@ -66,6 +66,9 @@ const cases: Case[] = [
   { name: '主题包校验', path: '/api/v1/themes/validate', method: 'post', status: '200', url: '/api/v1/themes/validate', init: { method: 'POST' } },
   { name: '卸载不存在的私有主题', path: '/api/v1/me/themes/{themeId}', method: 'delete', status: '404', url: '/api/v1/me/themes/thm_mock_does_not_exist', init: { method: 'DELETE' } },
   { name: '管理主题状态', path: '/api/v1/admin/themes/{themeId}', method: 'patch', status: '200', url: '/api/v1/admin/themes/slate', init: { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'active' }) } },
+  { name: '主题版本列表', path: '/api/v1/admin/themes/{themeId}/versions', method: 'get', status: '200', url: '/api/v1/admin/themes/slate/versions' },
+  { name: '版本级状态', path: '/api/v1/admin/theme-versions/{versionId}', method: 'patch', status: '200', url: '/api/v1/admin/theme-versions/v00000000000000000000000000000001', init: { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'active' }) } },
+  { name: '检查更新', path: '/api/v1/me/themes/{themeId}/check-update', method: 'post', status: '200', url: '/api/v1/me/themes/thm_mock_priv_1/check-update', init: { method: 'POST' } },
 ];
 
 beforeAll(() => {

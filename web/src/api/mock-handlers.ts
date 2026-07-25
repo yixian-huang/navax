@@ -624,6 +624,15 @@ handlers.push(async (url, init) => {
   if (url === `${API_BASE}/themes/validate` && method === 'POST') {
     return jsonResponse({ code: 'OK', data: { valid: true, errors: [] }, meta: { message: '', detail: '' } });
   }
+  if (url.endsWith('/check-update') && url.startsWith(`${API_BASE}/me/themes/`) && method === 'POST') {
+    // mock 固定报「有更新」，便于前端演练检查更新按钮的可见分支；真实无网络
+    // 分支（upload 主题恒 hasUpdate=false）已由契约测试覆盖。
+    return jsonResponse({
+      code: 'OK',
+      data: { sourceType: 'github', hasUpdate: true, currentSha: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', latestSha: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' },
+      meta: { message: '', detail: '' },
+    });
+  }
   return null;
 });
 
@@ -1120,6 +1129,38 @@ handlers.push((url, init) => {
     if (body.default !== undefined) theme.default = body.default;
     if (body.status !== undefined) theme.status = body.status;
     return Promise.resolve(jsonResponse({ code: 'OK', data: theme, meta: { message: '主题已更新', detail: '' } }));
+  }
+  // 版本列表：每个主题只投影其 currentVersionId 一条，当前、启用、无历史快照
+  // 引用——够前端渲染版本面板，不模拟多版本历史。
+  if (url.match(/\/admin\/themes\/[^/]+\/versions$/) && (init?.method || 'GET') === 'GET') {
+    const id = decodeURIComponent(url.match(/\/admin\/themes\/([^/]+)\/versions$/)![1]);
+    const theme = [...mockThemes, ...mockPrivateThemes].find(t => t.id === id);
+    if (!theme) return Promise.resolve(jsonResponse({ code: 'NotFound', data: null, meta: { message: '主题不存在', detail: '' } }, 404));
+    const version = {
+      versionId: theme.currentVersionId || mockPrivateThemeVersionId(0),
+      version: theme.version,
+      sourceRef: theme.sourceUrl || theme.sourceType || 'builtin',
+      status: 'active' as const,
+      createdAt: '2026-07-01T00:00:00Z',
+      isCurrent: true,
+      snapshotRefs: 0,
+    };
+    return Promise.resolve(jsonResponse({ code: 'OK', data: [version], meta: { message: '', detail: '' } }));
+  }
+  // 版本级状态：mock 不持久化 disabled 状态（无第二条版本可切换），仅回显
+  // 请求体，满足前端 PATCH 后原地更新面板的契约形状。
+  if (url.match(/\/admin\/theme-versions\/[^/]+$/) && (init?.method || 'GET') === 'PATCH') {
+    const versionId = decodeURIComponent(url.match(/\/admin\/theme-versions\/([^/]+)$/)![1]);
+    let body: { status?: 'active' | 'disabled' };
+    try { body = JSON.parse(init?.body || ''); } catch { return Promise.resolve(jsonResponse({ code: 'InvalidParameter', data: null, meta: { message: '请求格式错误', detail: '' } }, 400)); }
+    return Promise.resolve(jsonResponse({
+      code: 'OK',
+      data: {
+        versionId, version: '1.0.0', sourceRef: 'builtin', status: body.status ?? 'active',
+        createdAt: '2026-07-01T00:00:00Z', isCurrent: true, snapshotRefs: 0,
+      },
+      meta: { message: '版本状态已更新', detail: '' },
+    }));
   }
   if (url === `${API_BASE}/admin/settings`) {
     return Promise.resolve(jsonResponse({ code: 'OK', data: mockSystemSettings, meta: { message: '', detail: '' } }));

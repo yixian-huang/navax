@@ -367,6 +367,13 @@ func TestAPIContract(t *testing.T) {
 		mustStatus(t, imported, http.StatusCreated, "导入主题")
 		importedID := stringField(t, imported.data(), "id", "导入主题 ID")
 
+		// upload 主题检查更新:无 upstream,hasUpdate=false(无网络)。
+		checkUpd := user.call(t, http.MethodPost, "/api/v1/me/themes/"+importedID+"/check-update", nil)
+		mustStatus(t, checkUpd, http.StatusOK, "检查更新(upload)")
+		if hasUpdate, _ := checkUpd.data()["hasUpdate"].(bool); hasUpdate {
+			t.Fatal("upload 主题不应有更新")
+		}
+
 		// 列表出现(带会话)。
 		list := user.call(t, http.MethodGet, "/api/v1/themes", nil)
 		mustStatus(t, list, http.StatusOK, "含私有主题的列表")
@@ -460,6 +467,51 @@ func TestAPIContract(t *testing.T) {
 			result := admin.call(t, http.MethodGet, path, nil)
 			mustStatus(t, result, http.StatusOK, "管理端 "+path)
 		}
+	})
+
+	t.Run("主题版本视图与版本级 kill switch", func(t *testing.T) {
+		// slate(默认)版本列表:一条、当前、active。
+		list := admin.call(t, http.MethodGet, "/api/v1/admin/themes/slate/versions", nil)
+		mustStatus(t, list, http.StatusOK, "slate 版本列表")
+
+		// sakura 版本列表 → 取 versionId。
+		sakuraList := admin.call(t, http.MethodGet, "/api/v1/admin/themes/sakura/versions", nil)
+		mustStatus(t, sakuraList, http.StatusOK, "sakura 版本列表")
+		items, _ := sakuraList.json["data"].([]any)
+		if len(items) == 0 {
+			t.Fatal("sakura 应至少一个版本")
+		}
+		first, _ := items[0].(map[string]any)
+		versionID, _ := first["versionId"].(string)
+		if versionID == "" {
+			t.Fatal("缺 versionId")
+		}
+
+		// 停用 sakura 版本 → 200 disabled。
+		disabled := admin.call(t, http.MethodPatch, "/api/v1/admin/theme-versions/"+versionID,
+			map[string]any{"status": "disabled"})
+		mustStatus(t, disabled, http.StatusOK, "停用 sakura 版本")
+		if got := stringField(t, disabled.data(), "status", "版本状态"); got != "disabled" {
+			t.Fatalf("status = %q", got)
+		}
+
+		// 停用 slate(默认)当前版本 → 409。
+		slateItems, _ := list.json["data"].([]any)
+		slateFirst, _ := slateItems[0].(map[string]any)
+		slateVersion, _ := slateFirst["versionId"].(string)
+		rejected := admin.call(t, http.MethodPatch, "/api/v1/admin/theme-versions/"+slateVersion,
+			map[string]any{"status": "disabled"})
+		mustStatus(t, rejected, http.StatusConflict, "停用默认版本被拒")
+
+		// 恢复 sakura。
+		restored := admin.call(t, http.MethodPatch, "/api/v1/admin/theme-versions/"+versionID,
+			map[string]any{"status": "active"})
+		mustStatus(t, restored, http.StatusOK, "恢复 sakura 版本")
+
+		// 未知版本 → 404。
+		missing := admin.call(t, http.MethodPatch, "/api/v1/admin/theme-versions/v00000000000000000000000000000000",
+			map[string]any{"status": "disabled"})
+		mustStatus(t, missing, http.StatusNotFound, "未知版本 404")
 	})
 
 	t.Run("版本级 kill switch", func(t *testing.T) {
