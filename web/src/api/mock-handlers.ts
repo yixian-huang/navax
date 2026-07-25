@@ -566,6 +566,26 @@ handlers.push(async (url, init) => {
     mockPrivateThemeSeq += 1;
     const seq = mockPrivateThemeSeq;
     const versionId = mockPrivateThemeVersionId(seq);
+
+    // 根据请求类型判断导入方式（FormData 为 upload，JSON 为 github）
+    let sourceType: 'github' | 'upload' = 'upload';
+    let sourceUrl: string | undefined;
+
+    if (typeof init?.body === 'string') {
+      try {
+        const bodyObj = JSON.parse(init.body);
+        if (bodyObj.githubUrl) {
+          sourceType = 'github';
+          sourceUrl = bodyObj.githubUrl;
+        }
+      } catch {
+        // 如果不是有效 JSON，默认为 upload
+      }
+    } else if (init?.body && typeof init.body === 'object' && 'entries' in init.body) {
+      // FormData 有 entries 方法
+      sourceType = 'upload';
+    }
+
     const theme: Theme = {
       id: `thm_mock_priv_${seq}`,
       name: `导入主题 ${seq}`,
@@ -583,6 +603,8 @@ handlers.push(async (url, init) => {
       scope: 'private',
       vibe: 'serious',
       swatches: ['#f5f3ff', '#8b5cf6', '#1e1b4b'],
+      sourceType,
+      sourceUrl,
     };
     mockPrivateThemes.push(theme);
     return jsonResponse({ code: 'OK', data: theme, meta: { message: '主题已导入', detail: '' } }, 201);

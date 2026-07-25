@@ -539,6 +539,12 @@ func themeData(item adminpkg.Theme) map[string]any {
 	if item.Swatches[0] != "" {
 		data["swatches"] = item.Swatches[:]
 	}
+	if item.SourceType != "" {
+		data["sourceType"] = item.SourceType
+	}
+	if item.SourceURL != "" {
+		data["sourceUrl"] = item.SourceURL
+	}
 	return data
 }
 

@@ -114,6 +114,8 @@ type Theme struct {
 	Scope            string
 	Vibe             string
 	Swatches         [3]string
+	SourceType       string
+	SourceURL        string
 }
 
 type ThemePatch struct {
