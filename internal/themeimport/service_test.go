@@ -336,3 +336,62 @@ func TestCheckUpdateForeignThemeNotFound(t *testing.T) {
 		t.Fatalf("foreign check want ErrNotFound, got %v", err)
 	}
 }
+
+// TestCheckUpdateNoNewCommit 核心判定 latest != currentRef 此前只被
+// TestCheckUpdateDetectsNewCommit 单向验证过(latest 与 currentRef 不同的
+// 分支);这里补上 latest 与 currentRef 相同时 HasUpdate 必须为 false 的
+// 另一半。
+func TestCheckUpdateNoNewCommit(t *testing.T) {
+	service, _, _ := newServiceDB(t)
+	tarball := makeSampleTarGz(t)
+	sha := strings.Repeat("a", 40)
+	service.github = NewGitHubClient(publicResolver("api.github.com", "codeload.github.com"), roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.Host {
+		case "api.github.com":
+			return respond(200, `{"sha":"`+sha+`"}`), nil
+		case "codeload.github.com":
+			return &http.Response{StatusCode: 200, Body: io.NopCloser(bytes.NewReader(tarball)), Header: http.Header{}}, nil
+		}
+		t.Fatalf("host %s", r.URL.Host)
+		return nil, nil
+	}), nil, "")
+	installed, err := service.ImportGitHub(context.Background(), "usr_svc_0001", "https://github.com/e2e/lilac", "main")
+	if err != nil {
+		t.Fatalf("ImportGitHub: %v", err)
+	}
+	// 同一个 client 继续用于 check——api 仍返回同一个 sha,没有新提交。
+	status, err := service.CheckUpdate(context.Background(), "usr_svc_0001", installed.ThemeID)
+	if err != nil {
+		t.Fatalf("CheckUpdate: %v", err)
+	}
+	if status.SourceType != "github" || status.HasUpdate || status.CurrentSha != sha || status.LatestSha != sha {
+		t.Fatalf("unexpected status: %+v", status)
+	}
+}
+
+// TestCheckUpdateExtraHostDegradesGracefully 确认通过 extraHosts 白名单
+// (自建 Gitea 等)导入的主题——source_type 同样是 "github"(见
+// ImportGitHub),但那些主机没有 commits API——check-update 优雅退化为
+// HasUpdate=false,而不是报 ErrHostNotAllowed(该主机本身合法,只是无法
+// 回答"最新是什么"这个问题)。
+func TestCheckUpdateExtraHostDegradesGracefully(t *testing.T) {
+	service, _, _ := newServiceDB(t)
+	tarball := makeSampleTarGz(t)
+	service.github = NewGitHubClient(publicResolver("git.example.com"), roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if r.URL.Host != "git.example.com" {
+			t.Fatalf("host %s", r.URL.Host)
+		}
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(bytes.NewReader(tarball)), Header: http.Header{}}, nil
+	}), []string{"git.example.com"}, "")
+	installed, err := service.ImportGitHub(context.Background(), "usr_svc_0001", "https://git.example.com/alice/lilac", "v1.0.0")
+	if err != nil {
+		t.Fatalf("ImportGitHub: %v", err)
+	}
+	status, err := service.CheckUpdate(context.Background(), "usr_svc_0001", installed.ThemeID)
+	if err != nil {
+		t.Fatalf("CheckUpdate: %v", err)
+	}
+	if status.SourceType != "github" || status.HasUpdate || status.CurrentSha != "v1.0.0" || status.LatestSha != "" {
+		t.Fatalf("unexpected status: %+v", status)
+	}
+}
