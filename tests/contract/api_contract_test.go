@@ -8,6 +8,8 @@ import (
 	"image/png"
 	"net/http"
 	"net/url"
+	"regexp"
+	"strings"
 	"testing"
 )
 
@@ -27,13 +29,14 @@ func TestAPIContract(t *testing.T) {
 	const userPassword = "Member-Pass-2026!"
 
 	var (
-		adminPageID  string
-		systemPageID string
-		userPageID   string
-		userSlug     string
-		inviteToken  string
-		categoryID   string
-		userID       string
+		adminPageID          string
+		systemPageID         string
+		publicThemeVersionID string
+		userPageID           string
+		userSlug             string
+		inviteToken          string
+		categoryID           string
+		userID               string
 	)
 
 	t.Run("系统端点", func(t *testing.T) {
@@ -166,8 +169,40 @@ func TestAPIContract(t *testing.T) {
 		publicPage := guest.call(t, http.MethodGet, "/api/v1/public/pages/"+slug, nil)
 		mustStatus(t, publicPage, http.StatusOK, "公开读取个人页面")
 
+		// 发布必然锁定主题版本;该字段自本次起登记进 openapi。
+		publicThemeVersionID = stringField(t, publicPage.data(), "themeVersionId", "公开页主题版本")
+		if !regexp.MustCompile(`^v[0-9a-f]{32}$`).MatchString(publicThemeVersionID) {
+			t.Fatalf("themeVersionId 形状不合法: %q", publicThemeVersionID)
+		}
+
 		missing := guest.call(t, http.MethodGet, "/api/v1/public/pages/does-not-exist", nil)
 		mustStatus(t, missing, http.StatusNotFound, "读取不存在的公开页面")
+	})
+
+	t.Run("主题目录与公开样式表", func(t *testing.T) {
+		list := guest.call(t, http.MethodGet, "/api/v1/themes", nil)
+		mustStatus(t, list, http.StatusOK, "主题目录")
+
+		cssPath := "/api/v1/public/themes/" + publicThemeVersionID + ".css"
+		css := guest.call(t, http.MethodGet, cssPath, nil)
+		mustStatus(t, css, http.StatusOK, "主题样式表")
+		if cacheControl := css.header.Get("Cache-Control"); !strings.Contains(cacheControl, "immutable") {
+			t.Fatalf("样式表缺少 immutable 缓存头: %q", cacheControl)
+		}
+		etag := css.header.Get("ETag")
+		if etag == "" {
+			t.Fatal("样式表缺少 ETag")
+		}
+		cached := guest.call(t, http.MethodGet, cssPath, nil, withHeader("If-None-Match", etag))
+		mustStatus(t, cached, http.StatusNotModified, "样式表 304")
+
+		missing := guest.call(t, http.MethodGet,
+			"/api/v1/public/themes/v00000000000000000000000000000000.css", nil)
+		mustStatus(t, missing, http.StatusNotFound, "未知版本 404")
+
+		missingAsset := guest.call(t, http.MethodGet,
+			"/api/v1/public/themes/"+publicThemeVersionID+"/assets/nope.png", nil)
+		mustStatus(t, missingAsset, http.StatusNotFound, "未知资产 404")
 	})
 
 	t.Run("系统页发布与公开首页", func(t *testing.T) {

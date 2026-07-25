@@ -54,6 +54,7 @@ func withoutRequestValidation() callOption {
 
 type apiResult struct {
 	status int
+	header http.Header
 	body   []byte
 	json   map[string]any
 }
@@ -124,7 +125,7 @@ func (c *apiClient) call(t *testing.T, method, path string, body any, opts ...ca
 		}
 	}
 
-	result := apiResult{status: response.StatusCode, body: responseBody}
+	result := apiResult{status: response.StatusCode, header: response.Header, body: responseBody}
 	if strings.Contains(response.Header.Get("Content-Type"), "application/json") && len(responseBody) > 0 {
 		var parsed map[string]any
 		if err := json.Unmarshal(responseBody, &parsed); err != nil {
@@ -178,7 +179,7 @@ func (c *apiClient) uploadPNG(t *testing.T, kind string, png []byte) apiResult {
 		reportValidationErrors(t, "响应", http.MethodPost, "/api/v1/assets", validationErrs)
 	}
 
-	result := apiResult{status: response.StatusCode, body: responseBody}
+	result := apiResult{status: response.StatusCode, header: response.Header, body: responseBody}
 	if strings.Contains(response.Header.Get("Content-Type"), "application/json") && len(responseBody) > 0 {
 		var parsed map[string]any
 		if err := json.Unmarshal(responseBody, &parsed); err != nil {
