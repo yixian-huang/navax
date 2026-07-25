@@ -213,9 +213,11 @@ const themeSelect = `
 	SELECT themes.id, themes.name, themes.version, themes.author, themes.description,
 	       themes.mode, themes.preview, themes.enabled, themes.is_default,
 	       themes.current_version_id, themes.scope, themes.source_type, themes.source_url,
+	       themes.owner_id, users.username, theme_versions.status,
 	       theme_versions.manifest_json
 	FROM themes
-	LEFT JOIN theme_versions ON theme_versions.id = themes.current_version_id`
+	LEFT JOIN theme_versions ON theme_versions.id = themes.current_version_id
+	LEFT JOIN users ON users.id = themes.owner_id`
 
 func (s *SQLStore) ListThemes(ctx context.Context) ([]Theme, error) {
 	rows, err := s.db.QueryContext(ctx, themeSelect+`
@@ -452,9 +454,11 @@ func scanInvitation(row rowScanner) (Invitation, error) {
 func scanTheme(row rowScanner) (Theme, error) {
 	var item Theme
 	var currentVersionID, manifestJSON, sourceType, sourceURL sql.NullString
+	var ownerID, ownerName, status sql.NullString
 	if err := row.Scan(&item.ID, &item.Name, &item.Version, &item.Author, &item.Description,
 		&item.Mode, &item.Preview, &item.Enabled, &item.Default,
-		&currentVersionID, &item.Scope, &sourceType, &sourceURL, &manifestJSON); err != nil {
+		&currentVersionID, &item.Scope, &sourceType, &sourceURL,
+		&ownerID, &ownerName, &status, &manifestJSON); err != nil {
 		return Theme{}, err
 	}
 	// 无编译版本的主题保持零值,序列化层据此省略字段——缺省即「不可选用」。
@@ -467,6 +471,15 @@ func scanTheme(row rowScanner) (Theme, error) {
 	}
 	if sourceURL.Valid && sourceURL.String != "" {
 		item.SourceURL = sourceURL.String
+	}
+	if ownerID.Valid {
+		item.OwnerID = ownerID.String
+	}
+	if ownerName.Valid {
+		item.OwnerName = ownerName.String
+	}
+	if status.Valid {
+		item.Status = status.String
 	}
 	if manifestJSON.Valid && manifestJSON.String != "" {
 		var manifest themes.Manifest
