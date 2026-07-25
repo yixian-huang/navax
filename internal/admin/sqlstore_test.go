@@ -4,11 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/yixian-huang/navax/internal/database"
 	"github.com/yixian-huang/navax/internal/security"
+	"github.com/yixian-huang/navax/internal/themes"
 )
 
 func TestAdminManagementLifecycle(t *testing.T) {
@@ -162,5 +164,70 @@ func insertTestSession(t *testing.T, db *sql.DB, id, userID string, now time.Tim
 		VALUES (?, ?, ?, 'test', ?, ?, ?)`, id, userID, security.HashToken(id), dbTime(now), dbTime(now), dbTime(now.Add(time.Hour)))
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+// 管理后台是全量视图:既要读出有编译版本主题的 manifest 字段(色板、vibe
+// 分组都依赖它们),也要保留停用且无版本的行——那是它与 eligibility 谓词
+// 的职责区别。
+func TestThemeListingIncludesSpecV1Fields(t *testing.T) {
+	ctx := context.Background()
+	db, err := database.OpenAndMigrate(ctx, database.Config{Path: ":memory:", MaxOpenConns: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	if err := themes.SyncBuiltin(ctx, themes.NewStore(db), time.Now().UTC()); err != nil {
+		t.Fatalf("SyncBuiltin() error = %v", err)
+	}
+
+	store := NewSQLStore(db)
+	items, err := store.ListThemes(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byID := map[string]Theme{}
+	for _, item := range items {
+		byID[item.ID] = item
+	}
+
+	sakura, ok := byID["sakura"]
+	if !ok {
+		t.Fatal("列表缺少 sakura")
+	}
+	if sakura.Vibe != "cute" {
+		t.Fatalf("sakura vibe = %q, want cute", sakura.Vibe)
+	}
+	for i, swatch := range sakura.Swatches {
+		if !strings.HasPrefix(swatch, "#") {
+			t.Fatalf("sakura swatch[%d] = %q,不是真实色板", i, swatch)
+		}
+	}
+	if sakura.CurrentVersionID == "" ||
+		sakura.CSSHref != "/api/v1/public/themes/"+sakura.CurrentVersionID+".css" {
+		t.Fatalf("sakura 版本字段未接线: %+v", sakura)
+	}
+	if sakura.Scope != "catalog" || sakura.Tier != 1 || sakura.Subtitle == "" {
+		t.Fatalf("sakura manifest 字段未接线: %+v", sakura)
+	}
+
+	// migration 0013 停用的 mono 没有编译版本,必须保留在管理列表且 v1 字段为零值。
+	mono, ok := byID["mono"]
+	if !ok {
+		t.Fatal("管理列表必须包含已停用的 mono")
+	}
+	if mono.Enabled {
+		t.Fatal("mono 应处于停用状态")
+	}
+	if mono.CurrentVersionID != "" || mono.CSSHref != "" || mono.Vibe != "" || mono.Swatches[0] != "" {
+		t.Fatalf("无版本主题的 v1 字段应为零值: %+v", mono)
+	}
+
+	single, err := store.Theme(ctx, "sakura")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if single.Vibe != "cute" || single.CurrentVersionID == "" {
+		t.Fatalf("单行查询未接线: %+v", single)
 	}
 }
