@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// 基线令牌取自默认主题 slate（web/src/themes/packages/slate.ts）。
+// 基线令牌取自默认主题 slate 的令牌集（internal/themes/builtin/slate/theme.json）。
 // manifest 未提供 radius/elevation 时用它们补齐，因此一个最小可用主题
 // 只需写颜色四组与字体四族。
 var baselineRadius = map[string]string{

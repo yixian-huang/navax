@@ -130,7 +130,7 @@
 
 - `@import`、`@layer`；白名单外的 at-rule
 - 白名单外的函数（`src()`、`image()`、`image-set()`、`cross-fade()`、`element()`、`paint()` 等一切可能触发外部请求的函数）
-- 外部 URL、形如 URL 的字符串字面量、`data:image/svg+xml`
+- 外部 URL、形如 URL 的字符串字面量;`data:` 图片仅限 png/jpeg/webp/svg+xml 且单条 ≤ 8 KB(SVG 需通过净化检查;`.svg` 资产**文件**仍一律拒绝——图片上下文与文档上下文的风险不同)
 - 选择 `html` / `body`、命中 `[data-nx-frame]` 或 `[data-nx-protected]`
 - 主题根之后使用 `+` / `~`，或选择器 subject 落在根外
 - 类选择器与 `[class*="…"]` 属性匹配
