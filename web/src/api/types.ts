@@ -367,19 +367,6 @@ export interface PublicConfig {
   };
 }
 
-export interface ThemeManifest {
-  id: string;
-  name: string;
-  version: string;
-  author: string;
-  description: string;
-  mode: ThemeMode;
-  tokens: Record<string, Record<string, string>>;
-  preview: string;
-  license: string;
-  homepage: string;
-}
-
 export interface AdminOverview {
   totalUsers: number;
   activeUsers: number;

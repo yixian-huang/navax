@@ -216,7 +216,7 @@ func (c *compiler) declarationValue(property string, values []css.Token) string 
 		case token.TokenType == css.URLToken:
 			b.WriteString(c.rewriteURLToken(string(token.Data)))
 		case (token.TokenType == css.StringToken || token.TokenType == css.IdentToken) &&
-			isFontFamilyProperty(property, c.inAtRule("font-face")):
+			property == "font-family":
 			b.WriteString(c.rewriteFamilyToken(string(token.Data)))
 		case (token.TokenType == css.IdentToken) && isAnimationProperty(property):
 			b.WriteString(c.rewriteAnimationToken(string(token.Data)))
@@ -225,10 +225,6 @@ func (c *compiler) declarationValue(property string, values []css.Token) string 
 		}
 	}
 	return strings.TrimSpace(b.String())
-}
-
-func isFontFamilyProperty(property string, inFontFace bool) bool {
-	return property == "font-family" || (inFontFace && property == "font-family")
 }
 
 func isAnimationProperty(property string) bool {
