@@ -74,6 +74,8 @@ func (h *AdminHandler) MountRoutes(management chi.Router) {
 	management.Delete("/invitations/{invitationId}", h.revokeInvitation)
 	management.Get("/themes", h.themes)
 	management.Patch("/themes/{themeId}", h.updateTheme)
+	management.Get("/themes/{themeId}/versions", h.themeVersions)
+	management.Patch("/theme-versions/{versionId}", h.updateThemeVersion)
 	management.Get("/settings", h.settings)
 	management.Patch("/settings", h.updateSettings)
 	management.Get("/audit", h.audit)
@@ -318,6 +320,34 @@ func (h *AdminHandler) updateTheme(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, r, http.StatusOK, themeData(item))
 }
 
+func (h *AdminHandler) themeVersions(w http.ResponseWriter, r *http.Request) {
+	items, err := h.service.ThemeVersions(r.Context(), actorFromRequest(r), chi.URLParam(r, "themeId"))
+	if err != nil {
+		h.writeError(w, r, err)
+		return
+	}
+	out := make([]map[string]any, 0, len(items))
+	for _, v := range items {
+		out = append(out, themeVersionData(v))
+	}
+	WriteJSON(w, r, http.StatusOK, out)
+}
+
+func (h *AdminHandler) updateThemeVersion(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		Status string `json:"status"`
+	}
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+	item, err := h.service.SetThemeVersionStatus(r.Context(), actorFromRequest(r), chi.URLParam(r, "versionId"), request.Status, middleware.GetReqID(r.Context()))
+	if err != nil {
+		h.writeError(w, r, err)
+		return
+	}
+	WriteJSON(w, r, http.StatusOK, themeVersionData(item))
+}
+
 func (h *AdminHandler) settings(w http.ResponseWriter, r *http.Request) {
 	data, err := h.service.Settings(r.Context(), actorFromRequest(r))
 	if err != nil {
@@ -558,6 +588,18 @@ func themeData(item adminpkg.Theme) map[string]any {
 	}
 	if item.Status != "" {
 		data["status"] = item.Status
+	}
+	return data
+}
+
+func themeVersionData(v adminpkg.ThemeVersion) map[string]any {
+	data := map[string]any{
+		"versionId": v.VersionID, "version": v.Version, "sourceRef": v.SourceRef,
+		"status": v.Status, "createdAt": v.CreatedAt, "isCurrent": v.IsCurrent,
+		"snapshotRefs": v.SnapshotRefs,
+	}
+	if v.ImportedBy != "" {
+		data["importedBy"] = v.ImportedBy
 	}
 	return data
 }

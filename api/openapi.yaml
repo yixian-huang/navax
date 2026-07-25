@@ -1439,6 +1439,40 @@ paths:
         '401': { $ref: '#/components/responses/ErrorResponse' }
         '403': { $ref: '#/components/responses/ErrorResponse' }
         '409': { $ref: '#/components/responses/ErrorResponse' }
+  /api/v1/admin/themes/{themeId}/versions:
+    get:
+      tags: [Admin]
+      operationId: listThemeVersions
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ThemeId'
+      responses:
+        '200': { $ref: '#/components/responses/ThemeVersionsResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+  /api/v1/admin/theme-versions/{versionId}:
+    patch:
+      tags: [Admin]
+      operationId: updateThemeVersionStatus
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ThemeVersionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [active, disabled] }
+      responses:
+        '200': { $ref: '#/components/responses/ThemeVersionResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/admin/settings:
     get:
       tags: [Admin]
@@ -1842,6 +1876,8 @@ components:
     PublicationResponse: { description: 发布状态, content: { application/json: { schema: { $ref: '#/components/schemas/PublicationEnvelope' } } } }
     ThemesResponse: { description: 主题列表, content: { application/json: { schema: { $ref: '#/components/schemas/ThemesEnvelope' } } } }
     ThemeResponse: { description: 主题, content: { application/json: { schema: { $ref: '#/components/schemas/ThemeEnvelope' } } } }
+    ThemeVersionsResponse: { description: 主题版本列表, content: { application/json: { schema: { $ref: '#/components/schemas/ThemeVersionsEnvelope' } } } }
+    ThemeVersionResponse: { description: 主题版本, content: { application/json: { schema: { $ref: '#/components/schemas/ThemeVersionEnvelope' } } } }
     ThemeValidationResponse: { description: 主题包 dry-run 校验结果, content: { application/json: { schema: { $ref: '#/components/schemas/ThemeValidationEnvelope' } } } }
     DiscoverResponse: { description: 发现页, content: { application/json: { schema: { $ref: '#/components/schemas/DiscoverEnvelope' } } } }
     DirectoryResponse: { description: 公共目录站点, content: { application/json: { schema: { $ref: '#/components/schemas/DirectoryEnvelope' } } } }
@@ -2419,6 +2455,18 @@ components:
       pattern: '^v[0-9a-f]{32}$'
       minLength: 33
       maxLength: 33
+    ThemeVersion:
+      type: object
+      required: [versionId, version, sourceRef, status, createdAt, isCurrent, snapshotRefs]
+      properties:
+        versionId: { $ref: '#/components/schemas/ThemeVersionId' }
+        version: { type: string }
+        sourceRef: { type: string }
+        status: { type: string, enum: [active, disabled] }
+        createdAt: { $ref: '#/components/schemas/Timestamp' }
+        importedBy: { type: string }
+        isCurrent: { type: boolean }
+        snapshotRefs: { type: integer }
     ThemeManifestV1:
       type: object
       description: |
@@ -3008,6 +3056,8 @@ components:
     ThemeEnvelope: { allOf: [{ $ref: '#/components/schemas/EnvelopeBase' }, { type: object, properties: { data: { $ref: '#/components/schemas/Theme' } }, required: [data] }] }
     ThemesEnvelope: { allOf: [{ $ref: '#/components/schemas/EnvelopeBase' }, { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/Theme' } } }, required: [data] }] }
     ThemeValidationEnvelope: { allOf: [{ $ref: '#/components/schemas/EnvelopeBase' }, { type: object, properties: { data: { $ref: '#/components/schemas/ThemeValidationResult' } }, required: [data] }] }
+    ThemeVersionEnvelope: { allOf: [{ $ref: '#/components/schemas/EnvelopeBase' }, { type: object, properties: { data: { $ref: '#/components/schemas/ThemeVersion' } }, required: [data] }] }
+    ThemeVersionsEnvelope: { allOf: [{ $ref: '#/components/schemas/EnvelopeBase' }, { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/ThemeVersion' } } }, required: [data] }] }
     DiscoverEnvelope: { allOf: [{ $ref: '#/components/schemas/PaginatedEnvelopeBase' }, { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/DiscoverPage' } } }, required: [data] }] }
     DirectoryEnvelope: { allOf: [{ $ref: '#/components/schemas/PaginatedEnvelopeBase' }, { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/DirectorySite' } } }, required: [data] }] }
     DirectoryCategoriesEnvelope: { allOf: [{ $ref: '#/components/schemas/EnvelopeBase' }, { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/DirectoryCategory' } } }, required: [data] }] }
