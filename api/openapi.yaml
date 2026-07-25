@@ -16,6 +16,7 @@ tags:
   - { name: Pages, description: 导航草稿、设置与发布 }
   - { name: Data, description: 导入、导出、资源与链接检查 }
   - { name: Analytics, description: 隐私友好的访问统计 }
+  - { name: Themes, description: 主题导入、卸载与校验 }
   - { name: Admin, description: 运营管理 }
   - { name: Providers, description: 第三方服务配置 }
   - { name: Maintenance, description: 更新与备份 }
@@ -1136,6 +1137,61 @@ paths:
         '200': { $ref: '#/components/responses/AnalyticsBreakdownResponse' }
         '401': { $ref: '#/components/responses/ErrorResponse' }
 
+  /api/v1/me/themes/import:
+    post:
+      tags: [Themes]
+      operationId: importTheme
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary, description: 主题包 zip(≤ 16 MiB) }
+          application/json:
+            schema: { $ref: '#/components/schemas/ThemeImportRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/ThemeResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+        '413': { $ref: '#/components/responses/ErrorResponse' }
+        '415': { $ref: '#/components/responses/ErrorResponse' }
+        '422': { $ref: '#/components/responses/ErrorResponse' }
+        '502': { $ref: '#/components/responses/ErrorResponse' }
+  /api/v1/me/themes/{themeId}:
+    delete:
+      tags: [Themes]
+      operationId: uninstallTheme
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ThemeId'
+      responses:
+        '204': { description: 已卸载(物理删除或转墓碑) }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+  /api/v1/themes/validate:
+    post:
+      tags: [Themes]
+      operationId: validateTheme
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        '200': { $ref: '#/components/responses/ThemeValidationResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '413': { $ref: '#/components/responses/ErrorResponse' }
+        '422': { $ref: '#/components/responses/ErrorResponse' }
+
   /api/v1/admin/overview:
     get:
       tags: [Admin]
@@ -1784,6 +1840,7 @@ components:
     PublicationResponse: { description: 发布状态, content: { application/json: { schema: { $ref: '#/components/schemas/PublicationEnvelope' } } } }
     ThemesResponse: { description: 主题列表, content: { application/json: { schema: { $ref: '#/components/schemas/ThemesEnvelope' } } } }
     ThemeResponse: { description: 主题, content: { application/json: { schema: { $ref: '#/components/schemas/ThemeEnvelope' } } } }
+    ThemeValidationResponse: { description: 主题包 dry-run 校验结果, content: { application/json: { schema: { $ref: '#/components/schemas/ThemeValidationEnvelope' } } } }
     DiscoverResponse: { description: 发现页, content: { application/json: { schema: { $ref: '#/components/schemas/DiscoverEnvelope' } } } }
     DirectoryResponse: { description: 公共目录站点, content: { application/json: { schema: { $ref: '#/components/schemas/DirectoryEnvelope' } } } }
     DirectoryCategoriesResponse: { description: 公共目录分类, content: { application/json: { schema: { $ref: '#/components/schemas/DirectoryCategoriesEnvelope' } } } }
@@ -1846,7 +1903,7 @@ components:
       type: object
       required: [code, data, meta]
       properties:
-        code: { type: string, enum: [MALFORMED_REQUEST, VALIDATION_FAILED, AUTH_REQUIRED, INVALID_CREDENTIALS, SESSION_EXPIRED, FORBIDDEN, ADMIN_REQUIRED, ACCOUNT_DISABLED, NOT_FOUND, METHOD_NOT_ALLOWED, INSTANCE_ALREADY_INITIALIZED, EMAIL_CONFLICT, USERNAME_CONFLICT, SLUG_CONFLICT, CATEGORY_NOT_EMPTY, INVITATION_EXPIRED, INVITATION_REVOKED, INVITATION_EXHAUSTED, INVITATION_NOT_FOUND, INVALID_RESET_TOKEN, DRAFT_REVISION_MISMATCH, IDEMPOTENCY_CONFLICT, IMPORT_TOO_LARGE, IMPORT_CONFLICT, IMPORT_PREVIEW_EXPIRED, INVALID_IMPORT, INVALID_URL, IMPORT_INVALID, PAYLOAD_TOO_LARGE, UNSUPPORTED_MEDIA_TYPE, LINK_CHECK_BUSY, RATE_LIMITED, SETUP_REQUIRED, SERVICE_UNAVAILABLE, PRIVATE_THEME_DEFAULT, CONFLICT, INTERNAL_ERROR] }
+        code: { type: string, enum: [MALFORMED_REQUEST, VALIDATION_FAILED, AUTH_REQUIRED, INVALID_CREDENTIALS, SESSION_EXPIRED, FORBIDDEN, ADMIN_REQUIRED, ACCOUNT_DISABLED, NOT_FOUND, METHOD_NOT_ALLOWED, INSTANCE_ALREADY_INITIALIZED, EMAIL_CONFLICT, USERNAME_CONFLICT, SLUG_CONFLICT, CATEGORY_NOT_EMPTY, INVITATION_EXPIRED, INVITATION_REVOKED, INVITATION_EXHAUSTED, INVITATION_NOT_FOUND, INVALID_RESET_TOKEN, DRAFT_REVISION_MISMATCH, IDEMPOTENCY_CONFLICT, IMPORT_TOO_LARGE, IMPORT_CONFLICT, IMPORT_PREVIEW_EXPIRED, INVALID_IMPORT, INVALID_URL, IMPORT_INVALID, PAYLOAD_TOO_LARGE, UNSUPPORTED_MEDIA_TYPE, LINK_CHECK_BUSY, RATE_LIMITED, SETUP_REQUIRED, SERVICE_UNAVAILABLE, PRIVATE_THEME_DEFAULT, QUOTA_EXCEEDED, THEME_INVALID, UPSTREAM_ERROR, CONFLICT, INTERNAL_ERROR] }
         data: { type: 'null' }
         meta: { $ref: '#/components/schemas/ErrorMeta' }
     EmptyEnvelope:
@@ -2402,6 +2459,25 @@ components:
                   type: string
                   description: OKLCH 三通道，L∈[0,1] C∈[0,0.5] H∈[0,360)。
                   pattern: '^\d+(\.\d+)? \d+(\.\d+)? \d+(\.\d+)?$'
+    ThemeImportRequest:
+      type: object
+      required: [githubUrl]
+      properties:
+        githubUrl: { type: string, maxLength: 300, description: 'https://github.com/{owner}/{repo}' }
+        ref: { type: string, maxLength: 120, description: 分支/标签/40 位 commit sha,缺省默认分支 }
+    ThemeValidationIssue:
+      type: object
+      required: [stage, path, message]
+      properties:
+        stage: { type: string, enum: [archive, manifest, css, asset] }
+        path: { type: string }
+        message: { type: string }
+    ThemeValidationResult:
+      type: object
+      required: [valid, errors]
+      properties:
+        valid: { type: boolean }
+        errors: { type: array, items: { $ref: '#/components/schemas/ThemeValidationIssue' } }
     DiscoverPage:
       type: object
       required: [slug, title, description, ownerName, themeId, tags, publishedAt]
@@ -2920,6 +2996,7 @@ components:
     PublicationEnvelope: { allOf: [{ $ref: '#/components/schemas/EnvelopeBase' }, { type: object, properties: { data: { $ref: '#/components/schemas/Publication' } }, required: [data] }] }
     ThemeEnvelope: { allOf: [{ $ref: '#/components/schemas/EnvelopeBase' }, { type: object, properties: { data: { $ref: '#/components/schemas/Theme' } }, required: [data] }] }
     ThemesEnvelope: { allOf: [{ $ref: '#/components/schemas/EnvelopeBase' }, { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/Theme' } } }, required: [data] }] }
+    ThemeValidationEnvelope: { allOf: [{ $ref: '#/components/schemas/EnvelopeBase' }, { type: object, properties: { data: { $ref: '#/components/schemas/ThemeValidationResult' } }, required: [data] }] }
     DiscoverEnvelope: { allOf: [{ $ref: '#/components/schemas/PaginatedEnvelopeBase' }, { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/DiscoverPage' } } }, required: [data] }] }
     DirectoryEnvelope: { allOf: [{ $ref: '#/components/schemas/PaginatedEnvelopeBase' }, { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/DirectorySite' } } }, required: [data] }] }
     DirectoryCategoriesEnvelope: { allOf: [{ $ref: '#/components/schemas/EnvelopeBase' }, { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/DirectoryCategory' } } }, required: [data] }] }

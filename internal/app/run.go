@@ -35,6 +35,7 @@ import (
 	"github.com/yixian-huang/navax/internal/security"
 	seopkg "github.com/yixian-huang/navax/internal/seo"
 	"github.com/yixian-huang/navax/internal/subdomains"
+	"github.com/yixian-huang/navax/internal/themeimport"
 	"github.com/yixian-huang/navax/internal/themes"
 	"github.com/yixian-huang/navax/internal/webui"
 )
@@ -85,6 +86,9 @@ func Run(ctx context.Context, cfg config.Config, build BuildInfo) error {
 		return fmt.Errorf("sync builtin themes: %w", err)
 	}
 	themeHandler := httpapi.NewThemeHandler(themeStore)
+	// resolver/transport 双 nil：生产走 GuardedClient 的全套 SSRF 防护。
+	themeImportService := themeimport.NewService(themeStore,
+		themeimport.NewGitHubClient(nil, nil, cfg.ThemeImportHosts, cfg.GitHubToken), cfg.ThemePrivateQuota)
 
 	authStore := auth.NewSQLStore(db)
 	authService := auth.NewService(authStore, cfg.SetupToken, cfg.SessionTTL)
@@ -171,6 +175,7 @@ func Run(ctx context.Context, cfg config.Config, build BuildInfo) error {
 	directoryAdminHandler := httpapi.NewDirectoryAdminHandler(authService, directoryadmin.NewService(directoryadmin.NewSQLStore(db)))
 	catalogService := catalog.NewService(db)
 	catalogHandler := httpapi.NewCatalogHandler(catalogService)
+	themeImportHandler := httpapi.NewThemeImportHandler(themeImportService, catalogService)
 	analyticsKey, err := security.LoadOrCreateKey(filepath.Join(cfg.DataDir, "analytics.key"), 32)
 	if err != nil {
 		return fmt.Errorf("initialize analytics privacy key: %w", err)
@@ -273,6 +278,7 @@ func Run(ctx context.Context, cfg config.Config, build BuildInfo) error {
 				assetHandler.MountProtected(protected)
 				backgroundHandler.MountProtected(protected)
 				subdomainHandler.MountUserRoutes(protected)
+				themeImportHandler.MountProtected(protected)
 				protected.Route("/admin", func(admin chi.Router) {
 					admin.Use(httpapi.RequireAdmin)
 					adminHandler.MountRoutes(admin)
