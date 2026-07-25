@@ -246,10 +246,14 @@ func (s *SQLStore) Theme(ctx context.Context, themeID string) (Theme, error) {
 func (s *SQLStore) UpdateTheme(ctx context.Context, themeID string, patch ThemePatch, now time.Time, audit AuditRecord) (Theme, error) {
 	err := database.WithinTx(ctx, s.db, nil, func(tx *sql.Tx) error {
 		var currentDefault bool
-		if err := tx.QueryRowContext(ctx, "SELECT is_default FROM themes WHERE id = ?", themeID).Scan(&currentDefault); errors.Is(err, sql.ErrNoRows) {
+		var scope string
+		if err := tx.QueryRowContext(ctx, "SELECT is_default, scope FROM themes WHERE id = ?", themeID).Scan(&currentDefault, &scope); errors.Is(err, sql.ErrNoRows) {
 			return ErrNotFound
 		} else if err != nil {
 			return err
+		}
+		if patch.Default != nil && *patch.Default && scope == "private" {
+			return ErrPrivateDefault
 		}
 		if patch.Default != nil && *patch.Default {
 			if _, err := tx.ExecContext(ctx, "UPDATE themes SET is_default = 0, updated_at = ? WHERE is_default = 1 AND id <> ?", dbTime(now), themeID); err != nil {

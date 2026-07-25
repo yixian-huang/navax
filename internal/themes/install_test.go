@@ -1,6 +1,7 @@
 package themes
 
 import (
+	"database/sql"
 	"errors"
 	"testing"
 	"time"
@@ -115,5 +116,122 @@ func TestInstallPrivateIsolatesSlugAcrossOwners(t *testing.T) {
 	b := installSample(t, store, "usr_inst_b", "lilac", 10)
 	if a.ThemeID == b.ThemeID {
 		t.Fatal("different owners with same slug must get distinct theme rows")
+	}
+}
+
+// seedSnapshotReferencing 造一条引用给定主题版本的已发布快照,用来让
+// UninstallPrivate 走「仍被引用」的墓碑分支。复用迁移自带的系统页
+// page_system_root(navigation_pages 表,非 brief 草稿里假想的 pages 表)
+// 作为宿主页,免得每个测试都要把 navigation_pages 的全部 NOT NULL 列铺一遍。
+func seedSnapshotReferencing(t *testing.T, db *sql.DB, snapshotID, versionID string) {
+	t.Helper()
+	stamp := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := db.Exec(`INSERT INTO published_snapshots
+		(id, page_id, draft_revision, slug, visibility, payload_json, etag, published_at, theme_version_id)
+		VALUES (?, 'page_system_root', 1, ?, 'public', '{}', ?, ?, ?)`,
+		snapshotID, snapshotID, "W/\""+snapshotID+"\"", stamp, versionID); err != nil {
+		t.Fatalf("seed snapshot: %v", err)
+	}
+}
+
+func TestUninstallPrivateDeletesUnreferencedTheme(t *testing.T) {
+	db := newTestDB(t)
+	store := NewStore(db)
+	seedUser(t, store, "usr_uni_0001")
+	installed := installSample(t, store, "usr_uni_0001", "lilac", 10)
+
+	removed, err := store.UninstallPrivate(t.Context(), "usr_uni_0001", installed.ThemeID, time.Now().UTC())
+	if err != nil || !removed {
+		t.Fatalf("UninstallPrivate() = %v, %v; want removed", removed, err)
+	}
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM themes WHERE id = ?`, installed.ThemeID).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatal("theme row must be physically deleted")
+	}
+	if err := db.QueryRow(`SELECT COUNT(*) FROM theme_versions WHERE theme_id = ?`, installed.ThemeID).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatal("versions must be deleted with the theme")
+	}
+}
+
+func TestUninstallPrivateTombstonesReferencedTheme(t *testing.T) {
+	db := newTestDB(t)
+	store := NewStore(db)
+	seedUser(t, store, "usr_uni_0002")
+	installed := installSample(t, store, "usr_uni_0002", "lilac", 10)
+	seedSnapshotReferencing(t, db, "snp_uni_0002", installed.VersionID)
+
+	removed, err := store.UninstallPrivate(t.Context(), "usr_uni_0002", installed.ThemeID, time.Now().UTC())
+	if err != nil || removed {
+		t.Fatalf("UninstallPrivate() = %v, %v; want tombstone", removed, err)
+	}
+	var enabled bool
+	if err := db.QueryRow(`SELECT enabled FROM themes WHERE id = ?`, installed.ThemeID).Scan(&enabled); err != nil {
+		t.Fatal(err)
+	}
+	if enabled {
+		t.Fatal("tombstoned theme must be disabled")
+	}
+	// 公开供应不受影响:版本行仍在且 active。
+	if _, _, status, err := store.VersionCSS(t.Context(), installed.VersionID); err != nil || status != VersionStatusActive {
+		t.Fatalf("css after tombstone: status=%q err=%v", status, err)
+	}
+}
+
+func TestUninstallPrivateRejectsForeignTheme(t *testing.T) {
+	db := newTestDB(t)
+	store := NewStore(db)
+	seedUser(t, store, "usr_uni_a")
+	seedUser(t, store, "usr_uni_b")
+	installed := installSample(t, store, "usr_uni_a", "lilac", 10)
+	if _, err := store.UninstallPrivate(t.Context(), "usr_uni_b", installed.ThemeID, time.Now().UTC()); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("foreign uninstall err = %v, want ErrNotFound", err)
+	}
+}
+
+// 裁定跟进:重装同 slug 必须能唤醒一个被墓碑化(enabled=0,仍被历史快照
+// 引用)的主题行——否则用户卸载后想重新导入同一个主题,会永远卡在一个
+// 自己看不见、也无法再启用的僵尸行上。
+func TestInstallPrivateReinstallReenablesTombstonedTheme(t *testing.T) {
+	db := newTestDB(t)
+	store := NewStore(db)
+	seedUser(t, store, "usr_uni_0003")
+	first := installSample(t, store, "usr_uni_0003", "lilac", 10)
+	seedSnapshotReferencing(t, db, "snp_uni_0003", first.VersionID)
+
+	removed, err := store.UninstallPrivate(t.Context(), "usr_uni_0003", first.ThemeID, time.Now().UTC())
+	if err != nil || removed {
+		t.Fatalf("UninstallPrivate() = %v, %v; want tombstone", removed, err)
+	}
+	if _, err := store.ResolveEligibleVersion(t.Context(), first.ThemeID, "usr_uni_0003"); err == nil {
+		t.Fatal("tombstoned theme must not resolve before reinstall")
+	}
+
+	reinstalled, err := store.InstallPrivate(t.Context(), "usr_uni_0003", "lilac", "upload", "", "digest-reinstall", 10,
+		func(themeID string) (Compiled, error) {
+			pkg := samplePackage(t)
+			pkg.CSS = append(pkg.CSS, []byte("\n[data-nx=\"clock\"] { opacity: 0.7; }")...)
+			return Compile(pkg, themeID)
+		}, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("reinstall error = %v", err)
+	}
+	if !reinstalled.Upgraded || reinstalled.ThemeID != first.ThemeID || reinstalled.VersionID == first.VersionID {
+		t.Fatalf("reinstall result: first=%+v reinstalled=%+v", first, reinstalled)
+	}
+	var enabled bool
+	if err := db.QueryRow(`SELECT enabled FROM themes WHERE id = ?`, first.ThemeID).Scan(&enabled); err != nil {
+		t.Fatal(err)
+	}
+	if !enabled {
+		t.Fatal("reinstalling the same slug must re-enable the tombstoned row")
+	}
+	if got, err := store.ResolveEligibleVersion(t.Context(), first.ThemeID, "usr_uni_0003"); err != nil || got != reinstalled.VersionID {
+		t.Fatalf("owner resolve after reinstall = %q, %v; want %q", got, err, reinstalled.VersionID)
 	}
 }

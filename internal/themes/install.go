@@ -85,7 +85,10 @@ func (s *Store) InstallPrivate(ctx context.Context, ownerID, slug, sourceType, s
 			if err != nil {
 				return err
 			}
-			if _, err := tx.ExecContext(ctx, `UPDATE themes SET source_url = ?, updated_at = ? WHERE id = ?`,
+			// enabled = 1：重装同 slug 等同于重新安装，必须能唤醒一个先前被
+			// UninstallPrivate 墓碑化(enabled = 0)的行，否则用户会永远卡在
+			// 一个自己看不到、也无法再次启用的主题上。
+			if _, err := tx.ExecContext(ctx, `UPDATE themes SET source_url = ?, enabled = 1, updated_at = ? WHERE id = ?`,
 				sourceURL, dbTime(now), themeID); err != nil {
 				return err
 			}
@@ -97,4 +100,51 @@ func (s *Store) InstallPrivate(ctx context.Context, ownerID, slug, sourceType, s
 		return InstalledTheme{}, err
 	}
 	return result, nil
+}
+
+// UninstallPrivate 卸载私有主题。无任何已发布快照引用其版本时物理删除
+// (配额立即释放);仍被引用时转墓碑(enabled=0):版本与资产保留,公开页
+// 继续可用——撤销语义见设计 §8.1.1。不存在与非本人统一返回 ErrNotFound
+// (不区分,防止探测他人主题是否存在)。
+func (s *Store) UninstallPrivate(ctx context.Context, ownerID, themeID string, now time.Time) (bool, error) {
+	var removed bool
+	err := database.WithinTx(ctx, s.db, nil, func(tx *sql.Tx) error {
+		var one int
+		err := tx.QueryRowContext(ctx, `
+			SELECT 1 FROM themes WHERE id = ? AND scope = 'private' AND owner_id = ?`,
+			themeID, ownerID).Scan(&one)
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+		var refs int
+		if err := tx.QueryRowContext(ctx, `
+			SELECT COUNT(*) FROM published_snapshots
+			WHERE theme_version_id IN (SELECT id FROM theme_versions WHERE theme_id = ?)`,
+			themeID).Scan(&refs); err != nil {
+			return err
+		}
+		if refs > 0 {
+			_, err := tx.ExecContext(ctx, `UPDATE themes SET enabled = 0, updated_at = ? WHERE id = ?`, dbTime(now), themeID)
+			return err
+		}
+		// 物理删除:先摘 current 指针(theme_versions_current_guard 才放行删版本)。
+		if _, err := tx.ExecContext(ctx, `UPDATE themes SET current_version_id = NULL, updated_at = ? WHERE id = ?`, dbTime(now), themeID); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM theme_versions WHERE theme_id = ?`, themeID); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM themes WHERE id = ?`, themeID); err != nil {
+			return err
+		}
+		removed = true
+		return nil
+	})
+	if err != nil {
+		return false, err
+	}
+	return removed, nil
 }

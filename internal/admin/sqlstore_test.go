@@ -231,3 +231,32 @@ func TestThemeListingIncludesSpecV1Fields(t *testing.T) {
 		t.Fatalf("单行查询未接线: %+v", single)
 	}
 }
+
+// 默认主题必须是目录主题(设计 §7.1):私有主题只对其所有者可见,把它设为
+// 实例默认会让所有其他用户在发布时回落到一个自己看不到、也无权访问的主题。
+func TestUpdateThemeRejectsPrivateDefault(t *testing.T) {
+	ctx := context.Background()
+	db, err := database.OpenAndMigrate(ctx, database.Config{Path: ":memory:", MaxOpenConns: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	now := time.Date(2026, 7, 24, 0, 0, 0, 0, time.UTC)
+	insertTestUser(t, db, "usr_pd_01", "pduser", "pd@example.com", "user", now)
+	stamp := dbTime(now)
+	if _, err := db.Exec(`INSERT INTO themes (id, name, version, author, description, mode, preview, enabled, is_default, created_at, updated_at, slug, scope, owner_id, source_type)
+		VALUES ('thm_pd_01', 'PD', '1.0.0', 'pd', '', 'light', '', 1, 0, ?, ?, 'pd', 'private', 'usr_pd_01', 'upload')`, stamp, stamp); err != nil {
+		t.Fatal(err)
+	}
+
+	store := NewSQLStore(db)
+	enable := true
+	audit := AuditRecord{AuditEntry: AuditEntry{
+		ID: "aud_pd_01", ActorName: "t", Action: "theme.update",
+		TargetType: "theme", TargetID: "thm_pd_01", CreatedAt: now,
+	}}
+	if _, err := store.UpdateTheme(ctx, "thm_pd_01", ThemePatch{Default: &enable}, now, audit); !errors.Is(err, ErrPrivateDefault) {
+		t.Fatalf("err = %v, want ErrPrivateDefault", err)
+	}
+}
