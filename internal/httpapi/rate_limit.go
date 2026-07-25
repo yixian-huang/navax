@@ -49,6 +49,9 @@ func AbuseProtection() func(http.Handler) http.Handler {
 		{http.MethodPost, exactPath("/api/v1/assets"), 30, time.Minute},
 		{http.MethodPost, exactPath("/api/v1/me/themes/import"), 10, time.Hour},
 		{http.MethodPost, exactPath("/api/v1/themes/validate"), 20, time.Hour},
+		{http.MethodPost, func(path string) bool {
+			return strings.HasPrefix(path, "/api/v1/me/themes/") && strings.HasSuffix(path, "/check-update")
+		}, 20, time.Hour},
 	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

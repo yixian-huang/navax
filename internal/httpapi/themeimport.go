@@ -27,6 +27,7 @@ func (h *ThemeImportHandler) MountProtected(router chi.Router) {
 	router.Post("/me/themes/import", h.importTheme)
 	router.Delete("/me/themes/{themeId}", h.uninstall)
 	router.Post("/themes/validate", h.validate)
+	router.Post("/me/themes/{themeId}/check-update", h.checkUpdate)
 }
 
 const themeArchiveOverhead int64 = 1 << 20
@@ -146,6 +147,28 @@ func (h *ThemeImportHandler) uninstall(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *ThemeImportHandler) checkUpdate(w http.ResponseWriter, r *http.Request) {
+	session, _ := SessionFromContext(r.Context())
+	status, err := h.service.CheckUpdate(r.Context(), session.User.ID, chi.URLParam(r, "themeId"))
+	if err != nil {
+		switch {
+		case errors.Is(err, themes.ErrNotFound):
+			WriteError(w, r, http.StatusNotFound, "NOT_FOUND", "主题不存在", nil)
+		case errors.Is(err, themeimport.ErrHostNotAllowed):
+			WriteError(w, r, http.StatusUnprocessableEntity, "VALIDATION_FAILED", "仓库地址不被允许", err)
+		case errors.Is(err, themeimport.ErrUpstream):
+			WriteError(w, r, http.StatusBadGateway, "UPSTREAM_ERROR", "上游仓库检查失败", err)
+		default:
+			WriteError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "检查更新失败", nil)
+		}
+		return
+	}
+	WriteJSON(w, r, http.StatusOK, map[string]any{
+		"sourceType": status.SourceType, "hasUpdate": status.HasUpdate,
+		"currentSha": status.CurrentSha, "latestSha": status.LatestSha,
+	})
 }
 
 func (h *ThemeImportHandler) validate(w http.ResponseWriter, r *http.Request) {

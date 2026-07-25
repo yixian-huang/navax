@@ -1192,6 +1192,19 @@ paths:
         '413': { $ref: '#/components/responses/ErrorResponse' }
         '415': { $ref: '#/components/responses/ErrorResponse' }
         '422': { $ref: '#/components/responses/ErrorResponse' }
+  /api/v1/me/themes/{themeId}/check-update:
+    post:
+      tags: [Themes]
+      operationId: checkThemeUpdate
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ThemeId'
+      responses:
+        '200': { $ref: '#/components/responses/ThemeUpdateStatusResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+        '422': { $ref: '#/components/responses/ErrorResponse' }
+        '502': { $ref: '#/components/responses/ErrorResponse' }
 
   /api/v1/admin/overview:
     get:
@@ -1879,6 +1892,7 @@ components:
     ThemeVersionsResponse: { description: 主题版本列表, content: { application/json: { schema: { $ref: '#/components/schemas/ThemeVersionsEnvelope' } } } }
     ThemeVersionResponse: { description: 主题版本, content: { application/json: { schema: { $ref: '#/components/schemas/ThemeVersionEnvelope' } } } }
     ThemeValidationResponse: { description: 主题包 dry-run 校验结果, content: { application/json: { schema: { $ref: '#/components/schemas/ThemeValidationEnvelope' } } } }
+    ThemeUpdateStatusResponse: { description: 主题更新检查结果, content: { application/json: { schema: { $ref: '#/components/schemas/ThemeUpdateStatusEnvelope' } } } }
     DiscoverResponse: { description: 发现页, content: { application/json: { schema: { $ref: '#/components/schemas/DiscoverEnvelope' } } } }
     DirectoryResponse: { description: 公共目录站点, content: { application/json: { schema: { $ref: '#/components/schemas/DirectoryEnvelope' } } } }
     DirectoryCategoriesResponse: { description: 公共目录分类, content: { application/json: { schema: { $ref: '#/components/schemas/DirectoryCategoriesEnvelope' } } } }
@@ -2537,6 +2551,14 @@ components:
       properties:
         valid: { type: boolean }
         errors: { type: array, items: { $ref: '#/components/schemas/ThemeValidationIssue' } }
+    ThemeUpdateStatus:
+      type: object
+      required: [sourceType, hasUpdate, currentSha, latestSha]
+      properties:
+        sourceType: { type: string, enum: [builtin, github, upload] }
+        hasUpdate: { type: boolean }
+        currentSha: { type: string }
+        latestSha: { type: string }
     DiscoverPage:
       type: object
       required: [slug, title, description, ownerName, themeId, tags, publishedAt]
@@ -3056,6 +3078,7 @@ components:
     ThemeEnvelope: { allOf: [{ $ref: '#/components/schemas/EnvelopeBase' }, { type: object, properties: { data: { $ref: '#/components/schemas/Theme' } }, required: [data] }] }
     ThemesEnvelope: { allOf: [{ $ref: '#/components/schemas/EnvelopeBase' }, { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/Theme' } } }, required: [data] }] }
     ThemeValidationEnvelope: { allOf: [{ $ref: '#/components/schemas/EnvelopeBase' }, { type: object, properties: { data: { $ref: '#/components/schemas/ThemeValidationResult' } }, required: [data] }] }
+    ThemeUpdateStatusEnvelope: { allOf: [{ $ref: '#/components/schemas/EnvelopeBase' }, { type: object, properties: { data: { $ref: '#/components/schemas/ThemeUpdateStatus' } }, required: [data] }] }
     ThemeVersionEnvelope: { allOf: [{ $ref: '#/components/schemas/EnvelopeBase' }, { type: object, properties: { data: { $ref: '#/components/schemas/ThemeVersion' } }, required: [data] }] }
     ThemeVersionsEnvelope: { allOf: [{ $ref: '#/components/schemas/EnvelopeBase' }, { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/ThemeVersion' } } }, required: [data] }] }
     DiscoverEnvelope: { allOf: [{ $ref: '#/components/schemas/PaginatedEnvelopeBase' }, { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/DiscoverPage' } } }, required: [data] }] }
