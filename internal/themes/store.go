@@ -55,7 +55,7 @@ func NewStore(db *sql.DB) *Store { return &Store{db: db} }
 func (s *Store) UpsertVersion(ctx context.Context, packageID string, compiled Compiled, sourceType, sourceRef string, now time.Time) (string, error) {
 	var versionID string
 	err := database.WithinTx(ctx, s.db, nil, func(tx *sql.Tx) error {
-		id, err := upsertVersionTx(ctx, tx, packageID, compiled, sourceType, sourceRef, now)
+		id, err := upsertVersionTx(ctx, tx, packageID, compiled, sourceType, sourceRef, "", now)
 		if err != nil {
 			return err
 		}
@@ -71,11 +71,13 @@ func (s *Store) UpsertVersion(ctx context.Context, packageID string, compiled Co
 // upsertVersionTx 是 UpsertVersion 的事务体，未导出以便 InstallPrivate 之类的
 // 调用方在同一事务里复用（避免嵌套事务或先提交再补写导致的中间状态可见）。
 //
+// importerID 为空串时写 NULL，表示该版本不由某个特定用户导入（例如内置主题）。
+//
 // 入参校验也放在这里而不是公开包装函数 UpsertVersion：InstallPrivate 直接调用
 // 本函数，不经过 UpsertVersion，校验若只留在包装函数里，私有安装路径上一个
 // 坏 sourceType 就会绕过检查、一路撞到 SQL 层变成一次不可读的 500，而不是
 // 这里给出的域错误。
-func upsertVersionTx(ctx context.Context, tx *sql.Tx, packageID string, compiled Compiled, sourceType, sourceRef string, now time.Time) (string, error) {
+func upsertVersionTx(ctx context.Context, tx *sql.Tx, packageID string, compiled Compiled, sourceType, sourceRef, importerID string, now time.Time) (string, error) {
 	packageID = strings.TrimSpace(packageID)
 	if packageID == "" {
 		return "", errors.New("themes: package id is empty")
@@ -106,10 +108,10 @@ func upsertVersionTx(ctx context.Context, tx *sql.Tx, packageID string, compiled
 		INSERT INTO theme_versions(
 			id, theme_id, version, source_ref, manifest_json,
 			compiled_css, content_hash, status, imported_by, created_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', NULL, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)
 		ON CONFLICT (theme_id, content_hash) DO NOTHING`,
 		compiled.VersionID, packageID, compiled.Manifest.Version, sourceRef, string(manifestJSON),
-		compiled.CSS, compiled.ContentHash, dbTime(now))
+		compiled.CSS, compiled.ContentHash, sql.NullString{String: importerID, Valid: importerID != ""}, dbTime(now))
 	if err != nil {
 		return "", err
 	}

@@ -67,7 +67,7 @@ func (s *Store) InstallPrivate(ctx context.Context, ownerID, slug, sourceType, s
 				slug, ownerID, sourceType, sourceURL, compiled.Manifest.SpecVersion); err != nil {
 				return fmt.Errorf("insert private theme: %w", err)
 			}
-			versionID, err := upsertVersionTx(ctx, tx, themeID, compiled, sourceType, sourceRef, now)
+			versionID, err := upsertVersionTx(ctx, tx, themeID, compiled, sourceType, sourceRef, ownerID, now)
 			if err != nil {
 				return err
 			}
@@ -81,7 +81,7 @@ func (s *Store) InstallPrivate(ctx context.Context, ownerID, slug, sourceType, s
 			if err != nil {
 				return err
 			}
-			versionID, err := upsertVersionTx(ctx, tx, themeID, compiled, sourceType, sourceRef, now)
+			versionID, err := upsertVersionTx(ctx, tx, themeID, compiled, sourceType, sourceRef, ownerID, now)
 			if err != nil {
 				return err
 			}

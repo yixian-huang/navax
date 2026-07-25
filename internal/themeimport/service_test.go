@@ -241,6 +241,21 @@ func TestImportGitHubUsesFetchedTarball(t *testing.T) {
 	}
 }
 
+func TestImportZipRecordsImporter(t *testing.T) {
+	service, _, db := newServiceDB(t)
+	installed, err := service.ImportZip(context.Background(), "usr_svc_0001", sampleZip(t))
+	if err != nil {
+		t.Fatalf("ImportZip() error = %v", err)
+	}
+	var importer sql.NullString
+	if err := db.QueryRow(`SELECT imported_by FROM theme_versions WHERE id = ?`, installed.VersionID).Scan(&importer); err != nil {
+		t.Fatal(err)
+	}
+	if !importer.Valid || importer.String != "usr_svc_0001" {
+		t.Fatalf("imported_by = %v, want usr_svc_0001", importer)
+	}
+}
+
 func TestUninstallDelegates(t *testing.T) {
 	service, _ := newService(t)
 	installed, err := service.ImportZip(context.Background(), "usr_svc_0001", sampleZip(t))

@@ -119,3 +119,18 @@ func TestAssertDefaultThemeUsableDetectsBrokenFallback(t *testing.T) {
 		t.Fatalf("error = %v, want ErrDefaultThemeUnavailable", err)
 	}
 }
+
+func TestSyncBuiltinLeavesImporterNull(t *testing.T) {
+	db := newTestDB(t)
+	store := NewStore(db)
+	if err := SyncBuiltin(t.Context(), store, time.Now().UTC()); err != nil {
+		t.Fatalf("SyncBuiltin() error = %v", err)
+	}
+	var nonNull int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM theme_versions WHERE imported_by IS NOT NULL`).Scan(&nonNull); err != nil {
+		t.Fatal(err)
+	}
+	if nonNull != 0 {
+		t.Fatalf("builtin versions must have NULL imported_by, found %d non-null", nonNull)
+	}
+}
