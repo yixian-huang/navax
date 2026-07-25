@@ -320,3 +320,18 @@ func ResolveEligibleVersion(ctx context.Context, q Queryer, themeID, actorID str
 func (s *Store) ResolveEligibleVersion(ctx context.Context, themeID, actorID string) (string, error) {
 	return ResolveEligibleVersion(ctx, s.db, themeID, actorID)
 }
+
+// PrivateThemeSource 返回某 owner 私有主题的来源类型、仓库 URL 与当前版本 source_ref。
+// 非本人或不存在统一 ErrNotFound（防枚举）。
+func (s *Store) PrivateThemeSource(ctx context.Context, ownerID, themeID string) (sourceType, sourceURL, currentRef string, err error) {
+	err = s.db.QueryRowContext(ctx, `
+		SELECT themes.source_type, themes.source_url, COALESCE(tv.source_ref, '')
+		FROM themes
+		LEFT JOIN theme_versions tv ON tv.id = themes.current_version_id
+		WHERE themes.id = ? AND themes.scope = 'private' AND themes.owner_id = ?`,
+		themeID, ownerID).Scan(&sourceType, &sourceURL, &currentRef)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", "", "", ErrNotFound
+	}
+	return sourceType, sourceURL, currentRef, err
+}
