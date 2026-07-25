@@ -462,6 +462,40 @@ func TestAPIContract(t *testing.T) {
 		}
 	})
 
+	t.Run("版本级 kill switch", func(t *testing.T) {
+		// 先确认 sakura 在 user 的 eligible 列表里(非默认、active)。
+		before := user.call(t, http.MethodGet, "/api/v1/themes", nil)
+		mustStatus(t, before, http.StatusOK, "停用前主题列表")
+		if !strings.Contains(string(before.body), "\"sakura\"") {
+			t.Fatal("停用前列表应含 sakura")
+		}
+
+		// 管理员停用 sakura 当前版本。
+		disabled := admin.call(t, http.MethodPatch, "/api/v1/admin/themes/sakura",
+			map[string]any{"status": "disabled"})
+		mustStatus(t, disabled, http.StatusOK, "停用 sakura 版本")
+		if got := stringField(t, disabled.data(), "status", "sakura 状态"); got != "disabled" {
+			t.Fatalf("status = %q, want disabled", got)
+		}
+
+		// 停用后 sakura 从 user 的 eligible 列表消失(410 分支由 httpapi 单测覆盖,这里断言列表回落)。
+		after := user.call(t, http.MethodGet, "/api/v1/themes", nil)
+		mustStatus(t, after, http.StatusOK, "停用后主题列表")
+		if strings.Contains(string(after.body), "\"sakura\"") {
+			t.Fatal("停用后列表不应再含 sakura")
+		}
+
+		// 停用默认主题 slate 的当前版本 → 409。
+		rejected := admin.call(t, http.MethodPatch, "/api/v1/admin/themes/slate",
+			map[string]any{"status": "disabled"})
+		mustStatus(t, rejected, http.StatusConflict, "停用默认主题版本被拒")
+
+		// 恢复 sakura,避免污染后续断言。
+		restored := admin.call(t, http.MethodPatch, "/api/v1/admin/themes/sakura",
+			map[string]any{"status": "active"})
+		mustStatus(t, restored, http.StatusOK, "恢复 sakura")
+	})
+
 	t.Run("越权访问管理端", func(t *testing.T) {
 		denied := user.call(t, http.MethodGet, "/api/v1/admin/overview", nil)
 		mustStatus(t, denied, http.StatusForbidden, "普通用户访问管理端")
