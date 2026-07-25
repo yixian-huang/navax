@@ -143,10 +143,10 @@ func upsertVersionTx(ctx context.Context, tx *sql.Tx, packageID string, compiled
 		}
 	}
 	if _, err := tx.ExecContext(ctx, `
-		UPDATE themes SET current_version_id = ?, source_type = ?, name = ?, description = ?,
+		UPDATE themes SET current_version_id = ?, source_type = ?, name = ?, author = ?, description = ?,
 		       mode = ?, version = ?, preview = ?, spec_version = ?, updated_at = ?
 		WHERE id = ?`,
-		versionID, sourceType, compiled.Manifest.Name, compiled.Manifest.Description,
+		versionID, sourceType, compiled.Manifest.Name, compiled.Manifest.Author, compiled.Manifest.Description,
 		compiled.Manifest.Mode, compiled.Manifest.Version, preview, compiled.Manifest.SpecVersion,
 		dbTime(now), packageID); err != nil {
 		return "", fmt.Errorf("update theme pointer: %w", err)
