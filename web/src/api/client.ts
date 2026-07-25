@@ -70,6 +70,11 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
     throw new ApiError(response.status, code, message, detail);
   }
 
+  // Handle 204 No Content responses
+  if (response.status === 204) {
+    return { code: 'OK', data: null, meta: {} } as T;
+  }
+
   const data = await response.json();
   return data as T;
 }
