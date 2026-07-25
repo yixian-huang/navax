@@ -417,6 +417,11 @@ func (s *Service) UpdateTheme(ctx context.Context, actor Actor, themeID string, 
 	if patch.Default != nil && *patch.Default && patch.Enabled != nil && !*patch.Enabled {
 		return Theme{}, ErrDefaultTheme
 	}
+	// 组合 patch 一次把某主题设为默认、又停用它的当前版本是自相矛盾的
+	// (会让即将成为默认的主题失去可用版本)，在跨字段就地拒绝。
+	if patch.Default != nil && *patch.Default && patch.Status != nil && *patch.Status == "disabled" {
+		return Theme{}, ErrDefaultThemeVersion
+	}
 	current, err := s.store.Theme(ctx, themeID)
 	if err != nil {
 		return Theme{}, err
