@@ -1432,6 +1432,7 @@ paths:
               properties:
                 enabled: { type: boolean }
                 default: { type: boolean }
+                status: { type: string, enum: [active, disabled] }
               minProperties: 1
       responses:
         '200': { $ref: '#/components/responses/ThemeResponse' }

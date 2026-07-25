@@ -316,3 +316,72 @@ func TestThemeListingIncludesOwnerAndStatus(t *testing.T) {
 		t.Fatalf("slate status = %q, want active", slate.Status)
 	}
 }
+
+func TestUpdateThemeDisablesCurrentVersion(t *testing.T) {
+	ctx := context.Background()
+	db, err := database.OpenAndMigrate(ctx, database.Config{Path: ":memory:", MaxOpenConns: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	if err := themes.SyncBuiltin(ctx, themes.NewStore(db), time.Now().UTC()); err != nil {
+		t.Fatalf("SyncBuiltin() error = %v", err)
+	}
+	now := time.Date(2026, 7, 25, 12, 0, 0, 0, time.UTC)
+	insertTestUser(t, db, "usr_admin_b2a", "admin", "admin-b2a@example.com", "admin", now)
+	store := NewSQLStore(db)
+	service := NewService(store)
+	service.now = func() time.Time { return now }
+	actor := Actor{ID: "usr_admin_b2a", Username: "admin", Role: "admin", Status: "active"}
+
+	// sakura 非默认，可停用。
+	disabled := "disabled"
+	updated, err := service.UpdateTheme(ctx, actor, "sakura", ThemePatch{Status: &disabled, RequestID: "req-1"})
+	if err != nil {
+		t.Fatalf("disable sakura version error = %v", err)
+	}
+	if updated.Status != "disabled" {
+		t.Fatalf("status = %q, want disabled", updated.Status)
+	}
+	// 停用后 sakura 不再可解析，回落默认（slate）。
+	var slateVersion string
+	if err := db.QueryRow(`SELECT current_version_id FROM themes WHERE id = 'slate'`).Scan(&slateVersion); err != nil {
+		t.Fatal(err)
+	}
+	got, err := themes.ResolveEligibleVersion(ctx, db, "sakura", "")
+	if err != nil {
+		t.Fatalf("resolve after disable error = %v", err)
+	}
+	if got != slateVersion {
+		t.Fatalf("disabled theme should fall back to default %q, got %q", slateVersion, got)
+	}
+	// 重新启用恢复。
+	active := "active"
+	if _, err := service.UpdateTheme(ctx, actor, "sakura", ThemePatch{Status: &active, RequestID: "req-2"}); err != nil {
+		t.Fatalf("re-enable error = %v", err)
+	}
+	reGot, err := themes.ResolveEligibleVersion(ctx, db, "sakura", "")
+	if err != nil || reGot == slateVersion {
+		t.Fatalf("re-enabled sakura should resolve to its own version, got %q (err %v)", reGot, err)
+	}
+}
+
+func TestUpdateThemeRejectsDisablingDefaultVersion(t *testing.T) {
+	ctx := context.Background()
+	db, err := database.OpenAndMigrate(ctx, database.Config{Path: ":memory:", MaxOpenConns: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	if err := themes.SyncBuiltin(ctx, themes.NewStore(db), time.Now().UTC()); err != nil {
+		t.Fatalf("SyncBuiltin() error = %v", err)
+	}
+	service := NewService(NewSQLStore(db))
+	service.now = func() time.Time { return time.Date(2026, 7, 25, 12, 0, 0, 0, time.UTC) }
+	actor := Actor{ID: "usr_admin_b2a", Username: "admin", Role: "admin", Status: "active"}
+	disabled := "disabled"
+	// slate 是默认主题，拒绝停用其当前版本。
+	if _, err := service.UpdateTheme(ctx, actor, "slate", ThemePatch{Status: &disabled, RequestID: "req"}); !errors.Is(err, ErrDefaultThemeVersion) {
+		t.Fatalf("err = %v, want ErrDefaultThemeVersion", err)
+	}
+}

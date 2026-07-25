@@ -28,6 +28,10 @@ var (
 	ErrInvitationState = errors.New("invitation is already revoked")
 	// ErrPrivateDefault:默认主题必须是目录主题(设计 §7.1 不变量)。
 	ErrPrivateDefault = errors.New("private themes cannot be the instance default")
+	// ErrDefaultThemeVersion:不能停用默认主题的当前版本——否则默认主题失去可用版本。
+	ErrDefaultThemeVersion = errors.New("cannot disable the default theme's current version")
+	// ErrNoCurrentVersion:主题没有当前版本可供停用/启用。
+	ErrNoCurrentVersion = errors.New("theme has no current version")
 )
 
 type Actor struct {
@@ -125,6 +129,7 @@ type Theme struct {
 type ThemePatch struct {
 	Enabled   *bool
 	Default   *bool
+	Status    *string
 	RequestID string
 }
 
@@ -403,7 +408,10 @@ func (s *Service) UpdateTheme(ctx context.Context, actor Actor, themeID string, 
 	if err := authorize(actor); err != nil {
 		return Theme{}, err
 	}
-	if patch.Enabled == nil && patch.Default == nil {
+	if patch.Enabled == nil && patch.Default == nil && patch.Status == nil {
+		return Theme{}, ErrInvalidInput
+	}
+	if patch.Status != nil && *patch.Status != "active" && *patch.Status != "disabled" {
 		return Theme{}, ErrInvalidInput
 	}
 	if patch.Default != nil && *patch.Default && patch.Enabled != nil && !*patch.Enabled {
@@ -416,7 +424,7 @@ func (s *Service) UpdateTheme(ctx context.Context, actor Actor, themeID string, 
 	if current.Default && patch.Enabled != nil && !*patch.Enabled && (patch.Default == nil || *patch.Default) {
 		return Theme{}, ErrDefaultTheme
 	}
-	audit, err := s.audit(actor, "theme.update", "theme", themeID, map[string]any{"enabled": patch.Enabled, "default": patch.Default}, patch.RequestID)
+	audit, err := s.audit(actor, "theme.update", "theme", themeID, map[string]any{"enabled": patch.Enabled, "default": patch.Default, "status": patch.Status}, patch.RequestID)
 	if err != nil {
 		return Theme{}, err
 	}
