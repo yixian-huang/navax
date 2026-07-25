@@ -44,6 +44,13 @@ func (h *CatalogHandler) themes(w http.ResponseWriter, r *http.Request) {
 	if session, ok := SessionFromContext(r.Context()); ok {
 		actorID = session.User.ID
 	}
+	// Vary: Cookie 始终设置——同一 URL 因 Cookie 不同而返回不同内容，中间缓存
+	// 必须按 Cookie 区分变体。带会话时响应额外含调用者的私有主题，必须禁止
+	// 任何共享缓存存储它，否则 A 用户的私有主题列表可能被喂给 B 用户。
+	w.Header().Set("Vary", "Cookie")
+	if actorID != "" {
+		w.Header().Set("Cache-Control", "private, no-store")
+	}
 	themes, err := h.service.Themes(r.Context(), actorID)
 	if err != nil {
 		WriteError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "读取主题失败", nil)

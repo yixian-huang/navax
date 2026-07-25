@@ -173,6 +173,64 @@ func TestFetchTarballEscapesRepoPathSegments(t *testing.T) {
 	}
 }
 
+// TestFetchTarballRejectsRedirectToDisallowedHost 确认重定向目标主机白名单
+// 独立于 netguard 的 IP 复核生效:evil.example.com 解析到一个完全合法的公网
+// IP(IP 复核会放行),但主机本身不在 {github.com, api.github.com,
+// codeload.github.com} ∪ extraHosts 里,必须被拒绝——否则一次 3xx 就能把
+// 拉取器带去任意公网主机。
+func TestFetchTarballRejectsRedirectToDisallowedHost(t *testing.T) {
+	sha := strings.Repeat("e", 40)
+	var evilHit bool
+	transport := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.Host {
+		case "codeload.github.com":
+			resp := respond(http.StatusFound, "")
+			resp.Header.Set("Location", "https://evil.example.com/steal.tar.gz")
+			return resp, nil
+		case "evil.example.com":
+			evilHit = true
+			return respond(200, "should never be reached"), nil
+		}
+		t.Fatalf("unexpected host %s", r.URL.Host)
+		return nil, nil
+	})
+	client := NewGitHubClient(publicResolver("codeload.github.com", "evil.example.com"), transport, nil, "")
+	if _, err := client.FetchTarball(context.Background(), "https://github.com/alice/lilac", sha); !errors.Is(err, ErrHostNotAllowed) {
+		t.Fatalf("err = %v, want ErrHostNotAllowed", err)
+	}
+	if evilHit {
+		t.Fatal("redirect to disallowed host must not be followed")
+	}
+}
+
+// TestFetchTarballFollowsRedirectToExtraHost 确认白名单不是"只认 github.com
+// 三件套":Gitea 兼容主机的重定向(例如反代把 archive 请求转到同域的下载
+// 节点)只要落在 extraHosts 内仍会被跟随。
+func TestFetchTarballFollowsRedirectToExtraHost(t *testing.T) {
+	var finalHit bool
+	transport := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		switch {
+		case r.URL.Host == "git.example.com" && r.URL.Path == "/alice/lilac/archive/v1.2.0.tar.gz":
+			resp := respond(http.StatusFound, "")
+			resp.Header.Set("Location", "https://git.example.com/dl/lilac-v1.2.0.tar.gz")
+			return resp, nil
+		case r.URL.Host == "git.example.com" && r.URL.Path == "/dl/lilac-v1.2.0.tar.gz":
+			finalHit = true
+			return respond(200, "tarball-bytes"), nil
+		}
+		t.Fatalf("unexpected request %s", r.URL.String())
+		return nil, nil
+	})
+	client := NewGitHubClient(publicResolver("git.example.com"), transport, []string{"git.example.com"}, "")
+	fetched, err := client.FetchTarball(context.Background(), "https://git.example.com/alice/lilac", "v1.2.0")
+	if err != nil {
+		t.Fatalf("FetchTarball() error = %v", err)
+	}
+	if !finalHit || string(fetched.Data) != "tarball-bytes" {
+		t.Fatalf("fetched = %+v, finalHit = %v", fetched, finalHit)
+	}
+}
+
 func TestFetchTarballMapsUpstreamFailures(t *testing.T) {
 	client := NewGitHubClient(publicResolver("api.github.com"), roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		return respond(404, `{"message":"Not Found"}`), nil

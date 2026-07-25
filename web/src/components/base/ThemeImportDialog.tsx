@@ -2,12 +2,13 @@
 // nav.ax ThemeImportDialog — import a private theme from GitHub or a zip
 // ============================================================
 
-import { useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { X, Loader2, FileArchive, Import } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { FormField, FormInput } from '@/components/base/FormField';
 import { useToast } from '@/components/base/Toast';
 import { themesApi } from '@/api/themes';
+import { ApiError } from '@/api/client';
 
 interface ThemeImportDialogProps {
   open: boolean;
@@ -26,18 +27,28 @@ export function ThemeImportDialog({ open, onClose, onImported }: ThemeImportDial
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
-  const reset = () => {
+  const reset = useCallback(() => {
     setTab('github');
     setGithubUrl('');
     setGithubRef('');
     setFile(null);
-  };
+  }, []);
 
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
     if (submitting) return;
     reset();
     onClose();
-  };
+  }, [submitting, reset, onClose]);
+
+  // Esc 关闭，与点击遮罩层/关闭按钮同一路径（submitting 时同样按兵不动）。
+  useEffect(() => {
+    if (!open) return;
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') handleClose();
+    };
+    document.addEventListener('keydown', handleEsc, true);
+    return () => document.removeEventListener('keydown', handleEsc, true);
+  }, [open, handleClose]);
 
   const canSubmit = tab === 'github' ? githubUrl.trim().length > 0 : file !== null;
 
@@ -54,7 +65,14 @@ export function ThemeImportDialog({ open, onClose, onImported }: ThemeImportDial
       reset();
       onClose();
     } catch (cause) {
-      toast('error', cause instanceof Error ? cause.message : '主题导入失败');
+      // ApiError.detail 携带服务端给出的具体拒绝原因（例如校验器点出的规则与
+      // 文件名），拼进 toast 让作者知道具体是哪条规则拒了哪个文件，而不是只
+      // 看到一句笼统的 message。
+      if (cause instanceof ApiError) {
+        toast('error', cause.detail ? `${cause.message}：${cause.detail}` : cause.message);
+      } else {
+        toast('error', cause instanceof Error ? cause.message : '主题导入失败');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -65,9 +83,14 @@ export function ThemeImportDialog({ open, onClose, onImported }: ThemeImportDial
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={handleClose} />
-      <div className="relative bg-background-50 rounded-xl p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="theme-import-dialog-title"
+        className="relative bg-background-50 rounded-xl p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto"
+      >
         <div className="flex items-center justify-between mb-5">
-          <h3 className="text-lg font-semibold text-foreground-900">导入主题</h3>
+          <h3 id="theme-import-dialog-title" className="text-lg font-semibold text-foreground-900">导入主题</h3>
           <button onClick={handleClose} className="w-8 h-8 flex items-center justify-center rounded-lg text-foreground-400 hover:bg-background-100 transition-colors duration-150">
             <X className="w-5 h-5" />
           </button>

@@ -3,6 +3,7 @@ package themes
 import (
 	"database/sql"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -104,6 +105,37 @@ func TestInstallPrivateEnforcesQuota(t *testing.T) {
 			return Compile(pkg, themeID)
 		}, time.Now().UTC()); err != nil {
 		t.Fatalf("upgrade at quota error = %v", err)
+	}
+}
+
+// TestInstallPrivateUpgradeRejectsInvalidSourceType 确认 InstallPrivate 的
+// 升级分支——直连 upsertVersionTx、不经过公开包装函数 UpsertVersion——
+// 对坏 sourceType 得到的是可读域错误,而不是掉到 SQL 层变成一次不可读的
+// 约束冲突(themes.source_type 有 CHECK 约束,但直到 upsertVersionTx 末尾的
+// UPDATE 才会触发;校验若不前移,失败信息会是数据库层措辞而不是这里的)。
+func TestInstallPrivateUpgradeRejectsInvalidSourceType(t *testing.T) {
+	db := newTestDB(t)
+	store := NewStore(db)
+	seedUser(t, store, "usr_inst_bad_source")
+
+	installed := installSample(t, store, "usr_inst_bad_source", "lilac", 10)
+
+	_, err := store.InstallPrivate(t.Context(), "usr_inst_bad_source", "lilac", "not-a-real-source-type", "", "digest-lilac-2", 10,
+		func(themeID string) (Compiled, error) { return Compile(samplePackage(t), themeID) }, time.Now().UTC())
+	if err == nil {
+		t.Fatal("upgrade with an invalid source type was accepted")
+	}
+	if !strings.Contains(err.Error(), "unsupported source type") {
+		t.Fatalf("error = %v, want a readable unsupported-source-type message", err)
+	}
+
+	// 主题行未被破坏:被拒的升级整体回滚,current_version_id 仍指向升级前的版本。
+	var currentVersion string
+	if err := db.QueryRow(`SELECT current_version_id FROM themes WHERE id = ?`, installed.ThemeID).Scan(&currentVersion); err != nil {
+		t.Fatal(err)
+	}
+	if currentVersion != installed.VersionID {
+		t.Fatalf("current_version_id = %q, want unchanged %q after rejected upgrade", currentVersion, installed.VersionID)
 	}
 }
 

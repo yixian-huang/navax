@@ -40,7 +40,7 @@ func ExtractZip(data []byte) (map[string][]byte, error) {
 		return nil, invalidArchive("无法解析 zip: %v", err)
 	}
 	files := map[string][]byte{}
-	var total int
+	var total, seen int
 	for _, entry := range reader.File {
 		if entry.FileInfo().IsDir() {
 			continue
@@ -49,8 +49,12 @@ func ExtractZip(data []byte) (map[string][]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		if len(files) >= MaxArchiveFiles {
+		if seen >= MaxArchiveFiles {
 			return nil, invalidArchive("文件数超过 %d 上限", MaxArchiveFiles)
+		}
+		seen++
+		if _, exists := files[name]; exists {
+			return nil, invalidArchive("重复条目 %q", name)
 		}
 		rc, err := entry.Open()
 		if err != nil {
@@ -63,7 +67,7 @@ func ExtractZip(data []byte) (map[string][]byte, error) {
 		}
 		files[name] = content
 	}
-	return stripTopLevelDir(files), nil
+	return stripTopLevelDir(discardArchiveJunk(files)), nil
 }
 
 // ExtractTarGz 解 gzip tarball(GitHub codeload 产物),拒绝一切链接与设备条目。
@@ -78,7 +82,7 @@ func ExtractTarGz(data []byte) (map[string][]byte, error) {
 	defer gz.Close()
 	tr := tar.NewReader(gz)
 	files := map[string][]byte{}
-	var total int
+	var total, seen int
 	for {
 		header, err := tr.Next()
 		if errors.Is(err, io.EOF) {
@@ -98,8 +102,12 @@ func ExtractTarGz(data []byte) (map[string][]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		if len(files) >= MaxArchiveFiles {
+		if seen >= MaxArchiveFiles {
 			return nil, invalidArchive("文件数超过 %d 上限", MaxArchiveFiles)
+		}
+		seen++
+		if _, exists := files[name]; exists {
+			return nil, invalidArchive("重复条目 %q", name)
 		}
 		content, err := readCapped(tr, &total)
 		if err != nil {
@@ -107,7 +115,7 @@ func ExtractTarGz(data []byte) (map[string][]byte, error) {
 		}
 		files[name] = content
 	}
-	return stripTopLevelDir(files), nil
+	return stripTopLevelDir(discardArchiveJunk(files)), nil
 }
 
 // readCapped 累计解压总量,越过 MaxArchiveBytes 立即失败——不是读完再量。
@@ -125,15 +133,34 @@ func readCapped(r io.Reader, total *int) ([]byte, error) {
 }
 
 // cleanArchivePath 拒绝绝对路径、反斜杠与 .. 逃逸(zip-slip)。
+//
+// 规范化后允许与原始条目名不同——例如 "./theme.json" 规范化为
+// "theme.json" 会被接受,path.Clean 的改写本身不是危险信号;只有规范化后
+// 仍是 "."/".." 或以 "../" 起头(意味着条目逃出了包根)才拒绝。
 func cleanArchivePath(name string) (string, error) {
 	if strings.Contains(name, `\`) || strings.HasPrefix(name, "/") {
 		return "", invalidArchive("非法路径 %q", name)
 	}
 	cleaned := path.Clean(name)
-	if cleaned == "." || cleaned == ".." || strings.HasPrefix(cleaned, "../") || cleaned != name {
+	if cleaned == "." || cleaned == ".." || strings.HasPrefix(cleaned, "../") {
 		return "", invalidArchive("非法路径 %q", name)
 	}
 	return cleaned, nil
+}
+
+// discardArchiveJunk 丢弃 macOS 打包工具产生的垃圾条目:资源分支目录
+// __MACOSX/ 及其全部子条目,以及散落在任意目录层级的 .DS_Store。必须在
+// stripTopLevelDir 之前调用——垃圾条目会打破"全部条目共享单一顶层目录"的
+// 判定,让本该被剥离的 GitHub tarball / 作者习惯外层目录前缀保留下来。
+func discardArchiveJunk(files map[string][]byte) map[string][]byte {
+	cleaned := make(map[string][]byte, len(files))
+	for name, data := range files {
+		if strings.HasPrefix(name, "__MACOSX/") || path.Base(name) == ".DS_Store" {
+			continue
+		}
+		cleaned[name] = data
+	}
+	return cleaned
 }
 
 // stripTopLevelDir:全部条目共享单一顶层目录时剥掉一层(GitHub tarball 的

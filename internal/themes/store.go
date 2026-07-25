@@ -53,17 +53,6 @@ func NewStore(db *sql.DB) *Store { return &Store{db: db} }
 // 内置主题可以在每次启动时无条件 upsert。资产只在真正新插入版本时写入——版本
 // 内容寻址且不可变，已存在的版本其资产必然已经落库。
 func (s *Store) UpsertVersion(ctx context.Context, packageID string, compiled Compiled, sourceType, sourceRef string, now time.Time) (string, error) {
-	packageID = strings.TrimSpace(packageID)
-	if packageID == "" {
-		return "", errors.New("themes: package id is empty")
-	}
-	if compiled.VersionID == "" || compiled.ContentHash == "" {
-		return "", errors.New("themes: compiled package is missing version id or content hash")
-	}
-	if !allowedSourceTypes[sourceType] {
-		return "", fmt.Errorf("themes: unsupported source type %q", sourceType)
-	}
-
 	var versionID string
 	err := database.WithinTx(ctx, s.db, nil, func(tx *sql.Tx) error {
 		id, err := upsertVersionTx(ctx, tx, packageID, compiled, sourceType, sourceRef, now)
@@ -81,7 +70,23 @@ func (s *Store) UpsertVersion(ctx context.Context, packageID string, compiled Co
 
 // upsertVersionTx 是 UpsertVersion 的事务体，未导出以便 InstallPrivate 之类的
 // 调用方在同一事务里复用（避免嵌套事务或先提交再补写导致的中间状态可见）。
+//
+// 入参校验也放在这里而不是公开包装函数 UpsertVersion：InstallPrivate 直接调用
+// 本函数，不经过 UpsertVersion，校验若只留在包装函数里，私有安装路径上一个
+// 坏 sourceType 就会绕过检查、一路撞到 SQL 层变成一次不可读的 500，而不是
+// 这里给出的域错误。
 func upsertVersionTx(ctx context.Context, tx *sql.Tx, packageID string, compiled Compiled, sourceType, sourceRef string, now time.Time) (string, error) {
+	packageID = strings.TrimSpace(packageID)
+	if packageID == "" {
+		return "", errors.New("themes: package id is empty")
+	}
+	if compiled.VersionID == "" || compiled.ContentHash == "" {
+		return "", errors.New("themes: compiled package is missing version id or content hash")
+	}
+	if !allowedSourceTypes[sourceType] {
+		return "", fmt.Errorf("themes: unsupported source type %q", sourceType)
+	}
+
 	manifestJSON, err := json.Marshal(compiled.Manifest)
 	if err != nil {
 		return "", fmt.Errorf("themes: marshal manifest: %w", err)
