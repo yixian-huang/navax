@@ -152,20 +152,18 @@ func (c *GitHubClient) FetchTarball(ctx context.Context, rawURL, ref string) (Fe
 
 // ResolveHeadSHA 解析仓库某 ref 的 commit sha,但不下载 tarball——供更新检查用。
 // github.com 走 api.github.com/commits;缺省 ref 用默认分支 HEAD。追加白名单主机
-// 没有等价的 commits API:显式给了 ref 就原样返回(FetchTarball 场景——调用方
-// 已经知道自己要哪个 ref,这里只是回显);ref 留空(CheckUpdate 场景——想问
-// "现在最新是什么")则报 ErrUpdateCheckUnsupported,不是 ErrHostNotAllowed:
-// 主机本身合法,只是没有能力回答这个问题。
+// 没有等价的 commits API,无法在不下载的前提下确认"现在最新是什么",一律报
+// ErrUpdateCheckUnsupported——不是 ErrHostNotAllowed:主机本身合法,只是没有
+// 能力回答这个问题。唯一调用方 Service.CheckUpdate 恒传空 ref,这里不对非空
+// ref 区分处理(不做 FetchTarball 式的原样回显),避免留一条没有调用方能触达
+// 的死分支。
 func (c *GitHubClient) ResolveHeadSHA(ctx context.Context, rawURL, ref string) (string, error) {
 	owner, repo, host, err := parseRepoURL(rawURL, c.extraHosts)
 	if err != nil {
 		return "", err
 	}
 	if host != "github.com" {
-		if strings.TrimSpace(ref) == "" {
-			return "", ErrUpdateCheckUnsupported
-		}
-		return ref, nil
+		return "", ErrUpdateCheckUnsupported
 	}
 	refPath := "HEAD"
 	if strings.TrimSpace(ref) != "" {

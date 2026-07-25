@@ -591,14 +591,28 @@ export function useUpdateAdminThemeState() {
   });
 }
 
+// 版本面板:queryKey 按 themeId 分区,展开卡 B 之后 A 的迟到响应落在
+// ['admin','themes','A','versions'] 下，永远不会渲染进当前 expandedThemeId
+// 指向的 B 面板——从根上消灭"慢请求后到、挂错卡"的竞态（B2b-T7 终审 A）。
+export function useAdminThemeVersions(themeId: string | null, enabled: boolean) {
+  return useQuery({
+    queryKey: ['admin', 'themes', themeId, 'versions'],
+    queryFn: async () => {
+      const res = await adminApi.getThemeVersions(themeId as string);
+      return res.data;
+    },
+    enabled: enabled && !!themeId,
+  });
+}
+
 export function useSetThemeVersionStatus() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ versionId, status }: { versionId: string; status: 'active' | 'disabled' }) =>
       adminApi.setThemeVersionStatus(versionId, status),
-    // 非当前版本停用/启用不改 Theme.status（那只反映当前版本），但主题卡的
-    // 「查看版本」面板依赖本地 state 刷新；这里顺带失效 admin/themes 只是为了
-    // 与既有主题级 mutation 保持一致，不依赖它驱动版本面板本身的更新。
+    // invalidateQueries 默认做前缀（模糊）匹配：失效 ['admin','themes'] 会
+    // 连带失效 ['admin','themes', themeId, 'versions']（useAdminThemeVersions
+    // 的 queryKey），版本面板由此自动重新拉取——不再手动拼接/替换本地数组。
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'themes'] }),
   });
 }

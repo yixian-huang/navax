@@ -9,10 +9,9 @@ import { Link } from 'react-router-dom';
 import { useToast } from '@/components/base/Toast';
 import { cn } from '@/lib/utils';
 import { themeDisplayFromApi, type ThemePackage } from '@/themes/types';
-import { useAdminThemes, useUpdateAdminThemeState, useSetThemeVersionStatus } from '@/hooks/useQueries';
+import { useAdminThemes, useUpdateAdminThemeState, useSetThemeVersionStatus, useAdminThemeVersions } from '@/hooks/useQueries';
 import { ErrorState, LoadingSkeleton } from '@/components/base/SharedUI';
 import { backgroundsApi } from '@/api/backgrounds';
-import { adminApi } from '@/api/admin';
 import { ApiError } from '@/api/client';
 import type { BackgroundMedia, ThemeVersionRow } from '@/api/types';
 
@@ -142,39 +141,24 @@ export default function AdminThemesPage() {
     });
   }, [updateTheme, toast]);
 
-  // 版本面板：一次只展开一张卡，用局部 state 存展开的 themeId 及其版本列表，
-  // 不进 TanStack Query 缓存——面板关闭即丢弃，重新展开总是拉取最新。
+  // 版本面板：一次只展开一张卡，用局部 state 存展开的 themeId，版本列表本身
+  // 交给 useAdminThemeVersions（TanStack Query，queryKey 按 themeId 分区）。
+  // 展开 A（慢）→切到 B（先回）→A 迟到，A 的响应落进 ['admin','themes','A',
+  // 'versions'] 缓存桶，绝不会渲染进当前 expandedThemeId=B 的面板——不再需要
+  // 自己拼一套竞态防护。
   const [expandedThemeId, setExpandedThemeId] = useState<string | null>(null);
-  const [versionRows, setVersionRows] = useState<ThemeVersionRow[]>([]);
-  const [versionsLoading, setVersionsLoading] = useState(false);
   const [versionActionId, setVersionActionId] = useState<string | null>(null);
   const setVersionStatus = useSetThemeVersionStatus();
+  const versionsQuery = useAdminThemeVersions(expandedThemeId, expandedThemeId !== null);
 
-  const handleToggleVersions = useCallback(async (pkg: ThemePackage) => {
-    if (expandedThemeId === pkg.id) {
-      setExpandedThemeId(null);
-      setVersionRows([]);
-      return;
-    }
-    setExpandedThemeId(pkg.id);
-    setVersionRows([]);
-    setVersionsLoading(true);
-    try {
-      const res = await adminApi.getThemeVersions(pkg.id);
-      setVersionRows(res.data);
-    } catch (cause) {
-      toast('error', cause instanceof ApiError ? (cause.detail || cause.message) : '加载版本列表失败');
-      setExpandedThemeId(null);
-    } finally {
-      setVersionsLoading(false);
-    }
-  }, [expandedThemeId, toast]);
+  const handleToggleVersions = useCallback((pkg: ThemePackage) => {
+    setExpandedThemeId(current => (current === pkg.id ? null : pkg.id));
+  }, []);
 
   const handleSetVersionStatus = useCallback(async (row: ThemeVersionRow, next: 'active' | 'disabled') => {
     setVersionActionId(row.versionId);
     try {
-      const res = await setVersionStatus.mutateAsync({ versionId: row.versionId, status: next });
-      setVersionRows(current => current.map(v => (v.versionId === row.versionId ? res.data : v)));
+      await setVersionStatus.mutateAsync({ versionId: row.versionId, status: next });
       toast('success', next === 'disabled' ? '版本已停用' : '版本已启用');
     } catch (cause) {
       toast('error', cause instanceof ApiError ? (cause.detail || cause.message) : '操作失败');
@@ -275,12 +259,24 @@ export default function AdminThemesPage() {
   // 带停用启用按钮，当前版本沿用卡片既有的 B2a 停用控件，不在表里重复。
   const renderVersionPanel = (pkg: ThemePackage) => {
     if (expandedThemeId !== pkg.id) return null;
+    const versionRows = versionsQuery.data ?? [];
     return (
       <div className="mt-1.5 rounded-lg border border-background-200/70 bg-background-50 p-2">
-        {versionsLoading ? (
+        {versionsQuery.isLoading ? (
           <div className="py-3 flex items-center justify-center">
             <span className="w-4 h-4 rounded-full border-2 border-primary-400 border-t-transparent animate-spin" />
           </div>
+        ) : versionsQuery.isError ? (
+          <p className="py-2 text-center text-[11px] text-red-500">
+            加载版本列表失败
+            <button
+              type="button"
+              onClick={() => void versionsQuery.refetch()}
+              className="ml-1 underline hover:text-red-600"
+            >
+              重试
+            </button>
+          </p>
         ) : versionRows.length === 0 ? (
           <p className="py-2 text-center text-[11px] text-foreground-400">暂无版本记录</p>
         ) : (
@@ -354,7 +350,7 @@ export default function AdminThemesPage() {
         {pkg.meta.status && (
           <button
             type="button"
-            onClick={() => void handleToggleVersions(pkg)}
+            onClick={() => handleToggleVersions(pkg)}
             className="ml-auto inline-flex items-center gap-0.5 underline hover:text-foreground-600"
             aria-label={`${expandedThemeId === pkg.id ? '收起' : '展开'}主题 ${pkg.meta.name} 版本列表`}
             aria-expanded={expandedThemeId === pkg.id}

@@ -302,7 +302,7 @@ func TestInstallPrivateReclaimsUnreferencedTombstonesUnderQuota(t *testing.T) {
 		t.Fatalf("uninstall two: want tombstone, removed=%v err=%v", removed, err)
 	}
 	// 现在 owner 名下:two(墓碑,占配额)。装 three + four 应无问题(配额 2,占 1)。
-	installSample(t, store, "usr_recl_0001", "three", 2)
+	three := installSample(t, store, "usr_recl_0001", "three", 2)
 	// 此刻名下 two(墓碑)+ three = 2,已满。装 four 前若不回收会 ErrQuotaExceeded;
 	// 但 two 仍有引用,不可回收 → 确实应满 → four 被拒。
 	if _, err := store.InstallPrivate(t.Context(), "usr_recl_0001", "four", "upload", "", "d4", 2,
@@ -330,5 +330,50 @@ func TestInstallPrivateReclaimsUnreferencedTombstonesUnderQuota(t *testing.T) {
 	}
 	if count != 0 {
 		t.Fatal("reclaimable tombstone two should have been physically deleted")
+	}
+	// three 是 active、无引用的正常主题(非墓碑),回收逻辑只应扫墓碑
+	// (enabled=0)——它必须原封不动地留在库里。
+	var threeCount int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM themes WHERE id = ?`, three.ThemeID).Scan(&threeCount); err != nil {
+		t.Fatal(err)
+	}
+	if threeCount != 1 {
+		t.Fatal("active theme three must survive reclamation")
+	}
+}
+
+// TestInstallPrivateSkipsTombstoneWithDisabledVersionMemory 确认回收不误删
+// 承载 kill-switch 记忆的墓碑:一个墓碑即便无任何 published_snapshots 引用
+// (按纯引用计数本可回收),只要它任一版本曾被管理员停用(status='disabled'),
+// 回收就必须跳过它——否则物理删除连版本行一起抹掉,"这版本有问题"这条
+// 管理判断就随之消失,同 slug 未来重装会拿到一个不带任何历史痕迹的新行。
+func TestInstallPrivateSkipsTombstoneWithDisabledVersionMemory(t *testing.T) {
+	db := newTestDB(t)
+	store := NewStore(db)
+	seedUser(t, store, "usr_recl_disab_0001")
+
+	// 配额=1。装 one,然后直接摆成"墓碑 + kill-switch 记忆"的状态：
+	// enabled=0(墓碑)、无 published_snapshots 引用、唯一版本 status='disabled'。
+	one := installSample(t, store, "usr_recl_disab_0001", "one", 1)
+	if _, err := db.Exec(`UPDATE themes SET enabled = 0 WHERE id = ?`, one.ThemeID); err != nil {
+		t.Fatalf("seed tombstone: %v", err)
+	}
+	if _, err := db.Exec(`UPDATE theme_versions SET status = 'disabled' WHERE id = ?`, one.VersionID); err != nil {
+		t.Fatalf("seed disabled version: %v", err)
+	}
+
+	// 配额已满(1)。装 two 会触发 reclaimTombstones；one 按引用计数本可回收,
+	// 但带 disabled 版本记忆 → 应被跳过 → 配额仍满 → two 应被拒。
+	if _, err := store.InstallPrivate(t.Context(), "usr_recl_disab_0001", "two", "upload", "", "d2", 1,
+		func(themeID string) (Compiled, error) { return Compile(samplePackage(t), themeID) }, time.Now().UTC()); !errors.Is(err, ErrQuotaExceeded) {
+		t.Fatalf("two should be rejected (one's disabled-version tombstone must not be reclaimed): %v", err)
+	}
+
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM themes WHERE id = ?`, one.ThemeID).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatal("tombstone carrying disabled-version memory must survive reclamation")
 	}
 }

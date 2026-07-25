@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -167,9 +168,10 @@ func deleteThemeTx(ctx context.Context, tx *sql.Tx, themeID string, now time.Tim
 	return nil
 }
 
-// reclaimTombstones 回收该 owner 的可回收墓碑:scope=private、enabled=0、且其全部
-// 版本都不再被任何 published_snapshots 引用。返回回收数量。墓碑对 owner 不可见
-// 却占配额,回收在配额压力时自动发生。
+// reclaimTombstones 回收该 owner 的可回收墓碑:scope=private、enabled=0、其全部
+// 版本都不再被任何 published_snapshots 引用、且没有任何版本带 kill-switch
+// 停用记忆(status='disabled')。返回回收数量。墓碑对 owner 不可见却占配额,
+// 回收在配额压力时自动发生。
 func reclaimTombstones(ctx context.Context, tx *sql.Tx, ownerID string, now time.Time) (int, error) {
 	rows, err := tx.QueryContext(ctx, `
 		SELECT id FROM themes WHERE scope = 'private' AND owner_id = ? AND enabled = 0`, ownerID)
@@ -203,9 +205,25 @@ func reclaimTombstones(ctx context.Context, tx *sql.Tx, ownerID string, now time
 		if refs > 0 {
 			continue
 		}
+		// 任一版本曾被管理员 kill-switch 停用(status='disabled'),说明该墓碑
+		// 承载着一段管理判断("这版本有问题")。物理删除会连它的版本行一起
+		// 抹掉,记忆也随之消失——如果同名 slug 未来被重装,新行拿到新 ULID,
+		// 不会继承任何"这曾经被停用过"的痕迹。配额压力下宁可不回收,也不
+		// 丢掉这条记忆。
+		var disabledVersions int
+		if err := tx.QueryRowContext(ctx, `
+			SELECT COUNT(*) FROM theme_versions WHERE theme_id = ? AND status = ?`,
+			themeID, VersionStatusDisabled).Scan(&disabledVersions); err != nil {
+			return 0, err
+		}
+		if disabledVersions > 0 {
+			continue
+		}
 		if err := deleteThemeTx(ctx, tx, themeID, now); err != nil {
 			return 0, err
 		}
+		slog.WarnContext(ctx, "reclaiming unreferenced private tombstone",
+			"themeID", themeID, "ownerID", ownerID)
 		reclaimed++
 	}
 	return reclaimed, nil
