@@ -28,8 +28,8 @@ var ErrNotFound = errors.New("theme resource not found")
 var ErrDefaultThemeUnavailable = errors.New("default theme has no active version")
 
 // themeIDAliases 把已下架的一方主题映射到最接近的保留主题。
-// 与 web/src/lib/themeResolve.ts 的 THEME_ID_ALIASES 保持一致：解析统一收敛到
-// 服务端一处，前端不再自行兜底。
+// 前端旧实现（themeResolve.ts，已随主题规范 v1 删除）曾在浏览器里做同样的
+// 映射；现在解析统一收敛到服务端这一处，前端不再自行兜底。
 var themeIDAliases = map[string]string{
 	"kyoto":      "slate",
 	"terracotta": "slate",

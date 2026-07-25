@@ -2,8 +2,8 @@
  *
  * 迁移说明（详见 docs/theme-api.md §4.1）：
  * - `body` / `body::before` → `[data-nx="page-root"]` / `::before`。
- * - 卡片右上角的 `content: '✿'` 装饰字符被规则拒绝（content 只允许 "" 与 none），
- *   本次不引入资产，因此整条规则删除 —— 记录为视觉降级。
+ * - 卡片右上角的 `content: '✿'` 装饰：content 规则已放宽为「≤ 2 个符号/
+ *   标点码位」，本主题恢复使用（见文末 :hover 规则），不再是视觉降级。
  * - `footer a:hover` 删除：页脚是受保护区域，位于主题根之外。
  * - `[role="tablist"] + div` / `~ div[class*="relative"]` 的 display:none 删除：
  *   它依赖未登记的内部 DOM 结构与 Tailwind 原子类，没有对应钩子。
