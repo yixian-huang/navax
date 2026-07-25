@@ -127,7 +127,7 @@ export const adminApi = {
   toggleTheme: (themeId: string, enabled: boolean) =>
     request<ApiResponse<Theme>>(`/admin/themes/${themeId}`, { method: 'PATCH', body: { enabled } }),
 
-  updateThemeState: (themeId: string, data: { enabled?: boolean; default?: boolean }) =>
+  updateThemeState: (themeId: string, data: { enabled?: boolean; default?: boolean; status?: 'active' | 'disabled' }) =>
     request<ApiResponse<Theme>>(`/admin/themes/${themeId}`, { method: 'PATCH', body: data }),
 
   // Settings

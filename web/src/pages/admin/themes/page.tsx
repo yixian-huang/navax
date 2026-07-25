@@ -38,8 +38,8 @@ export default function AdminThemesPage() {
     return map;
   }, [platformThemes]);
 
-  const seriousThemes = useMemo(() => themes.filter(t => t.meta.vibe === 'serious'), [themes]);
-  const cuteThemes = useMemo(() => themes.filter(t => t.meta.vibe === 'cute'), [themes]);
+  const catalogThemes = useMemo(() => themes.filter(t => t.meta.scope !== 'private'), [themes]);
+  const privateThemes = useMemo(() => themes.filter(t => t.meta.scope === 'private'), [themes]);
 
   // Instance background presets (站长精选)
   const [presets, setPresets] = useState<BackgroundMedia[]>([]);
@@ -135,6 +135,12 @@ export default function AdminThemesPage() {
     }
   }, [toast]);
 
+  const disableVersion = useCallback((pkg: ThemePackage, next: 'active' | 'disabled') => {
+    updateTheme.mutate({ themeId: pkg.id, data: { status: next } }, {
+      onError: (cause) => toast('error', cause instanceof ApiError ? (cause.detail || cause.message) : '操作失败'),
+    });
+  }, [updateTheme, toast]);
+
   if (isLoading) return <LoadingSkeleton count={4} />;
   if (isError) {
     return <ErrorState message={error instanceof Error ? error.message : '加载主题失败'} onRetry={() => refetch()} />;
@@ -222,6 +228,27 @@ export default function AdminThemesPage() {
       </div>
     );
   };
+
+  // 治理叠层：复用 renderThemeCard 渲染本体，外面叠一层 owner / 状态徽章 /
+  // 停用按钮，不改 renderThemeCard 签名——目录主题不需要这些控件。
+  const renderGovernedCard = (pkg: ThemePackage, showOwner: boolean) => (
+    <div key={pkg.id} className="relative">
+      {renderThemeCard(pkg)}
+      <div className="mt-1 flex items-center gap-2 text-xs text-foreground-400">
+        {showOwner && pkg.meta.ownerName && <span>作者：{pkg.meta.ownerName}</span>}
+        {pkg.meta.status === 'disabled' && <span className="text-red-500">已停用版本</span>}
+        {pkg.id !== activeId && (
+          <button
+            type="button"
+            onClick={() => disableVersion(pkg, pkg.meta.status === 'disabled' ? 'active' : 'disabled')}
+            className="underline hover:text-foreground-600"
+          >
+            {pkg.meta.status === 'disabled' ? '启用版本' : '停用版本'}
+          </button>
+        )}
+      </div>
+    </div>
+  );
 
   return (
     <div>
@@ -364,26 +391,26 @@ export default function AdminThemesPage() {
         </div>
       )}
 
-      {seriousThemes.length > 0 && (
+      {catalogThemes.length > 0 && (
         <div className="mb-8">
           <h3 className="text-sm font-semibold text-foreground-700 mb-3 flex items-center gap-2">
             <span className="w-1.5 h-4 rounded-full bg-slate-400" />
-            Classic 经典
+            官方目录
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {seriousThemes.map(renderThemeCard)}
+            {catalogThemes.map(pkg => renderGovernedCard(pkg, false))}
           </div>
         </div>
       )}
 
-      {cuteThemes.length > 0 && (
+      {privateThemes.length > 0 && (
         <div>
           <h3 className="text-sm font-semibold text-foreground-700 mb-3 flex items-center gap-2">
             <span className="w-1.5 h-4 rounded-full bg-pink-400" />
-            Kawaii 可爱
+            用户主题
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {cuteThemes.map(renderThemeCard)}
+            {privateThemes.map(pkg => renderGovernedCard(pkg, true))}
           </div>
         </div>
       )}
