@@ -15,6 +15,7 @@ import (
 	adminpkg "github.com/yixian-huang/navax/internal/admin"
 	"github.com/yixian-huang/navax/internal/auth"
 	"github.com/yixian-huang/navax/internal/database"
+	"github.com/yixian-huang/navax/internal/themes"
 )
 
 func TestAccountHandlerLifecycle(t *testing.T) {
@@ -86,7 +87,12 @@ func TestAccountHandlerLifecycle(t *testing.T) {
 }
 
 func TestAdminHandlerLifecycleAndAuthorization(t *testing.T) {
-	_, authService, adminService, adminSession, adminToken := setupHandlerServices(t)
+	db, authService, adminService, adminSession, adminToken := setupHandlerServices(t)
+	// 主题提升为默认现在要求当前版本 active（关闭了"提升一个没有编译版本的
+	// 主题"的默认提升守卫缺口），所以先跑 SyncBuiltin 让 sakura 有版本可用。
+	if err := themes.SyncBuiltin(context.Background(), themes.NewStore(db), time.Now().UTC()); err != nil {
+		t.Fatalf("SyncBuiltin() error = %v", err)
+	}
 	router := handlerRouter(authService, adminService)
 	actor := adminpkg.Actor{ID: adminSession.User.ID, Username: adminSession.User.Username, Role: "admin", Status: "active"}
 	created, err := adminService.CreateInvitation(context.Background(), actor, adminpkg.InvitationCreate{
@@ -153,11 +159,11 @@ func TestAdminHandlerLifecycleAndAuthorization(t *testing.T) {
 		}
 	}
 
-	response = performRequest(router, http.MethodPatch, "/admin/themes/kyoto", map[string]any{"default": true}, adminToken)
+	response = performRequest(router, http.MethodPatch, "/admin/themes/sakura", map[string]any{"default": true}, adminToken)
 	if response.Code != http.StatusOK {
 		t.Fatalf("set default theme status = %d: %s", response.Code, response.Body.String())
 	}
-	response = performRequest(router, http.MethodPatch, "/admin/themes/kyoto", map[string]any{"enabled": false}, adminToken)
+	response = performRequest(router, http.MethodPatch, "/admin/themes/sakura", map[string]any{"enabled": false}, adminToken)
 	if response.Code != http.StatusConflict {
 		t.Fatalf("disable default theme status = %d", response.Code)
 	}

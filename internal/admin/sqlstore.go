@@ -291,6 +291,24 @@ func (s *SQLStore) UpdateTheme(ctx context.Context, themeID string, patch ThemeP
 				return err
 			}
 		}
+		// 收尾自查:不管上面几路 patch 怎么组合出这个结果,事务提交前都要
+		// 保证「默认主题的当前版本是 active」这条不变量成立。上面的
+		// is_default 提升块只查了 scope,没查版本状态——反过来先停用版本、
+		// 再单独一次 PATCH 把它设为默认(或者两个请求并发),都能绕过前面
+		// 任何一个只看单次 patch 的守卫。这里每个事务收尾都重新读一遍落地
+		// 后的状态,天然覆盖组合 patch、反向两步和并发。
+		var isDefaultNow bool
+		var versionStatus sql.NullString
+		if err := tx.QueryRowContext(ctx, `
+			SELECT themes.is_default, theme_versions.status
+			FROM themes
+			LEFT JOIN theme_versions ON theme_versions.id = themes.current_version_id
+			WHERE themes.id = ?`, themeID).Scan(&isDefaultNow, &versionStatus); err != nil {
+			return err
+		}
+		if isDefaultNow && (!versionStatus.Valid || versionStatus.String != themes.VersionStatusActive) {
+			return ErrDefaultThemeVersion
+		}
 		return insertAudit(ctx, tx, audit)
 	})
 	if err != nil {

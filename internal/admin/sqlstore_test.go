@@ -22,6 +22,11 @@ func TestAdminManagementLifecycle(t *testing.T) {
 	t.Cleanup(func() { _ = db.Close() })
 
 	now := time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC)
+	// 主题提升为默认需要一个真正带 active 当前版本的目录主题（B 的收尾自查
+	// 不再放行"提升一个没有编译版本的主题"），所以先跑 SyncBuiltin。
+	if err := themes.SyncBuiltin(ctx, themes.NewStore(db), now); err != nil {
+		t.Fatalf("SyncBuiltin() error = %v", err)
+	}
 	insertTestUser(t, db, "usr_admin_test", "owner", "owner@example.com", "admin", now)
 	insertTestUser(t, db, "usr_alice_test", "alice", "alice@example.com", "user", now.Add(time.Minute))
 	insertTestSession(t, db, "ses_alice_test", "usr_alice_test", now)
@@ -88,7 +93,7 @@ func TestAdminManagementLifecycle(t *testing.T) {
 	}
 
 	makeDefault := true
-	theme, err := service.UpdateTheme(ctx, actor, "kyoto", ThemePatch{Default: &makeDefault, RequestID: "req-theme"})
+	theme, err := service.UpdateTheme(ctx, actor, "sakura", ThemePatch{Default: &makeDefault, RequestID: "req-theme"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +101,7 @@ func TestAdminManagementLifecycle(t *testing.T) {
 		t.Fatalf("unexpected default theme: %+v", theme)
 	}
 	disable := false
-	if _, err := service.UpdateTheme(ctx, actor, "kyoto", ThemePatch{Enabled: &disable}); !errors.Is(err, ErrDefaultTheme) {
+	if _, err := service.UpdateTheme(ctx, actor, "sakura", ThemePatch{Enabled: &disable}); !errors.Is(err, ErrDefaultTheme) {
 		t.Fatalf("disable default theme error = %v", err)
 	}
 
@@ -427,5 +432,92 @@ func TestUpdateThemeRejectsCombinedPromoteAndDisable(t *testing.T) {
 	}
 	if !slateDefault {
 		t.Fatal("slate should remain the default theme")
+	}
+}
+
+// TestUpdateThemePromotionRejectsDisabledCurrentVersion 覆盖反向两步:先单独一次
+// PATCH 停用 sakura 的当前版本(此时它不是默认，允许)，再单独一次 PATCH 把
+// sakura 提升为默认——这次的 patch 里没有 Status 字段，service 层只看单次 patch
+// 内部组合的前置守卫（TestUpdateThemeRejectsCombinedPromoteAndDisable 覆盖的那条）
+// 看不到跨请求的冲突，只能靠 sqlstore 事务收尾时重新读一遍落地状态来拦。必须
+// 返回 ErrDefaultThemeVersion 并回滚：sakura 未成为默认、其版本仍是 disabled，
+// slate 仍是默认主题。
+func TestUpdateThemePromotionRejectsDisabledCurrentVersion(t *testing.T) {
+	ctx := context.Background()
+	db, err := database.OpenAndMigrate(ctx, database.Config{Path: ":memory:", MaxOpenConns: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	if err := themes.SyncBuiltin(ctx, themes.NewStore(db), time.Now().UTC()); err != nil {
+		t.Fatalf("SyncBuiltin() error = %v", err)
+	}
+	now := time.Date(2026, 7, 25, 12, 0, 0, 0, time.UTC)
+	insertTestUser(t, db, "usr_admin_b2a", "admin", "admin-promo@example.com", "admin", now)
+	service := NewService(NewSQLStore(db))
+	service.now = func() time.Time { return now }
+	actor := Actor{ID: "usr_admin_b2a", Username: "admin", Role: "admin", Status: "active"}
+
+	disabled := "disabled"
+	if _, err := service.UpdateTheme(ctx, actor, "sakura", ThemePatch{Status: &disabled, RequestID: "req-1"}); err != nil {
+		t.Fatalf("disable sakura version error = %v", err)
+	}
+
+	promote := true
+	if _, err := service.UpdateTheme(ctx, actor, "sakura", ThemePatch{Default: &promote, RequestID: "req-2"}); !errors.Is(err, ErrDefaultThemeVersion) {
+		t.Fatalf("err = %v, want ErrDefaultThemeVersion", err)
+	}
+
+	var sakuraStatus string
+	var sakuraDefault bool
+	if err := db.QueryRow(`
+		SELECT theme_versions.status, themes.is_default
+		FROM themes JOIN theme_versions ON theme_versions.id = themes.current_version_id
+		WHERE themes.id = 'sakura'`).Scan(&sakuraStatus, &sakuraDefault); err != nil {
+		t.Fatal(err)
+	}
+	if sakuraStatus != "disabled" || sakuraDefault {
+		t.Fatalf("sakura should be untouched by the rejected promotion: status=%q is_default=%v", sakuraStatus, sakuraDefault)
+	}
+	var slateDefault bool
+	if err := db.QueryRow(`SELECT is_default FROM themes WHERE id = 'slate'`).Scan(&slateDefault); err != nil {
+		t.Fatal(err)
+	}
+	if !slateDefault {
+		t.Fatal("slate should remain the default theme")
+	}
+}
+
+// TestUpdateThemeStatusRejectsThemeWithoutCurrentVersion 覆盖此前零测试覆盖的
+// NO_CURRENT_VERSION 分支:migration 0013 停用的 culled 主题（如 mono）从未有过
+// 编译版本，current_version_id 为 NULL。对它 PATCH {status: disabled} 没有版本
+// 可停，必须返回 ErrNoCurrentVersion，而不是把空字符串当版本 ID 传给 UPDATE
+// theme_versions（那样会静默地什么都不改，掩盖真实状态）。
+func TestUpdateThemeStatusRejectsThemeWithoutCurrentVersion(t *testing.T) {
+	ctx := context.Background()
+	db, err := database.OpenAndMigrate(ctx, database.Config{Path: ":memory:", MaxOpenConns: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	if err := themes.SyncBuiltin(ctx, themes.NewStore(db), time.Now().UTC()); err != nil {
+		t.Fatalf("SyncBuiltin() error = %v", err)
+	}
+
+	var monoCurrentVersion sql.NullString
+	if err := db.QueryRow(`SELECT current_version_id FROM themes WHERE id = 'mono'`).Scan(&monoCurrentVersion); err != nil {
+		t.Fatalf("read mono current_version_id: %v", err)
+	}
+	if monoCurrentVersion.Valid && monoCurrentVersion.String != "" {
+		t.Fatalf("test fixture assumption broken: mono already has a current version %q", monoCurrentVersion.String)
+	}
+
+	service := NewService(NewSQLStore(db))
+	service.now = func() time.Time { return time.Date(2026, 7, 25, 12, 0, 0, 0, time.UTC) }
+	actor := Actor{ID: "usr_admin_b2a", Username: "admin", Role: "admin", Status: "active"}
+
+	disabled := "disabled"
+	if _, err := service.UpdateTheme(ctx, actor, "mono", ThemePatch{Status: &disabled, RequestID: "req"}); !errors.Is(err, ErrNoCurrentVersion) {
+		t.Fatalf("err = %v, want ErrNoCurrentVersion", err)
 	}
 }

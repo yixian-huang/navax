@@ -135,7 +135,20 @@ func upsertVersionTx(ctx context.Context, tx *sql.Tx, packageID string, compiled
 	}
 
 	// 撤销过的版本不因一次重新导入而复活：撤销是运维动作，静默回滚它会让
-	// kill switch 形同虚设。触发器也会拦，但这里给出可读的原因。
+	// kill switch 形同虚设。
+	if status == VersionStatusDisabled {
+		// 但重新导入本身必须成功返回,而不是报错。内置主题在每次启动都会
+		// 无条件重放同一份编译产物(SyncBuiltin);如果这里报错,一个被
+		// 管理员停用的内置版本会让进程每次重启都在这里失败,俗称 boot
+		// loop。已存在的行内容和这次重放完全相同(否则内容哈希就不会
+		// 命中同一行),所以除了 status 之外没有任何东西需要回写——尤其
+		// 不能把 current_version_id 重新指回它:那既会悄悄撤销管理员的
+		// 停用决定,也会因为 UPDATE OF current_version_id 触发器对「赋值
+		// 相同也算一次 UPDATE」而在这里直接报错（migration 0014）。
+		// eligibility 谓词仍然把这个版本排除在外;默认主题另有
+		// EnsureDefaultTheme / AssertDefaultThemeUsable 兜底防它失守。
+		return versionID, nil
+	}
 	if status != VersionStatusActive {
 		return "", fmt.Errorf("themes: version %s of theme %s is %s and cannot become current", versionID, packageID, status)
 	}
