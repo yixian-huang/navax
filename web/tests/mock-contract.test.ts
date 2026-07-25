@@ -52,7 +52,7 @@ function responseValidator(path: string, method: string, status: string): Valida
 type Case = { name: string; path: string; method: string; status: string; url: string; init?: RequestInit };
 const cases: Case[] = [
   { name: '当前草稿页', path: '/api/v1/pages/current', method: 'get', status: '200', url: '/api/v1/pages/current?scope=personal' },
-  { name: '草稿预览', path: '/api/v1/pages/{pageId}/preview', method: 'get', status: '200', url: '/api/v1/pages/pg_mock_001/preview' },
+  { name: '草稿预览', path: '/api/v1/pages/{pageId}/preview', method: 'get', status: '200', url: '/api/v1/pages/page_001/preview' },
   { name: '公开首页快照', path: '/api/v1/public/home', method: 'get', status: '200', url: '/api/v1/public/home' },
   { name: '公开实例配置', path: '/api/v1/public/config', method: 'get', status: '200', url: '/api/v1/public/config' },
   { name: '主题列表', path: '/api/v1/themes', method: 'get', status: '200', url: '/api/v1/themes' },
