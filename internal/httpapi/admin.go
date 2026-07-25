@@ -447,6 +447,8 @@ func (h *AdminHandler) writeError(w http.ResponseWriter, r *http.Request, err er
 		WriteError(w, r, http.StatusConflict, "CONFLICT", "不能停用当前管理员账号", nil)
 	case errors.Is(err, adminpkg.ErrDefaultTheme):
 		WriteError(w, r, http.StatusConflict, "CONFLICT", "默认主题必须保持启用", nil)
+	case errors.Is(err, adminpkg.ErrPrivateDefault):
+		WriteError(w, r, http.StatusConflict, "PRIVATE_THEME_DEFAULT", "私有主题不能设为实例默认主题", nil)
 	case errors.Is(err, adminpkg.ErrInvitationState):
 		WriteError(w, r, http.StatusConflict, "CONFLICT", "邀请已被撤销", nil)
 	case errors.Is(err, adminpkg.ErrConflict):

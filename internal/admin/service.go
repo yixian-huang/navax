@@ -26,6 +26,8 @@ var (
 	ErrSelfDisable     = errors.New("an administrator cannot disable their own account")
 	ErrDefaultTheme    = errors.New("the default theme must remain enabled")
 	ErrInvitationState = errors.New("invitation is already revoked")
+	// ErrPrivateDefault:默认主题必须是目录主题(设计 §7.1 不变量)。
+	ErrPrivateDefault = errors.New("private themes cannot be the instance default")
 )
 
 type Actor struct {
