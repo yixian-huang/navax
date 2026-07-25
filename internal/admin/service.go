@@ -116,6 +116,10 @@ type Theme struct {
 	Swatches         [3]string
 	SourceType       string
 	SourceURL        string
+	OwnerID          string
+	OwnerName        string
+	// Status 是当前版本的状态(active/disabled)。无当前版本时空串。
+	Status string
 }
 
 type ThemePatch struct {

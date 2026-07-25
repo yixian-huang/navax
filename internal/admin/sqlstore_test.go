@@ -260,3 +260,59 @@ func TestUpdateThemeRejectsPrivateDefault(t *testing.T) {
 		t.Fatalf("err = %v, want ErrPrivateDefault", err)
 	}
 }
+
+func TestThemeListingIncludesOwnerAndStatus(t *testing.T) {
+	ctx := context.Background()
+	db, err := database.OpenAndMigrate(ctx, database.Config{Path: ":memory:", MaxOpenConns: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	if err := themes.SyncBuiltin(ctx, themes.NewStore(db), time.Now().UTC()); err != nil {
+		t.Fatalf("SyncBuiltin() error = %v", err)
+	}
+	// 造一个属于 alice 的私有主题 + 一个 active 当前版本。
+	stamp := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := db.Exec(`INSERT INTO users (id, username, email, password_hash, role, status, created_at, updated_at)
+		VALUES ('usr_alice_b2a', 'alice', 'alice@example.com', 'x', 'user', 'active', ?, ?)`, stamp, stamp); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO themes (id, name, version, author, description, mode, preview, enabled, is_default, created_at, updated_at, slug, scope, owner_id, source_type)
+		VALUES ('thm_alice_b2a', 'Alice Theme', '1.0.0', 'alice', '', 'light', '', 1, 0, ?, ?, 'alice-theme', 'private', 'usr_alice_b2a', 'upload')`, stamp, stamp); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO theme_versions (id, theme_id, version, source_ref, manifest_json, compiled_css, content_hash, status, created_at)
+		VALUES ('vaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'thm_alice_b2a', '1.0.0', 'digest', '{}', 'x', 'hashalicetheme0001', 'active', ?)`, stamp); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`UPDATE themes SET current_version_id = 'vaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' WHERE id = 'thm_alice_b2a'`); err != nil {
+		t.Fatal(err)
+	}
+
+	store := NewSQLStore(db)
+	items, err := store.ListThemes(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byID := map[string]Theme{}
+	for _, item := range items {
+		byID[item.ID] = item
+	}
+	alice, ok := byID["thm_alice_b2a"]
+	if !ok {
+		t.Fatal("列表缺少私有主题")
+	}
+	if alice.OwnerID != "usr_alice_b2a" || alice.OwnerName != "alice" {
+		t.Fatalf("owner 未接线: %+v", alice)
+	}
+	if alice.Status != "active" {
+		t.Fatalf("status = %q, want active", alice.Status)
+	}
+	// catalog 内置主题无 owner。
+	if slate := byID["slate"]; slate.OwnerName != "" || slate.OwnerID != "" {
+		t.Fatalf("catalog 主题不应有 owner: %+v", slate)
+	}
+	if slate := byID["slate"]; slate.Status != "active" {
+		t.Fatalf("slate status = %q, want active", slate.Status)
+	}
+}

@@ -545,6 +545,15 @@ func themeData(item adminpkg.Theme) map[string]any {
 	if item.SourceURL != "" {
 		data["sourceUrl"] = item.SourceURL
 	}
+	if item.OwnerID != "" {
+		data["ownerId"] = item.OwnerID
+	}
+	if item.OwnerName != "" {
+		data["ownerName"] = item.OwnerName
+	}
+	if item.Status != "" {
+		data["status"] = item.Status
+	}
 	return data
 }
 
