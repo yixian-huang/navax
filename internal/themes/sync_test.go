@@ -120,6 +120,75 @@ func TestAssertDefaultThemeUsableDetectsBrokenFallback(t *testing.T) {
 	}
 }
 
+// 一次真实事故:管理员停用了某个内置主题(如 sakura)的当前版本后重启进程。
+// SyncBuiltin 每次启动都无条件重放同一份编译产物,按内容哈希幂等回读命中的
+// 是那条刚被停用的行。若 upsertVersionTx 对此报错,SyncBuiltin 就失败、
+// run.go 把它当致命错误,于是进程陷入无限重启(boot loop)。这个测试要
+// 证明:带着一个被停用的内置版本重启,SyncBuiltin 必须干净返回,且不悄悄
+// 复活那个版本、不影响未受影响的默认主题(slate)。
+func TestSyncBuiltinSurvivesDisabledBuiltinVersion(t *testing.T) {
+	db := newTestDB(t)
+	store := NewStore(db)
+	stamp := time.Date(2026, 7, 25, 0, 0, 0, 0, time.UTC)
+
+	if err := SyncBuiltin(t.Context(), store, stamp); err != nil {
+		t.Fatalf("SyncBuiltin() first run error = %v", err)
+	}
+
+	var sakuraVersionID string
+	if err := db.QueryRow(`SELECT current_version_id FROM themes WHERE id = 'sakura'`).Scan(&sakuraVersionID); err != nil {
+		t.Fatalf("read sakura current_version_id: %v", err)
+	}
+	if sakuraVersionID == "" {
+		t.Fatal("sakura has no current version after first sync")
+	}
+
+	// 模拟管理员停用:直接改行,绕开 service 层(与 upsertVersionTx 里
+	// 校验的场景一致——重同步撞见的是一条已经是 disabled 的既存行)。
+	if _, err := db.Exec(`UPDATE theme_versions SET status = 'disabled' WHERE id = ?`, sakuraVersionID); err != nil {
+		t.Fatalf("disable sakura version: %v", err)
+	}
+
+	// 重启:再次 SyncBuiltin 必须无错返回,不能把停用当成致命错误。
+	if err := SyncBuiltin(t.Context(), store, stamp.Add(time.Hour)); err != nil {
+		t.Fatalf("SyncBuiltin() second run (with disabled builtin version) error = %v", err)
+	}
+
+	// 该版本仍是 disabled——重同步不得复活它,否则停用形同虚设。
+	var status string
+	if err := db.QueryRow(`SELECT status FROM theme_versions WHERE id = ?`, sakuraVersionID).Scan(&status); err != nil {
+		t.Fatalf("read sakura version status: %v", err)
+	}
+	if status != VersionStatusDisabled {
+		t.Fatalf("sakura version status = %q, want %q (must not be revived)", status, VersionStatusDisabled)
+	}
+
+	// current_version_id 也不能被悄悄指回这个 disabled 版本。
+	var themeVersionID, themeStatus string
+	if err := db.QueryRow(`
+		SELECT themes.current_version_id, theme_versions.status
+		FROM themes JOIN theme_versions ON theme_versions.id = themes.current_version_id
+		WHERE themes.id = 'sakura'`).Scan(&themeVersionID, &themeStatus); err != nil {
+		t.Fatalf("read sakura theme pointer: %v", err)
+	}
+	if themeVersionID != sakuraVersionID || themeStatus != VersionStatusDisabled {
+		t.Fatalf("sakura current_version_id should still point at the disabled version %q, got %q (status %q)",
+			sakuraVersionID, themeVersionID, themeStatus)
+	}
+
+	// 默认主题(slate)未受影响,启动断言照常通过。
+	if err := store.AssertDefaultThemeUsable(t.Context()); err != nil {
+		t.Fatalf("AssertDefaultThemeUsable() error = %v", err)
+	}
+	var defaultID string
+	if err := db.QueryRow(`SELECT id FROM themes WHERE is_default = 1`).Scan(&defaultID); err != nil {
+		t.Fatalf("read default theme: %v", err)
+	}
+	if defaultID != BaselineThemeID {
+		t.Fatalf("default theme = %q, want unaffected baseline %q", defaultID, BaselineThemeID)
+	}
+}
+
 func TestSyncBuiltinLeavesImporterNull(t *testing.T) {
 	db := newTestDB(t)
 	store := NewStore(db)

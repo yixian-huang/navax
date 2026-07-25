@@ -237,11 +237,12 @@ export default function AdminThemesPage() {
       <div className="mt-1 flex items-center gap-2 text-xs text-foreground-400">
         {showOwner && pkg.meta.ownerName && <span>作者：{pkg.meta.ownerName}</span>}
         {pkg.meta.status === 'disabled' && <span className="text-red-500">已停用版本</span>}
-        {pkg.id !== activeId && (
+        {pkg.id !== activeId && pkg.meta.status && (
           <button
             type="button"
             onClick={() => disableVersion(pkg, pkg.meta.status === 'disabled' ? 'active' : 'disabled')}
             className="underline hover:text-foreground-600"
+            aria-label={`${pkg.meta.status === 'disabled' ? '启用' : '停用'}版本 ${pkg.meta.name}`}
           >
             {pkg.meta.status === 'disabled' ? '启用版本' : '停用版本'}
           </button>
