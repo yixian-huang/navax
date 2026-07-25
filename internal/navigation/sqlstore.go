@@ -23,10 +23,15 @@ type SQLStore struct {
 	resolveThemeVersion ThemeVersionResolver
 }
 
-// ThemeVersionResolver 在给定事务上解析出某主体可用的主题版本。
-// 必须在发布事务内执行：解析与写快照之间若隔着事务边界，主题在这个空档
-// 被撤销就会留下一条指向已撤销版本的快照。
-type ThemeVersionResolver func(ctx context.Context, tx *sql.Tx, themeID, actorID string) (string, error)
+// ThemeQueryer 是主题解析所需的最小查询能力，*sql.DB 与 *sql.Tx 都满足。
+type ThemeQueryer interface {
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+// ThemeVersionResolver 解析出某主体可用的主题版本。发布必须传**发布事务**：
+// 解析与写快照之间若隔着事务边界，主题在这个空档被撤销就会留下一条指向
+// 已撤销版本的快照。预览只读、不写快照，没有这个窗口，在连接池上解析即可。
+type ThemeVersionResolver func(ctx context.Context, q ThemeQueryer, themeID, actorID string) (string, error)
 
 func NewSQLStore(db *sql.DB) *SQLStore { return &SQLStore{db: db} }
 
@@ -555,6 +560,15 @@ func (s *SQLStore) Preview(ctx context.Context, actor Actor, pageID, _ string, n
 	if err := attachApprovedSubdomain(ctx, s.db, page, &published); err != nil {
 		return PublishedPage{}, err
 	}
+	if s.resolveThemeVersion == nil {
+		return PublishedPage{}, fmt.Errorf("navigation: theme version resolver is not wired")
+	}
+	// 与发布共用同一份解析，预览里看到的主题才与发布后一致。
+	themeVersionID, err := s.resolveThemeVersion(ctx, s.db, page.Settings.Appearance.ThemeID, actor.UserID)
+	if err != nil {
+		return PublishedPage{}, err
+	}
+	published.ThemeVersionID = themeVersionID
 	published.ETag = makeETag(published)
 	return published, nil
 }

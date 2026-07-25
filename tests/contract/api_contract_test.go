@@ -175,6 +175,14 @@ func TestAPIContract(t *testing.T) {
 			t.Fatalf("themeVersionId 形状不合法: %q", publicThemeVersionID)
 		}
 
+		previewResult := admin.call(t, http.MethodGet,
+			fmt.Sprintf("/api/v1/pages/%s/preview", adminPageID), nil)
+		mustStatus(t, previewResult, http.StatusOK, "草稿预览")
+		// 预览与发布解析出同一个版本(同一份草稿、同一个谓词)。
+		if got := stringField(t, previewResult.data(), "themeVersionId", "预览主题版本"); got != publicThemeVersionID {
+			t.Fatalf("预览主题版本 %q != 发布主题版本 %q", got, publicThemeVersionID)
+		}
+
 		missing := guest.call(t, http.MethodGet, "/api/v1/public/pages/does-not-exist", nil)
 		mustStatus(t, missing, http.StatusNotFound, "读取不存在的公开页面")
 	})

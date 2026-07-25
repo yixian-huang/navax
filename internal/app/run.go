@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -159,8 +158,8 @@ func Run(ctx context.Context, cfg config.Config, build BuildInfo) error {
 	navigationStore := navigation.NewSQLStore(db)
 	// 发布事务内锁定主题版本。解析与写快照必须在同一事务里，否则中间的
 	// 空档足以让一个刚被撤销的版本进入快照。
-	navigationStore.SetThemeVersionResolver(func(ctx context.Context, tx *sql.Tx, themeID, actorID string) (string, error) {
-		return themes.ResolveEligibleVersion(ctx, tx, themeID, actorID)
+	navigationStore.SetThemeVersionResolver(func(ctx context.Context, q navigation.ThemeQueryer, themeID, actorID string) (string, error) {
+		return themes.ResolveEligibleVersion(ctx, q, themeID, actorID)
 	})
 	navigationService := navigation.NewService(navigationStore)
 	navigationHandler := httpapi.NewNavigationHandler(navigationService, cfg.PublicBaseURL, httpapi.NavigationHandlerOptions{

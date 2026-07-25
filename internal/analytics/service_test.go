@@ -3,7 +3,6 @@ package analytics
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"testing"
 	"time"
 
@@ -67,8 +66,8 @@ func TestRecordAndReadPrivacyPreservingAnalytics(t *testing.T) {
 		t.Fatalf("SyncBuiltin() error = %v", err)
 	}
 	navigationStore := navigation.NewSQLStore(db)
-	navigationStore.SetThemeVersionResolver(func(ctx context.Context, tx *sql.Tx, themeID, actorID string) (string, error) {
-		return themes.ResolveEligibleVersion(ctx, tx, themeID, actorID)
+	navigationStore.SetThemeVersionResolver(func(ctx context.Context, q navigation.ThemeQueryer, themeID, actorID string) (string, error) {
+		return themes.ResolveEligibleVersion(ctx, q, themeID, actorID)
 	})
 	navigationService := navigation.NewService(navigationStore)
 	page, err := navigationService.CurrentPage(ctx, actor, navigation.PageKindPersonal)

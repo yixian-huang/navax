@@ -81,3 +81,30 @@ func TestPublishLocksThemeVersion(t *testing.T) {
 		t.Fatalf("published snapshot drifted: %q → %q", locked, reread.ThemeVersionID)
 	}
 }
+
+// 预览与发布共用同一份主题解析：用户在预览里看到的主题必须与发布后一致，
+// 否则「所见即所得」只是口号。
+func TestPreviewCarriesThemeVersion(t *testing.T) {
+	db, service := testNavigationService(t)
+	ctx := context.Background()
+	actor := insertTestPersonalPage(t, db, "usr_prev_0001", "previewer", "pg_prev_0001", "cat_prev_001", "prev-page")
+
+	preview, err := service.Preview(ctx, actor, "pg_prev_0001", "https://nav.ax")
+	if err != nil {
+		t.Fatalf("Preview() error = %v", err)
+	}
+	if preview.ThemeVersionID == "" {
+		t.Fatal("preview carries no theme version")
+	}
+
+	if _, err := service.Publish(ctx, actor, "pg_prev_0001", 0, "https://nav.ax"); err != nil {
+		t.Fatalf("Publish() error = %v", err)
+	}
+	published, err := service.PublicBySlug(ctx, "prev-page")
+	if err != nil {
+		t.Fatalf("PublicBySlug() error = %v", err)
+	}
+	if preview.ThemeVersionID != published.ThemeVersionID {
+		t.Fatalf("preview theme %q != published theme %q", preview.ThemeVersionID, published.ThemeVersionID)
+	}
+}
