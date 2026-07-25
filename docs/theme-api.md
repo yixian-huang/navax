@@ -139,3 +139,170 @@
 - `behavior`、`-moz-binding`、`expression()`
 
 标识符在比较前会先解码 CSS 转义并做 ASCII 小写规范化——`h\74ml` 等同于 `html`，不能借此绕过。
+
+## 6. 导入与安装
+
+本节面向想把自己的主题包装到 nav.ax 实例上的作者。实现见 `internal/themes`
+（解包/校验/编译）与 `internal/themeimport`（GitHub 拉取与导入编排）。
+
+### 6.1 包布局
+
+一个主题包是一个 zip（或 GitHub 仓库的 tarball），解压后按白名单提取：
+
+| 路径 | 必需 | 说明 |
+|---|---|---|
+| `theme.json` | 是 | manifest，字段与 `api/openapi.yaml` 的 `ThemeManifestV1` 一一对应 |
+| `theme.css` | 否 | 缺失按空 CSS 处理，仅令牌生成的基础样式生效 |
+| `assets/**` | 否 | 字体与图片，包内路径去掉 `assets/` 前缀后即为资产路径 |
+| `preview.png` | 否 | 主题预览图，落库后成为 `themes.preview` 的实际取值 |
+
+其余文件（`README`、`LICENSE`、`.github/` 等）会被忽略，不参与校验也不占资产配额。
+
+如果解压出的全部条目共享同一个顶层目录（GitHub tarball 固有的
+`{repo}-{sha}/` 前缀，或作者打 zip 时习惯带的外层文件夹），该目录会被自动
+剥离一层，因此仓库根目录放 `theme.json` 或套一层文件夹再放，效果相同。
+
+### 6.2 zip 上传与 GitHub 导入
+
+`POST /api/v1/me/themes/import`（需登录）按 `Content-Type` 分两种请求形态：
+
+- `multipart/form-data`，字段名 `file`：zip 上传。
+- `application/json`：`{"githubUrl": "https://github.com/{owner}/{repo}", "ref": "<可选>"}`，从 GitHub 拉取 tarball 后走同一条解包/校验/编译管线。
+
+两条路径落库时都会：
+
+- **锁定来源**：GitHub 导入把 `ref` 解析为具体的 40 位 commit sha 后记入
+  `theme_versions.source_ref`（即便你传的是分支名，落库的也是那一刻解析出
+  的 sha，不是活动引用）；zip 上传则记入上传内容的 `sha256:` 摘要
+  （`ContentDigest`）。两者都保证同一版本行的内容可追溯、不随上游变化。
+- **私有安装仅自己可用**：新装的主题以 `scope = 'private'`、
+  `owner_id = 当前用户` 落库，只有 owner 能在选择器、我的主题列表和发布时
+  看到/用到它（与目录主题共用同一条可用性谓词，见 `internal/themes/store.go`
+  的 `EligibilityWhere`）。
+- **同 slug 重复导入即升级**：`theme.json` 里的 `id` 字段同时是主题标识与
+  私有安装的 slug。同一用户对同一 `id` 再次导入（无论换成新版本还是原样
+  重传）不会新建一行、不占新配额，而是复用既有 `themes` 行、写入新版本并
+  切换 `current_version_id`；已发布快照引用的历史版本不受影响（版本内容
+  寻址、不可变）。如果这个 slug 此前被卸载成了「墓碑」（见 §6.8），重新
+  导入会把它唤醒（`enabled` 改回 `1`），而不是被拒绝或产生一个用户看不到
+  的新行。
+
+成功返回 `201` 与该主题的完整 `Theme` 对象（形状同列表接口）。
+
+### 6.3 体积与数量硬限
+
+解包、组包、编译三层各自设限，任一超限都直接失败，不做截断或降级：
+
+| 限制 | 数值 | 作用层 |
+|---|---|---|
+| 压缩包大小 / 解压总量 | 16 MiB | 解包（`MaxArchiveBytes`）——上传的 zip 体积、GitHub tarball 响应体、解压后全部文件累计字节数，三者共用同一个上限；解压过程中一旦累计超限立即失败，不等读完 |
+| 包内文件数 | 200 | 解包（`MaxArchiveFiles`），忽略目录条目 |
+| 整包体积（CSS + 全部资产） | 4 MiB | 编译（`MaxPackageBytes`） |
+| 单个 `theme.css` | 256 KiB | CSS 校验（`MaxCSSBytes`） |
+| 单个资产文件 | 512 KiB | 资产校验（`MaxAssetBytes`）——中文字体请自行子集化 |
+| CSS 内单条 `data:` URI | 8 KiB | CSS 校验（`MaxDataURIBytes`，见 §3） |
+
+解包层另有三项不可绕过的防护：拒绝 zip-slip（绝对路径、`..` 逃逸、反斜杠）；
+GitHub tarball 中的软链接/硬链接/设备文件一律拒绝，只接受普通文件；zip 内
+目录条目被跳过，不计入文件数。
+
+### 6.4 私有主题配额
+
+每个用户可持有的私有主题数量有实例级配额，默认 **10**，运维可通过环境变量
+`NAVAX_THEME_PRIVATE_QUOTA` 调整。计数按**行数**而非「当前可见」数：被
+已发布快照引用因而只能转为墓碑（`enabled = 0`，见 §6.8）的已卸载主题仍占
+一个名额。墓碑不会出现在「我的主题」列表里（列表复用可用性谓词，要求
+`enabled = 1`），因此无法从界面回收这个名额；配额只有在所有引用它的发布
+快照都被替换掉之后、且再次对同一 `themeId` 发起卸载请求时才会被物理删除
+并释放。超出配额导入会收到 `409 QUOTA_EXCEEDED`。
+
+### 6.5 dry-run 校验：`POST /api/v1/themes/validate`
+
+在真正导入前，可以用同一个 zip 走一遍**只读**的完整管线（解包 → 组包 →
+编译），不写入数据库、不占配额、不消耗导入限流：
+
+```
+POST /api/v1/themes/validate
+Content-Type: multipart/form-data; boundary=...
+
+file: <你的主题包 zip>
+```
+
+响应：
+
+```json
+{ "valid": true, "errors": [] }
+```
+
+失败时 `valid` 为 `false`，`errors` 是结构化问题列表，`stage` 取以下四类之一：
+
+| stage | 含义 | `path` 是否填充 |
+|---|---|---|
+| `archive` | zip 本身不可接受（路径逃逸、超限、格式损坏） | 否，定位信息在 `message` 文本里 |
+| `manifest` | `theme.json` 解析或校验失败 | 是，固定为 `theme.json` |
+| `css` | `theme.css` 校验失败 | 是，固定为 `theme.css` |
+| `asset` | 某个资产文件校验失败（类型、体积、路径） | 否，具体资产名在 `message` 文本里 |
+
+当前粒度是**首个错误**：管线在第一处失败就停止，不会把同一份包里的全部
+问题一次性列出——改完第一条错误再重新校验，才会看到下一条。
+
+`/themes/validate` 只接受 `multipart/form-data` 的 zip，不支持对 GitHub
+仓库做 dry-run；要校验一个仓库，先把它打成 zip。
+
+导入与校验各自独立限流、按来源 IP 计数：`POST /me/themes/import` 每小时 10
+次，`POST /themes/validate` 每小时 20 次，互不共享配额，超出返回
+`429 RATE_LIMITED` 并带 `Retry-After`。
+
+### 6.6 GitHub 匿名 API 限额
+
+把 `ref`（分支/标签）解析为 commit sha 这一步会调用
+`api.github.com/repos/{owner}/{repo}/commits/{ref}`。这是 GitHub 自己对
+未认证请求的限制（不是 nav.ax 施加的），默认约 60 次/小时/来源 IP，多用户
+共享同一实例出口 IP 时容易触顶。三种规避方式：
+
+- **直接传 40 位十六进制 commit sha 作为 `ref`**：服务端识别出这已经是
+  sha 后跳过 `api.github.com` 解析，直接向 `codeload.github.com` 请求
+  tarball——下载 tarball 本身不计入 REST API 限额。
+- **配置 `NAVAX_GITHUB_TOKEN`**：设置后，请求 `github.com` /
+  `api.github.com` / `codeload.github.com` 这三个官方主机时会带上
+  `Authorization: Bearer <token>`，把限额从匿名档提升到认证档（具体数值由
+  GitHub 决定）。这个 token **只**对上述三个官方主机生效，不会被转发给
+  `NAVAX_THEME_IMPORT_HOSTS` 白名单里的自建 Gitea 等第三方主机。
+- **zip 兜底**：GitHub 拉取因限额、网络或仓库不可达失败时，直接把仓库打成
+  zip 走 §6.2 的上传路径——两条路径共用同一套解包/校验/编译管线，效果等价。
+
+### 6.7 `NAVAX_THEME_IMPORT_HOSTS`：追加导入主机
+
+默认只允许从 `github.com` 导入。运维可通过 `NAVAX_THEME_IMPORT_HOSTS`
+（逗号分隔的主机名列表，大小写不敏感）追加允许的仓库主机，典型场景是
+自建的 GitHub Enterprise 或 Gitea 镜像。追加主机与 `github.com` 有两点
+关键差异：
+
+- **按 Gitea 兼容的 archive 布局取包**：请求
+  `https://{host}/{owner}/{repo}/archive/{ref}.tar.gz`，不经过任何
+  `.../commits/{ref}` 式的 API 解析——因为非官方 GitHub 主机不保证有这个
+  API。
+- **必须显式传 `ref`**：这些主机没有「默认分支」这一步解析，留空 `ref`
+  会直接返回 422，不会像 `github.com` 那样缺省取 `HEAD`。
+
+请求同样经过 SSRF 防护（`internal/netguard`）：每次 DNS 解析与重定向都会
+拒绝回环、私网、链路本地、保留地址与云元数据地址；仓库地址必须是
+`https://` 且不含用户名/密码。`NAVAX_GITHUB_TOKEN` 不会下发给这些主机
+（见 §6.6）。
+
+### 6.8 卸载
+
+`DELETE /api/v1/me/themes/{themeId}`（仅本人）根据是否还有历史发布引用，
+走两条分支之一：
+
+1. **没有任何已发布快照引用过它的任一版本**：物理删除——`theme_versions`
+   与 `themes` 行一并清除，配额立即释放。
+2. **至少一个已发布快照引用过某个历史版本**：转为「墓碑」——只把
+   `themes.enabled` 置为 `0`，版本与资产原样保留。已经发布出去的页面
+   继续正常渲染这个主题；它只是从你的选择器、我的主题列表和后续可选目标
+   里消失（沿用 §6.2 提到的可用性谓词）。这一行仍计入配额，直到不再被
+   任何快照引用、被再次卸载时才会物理删除。
+
+不存在的 `themeId` 与「存在但不是你的」统一返回 `404 NOT_FOUND`，不做区分
+——避免被用来探测其他用户持有哪些私有主题。同 slug 重新导入可以唤醒一个
+墓碑（见 §6.2），这是它存在的主要原因：卸载不是不可逆操作。
