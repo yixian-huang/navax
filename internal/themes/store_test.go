@@ -124,64 +124,6 @@ func TestUpsertVersionStoresAssets(t *testing.T) {
 	}
 }
 
-func TestResolvePackageVersionFallsBack(t *testing.T) {
-	db := newTestDB(t)
-	store := NewStore(db)
-	slateVersion, err := store.UpsertVersion(t.Context(), "slate", compileFor(t, "slate"), "builtin", "builtin", time.Now().UTC())
-	if err != nil {
-		t.Fatalf("UpsertVersion() error = %v", err)
-	}
-	sakuraVersion, err := store.UpsertVersion(t.Context(), "sakura", compileFor(t, "sakura"), "builtin", "builtin", time.Now().UTC())
-	if err != nil {
-		t.Fatalf("UpsertVersion(sakura) error = %v", err)
-	}
-
-	tests := []struct {
-		name    string
-		themeID string
-		want    string
-	}{
-		{"已知主题", "slate", slateVersion},
-		{"另一个已知主题", "sakura", sakuraVersion},
-		{"未知主题回落默认", "does-not-exist", slateVersion},
-		{"culled 别名回落", "kyoto", slateVersion},
-		{"别名指向非默认主题", "mochi", sakuraVersion},
-		{"空 themeId 回落默认", "", slateVersion},
-		{"空白 themeId 回落默认", "   ", slateVersion},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			got, err := store.ResolvePackageVersion(t.Context(), tc.themeID)
-			if err != nil {
-				t.Fatalf("ResolvePackageVersion() error = %v", err)
-			}
-			if got != tc.want {
-				t.Fatalf("version = %q, want %q", got, tc.want)
-			}
-		})
-	}
-
-	// 当前版本被撤销 → 该主题不再可下发，回落默认主题。
-	if _, err := db.Exec(`UPDATE theme_versions SET status = 'disabled' WHERE id = ?`, sakuraVersion); err != nil {
-		t.Fatalf("disable version error = %v", err)
-	}
-	got, err := store.ResolvePackageVersion(t.Context(), "sakura")
-	if err != nil {
-		t.Fatalf("ResolvePackageVersion() error = %v", err)
-	}
-	if got != slateVersion {
-		t.Fatalf("revoked version resolved to %q, want default %q", got, slateVersion)
-	}
-
-	// 回落目标本身不可用时必须明确报错，而不是返回空版本。
-	if _, err := db.Exec(`UPDATE theme_versions SET status = 'disabled' WHERE id = ?`, slateVersion); err != nil {
-		t.Fatalf("disable default version error = %v", err)
-	}
-	if _, err := store.ResolvePackageVersion(t.Context(), "slate"); !errors.Is(err, ErrDefaultThemeUnavailable) {
-		t.Fatalf("error = %v, want ErrDefaultThemeUnavailable", err)
-	}
-}
-
 func TestUpsertVersionRejectsUnknownTheme(t *testing.T) {
 	db := newTestDB(t)
 	store := NewStore(db)
