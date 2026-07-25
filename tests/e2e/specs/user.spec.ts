@@ -4,6 +4,7 @@ import { USER } from './accounts';
 
 const BACKGROUND_PNG = fileURLToPath(new URL('../fixtures/background.png', import.meta.url));
 const BOOKMARKS_HTML = fileURLToPath(new URL('../fixtures/bookmarks.html', import.meta.url));
+const THEME_ZIP = fileURLToPath(new URL('../fixtures/theme-lilac.zip', import.meta.url));
 
 // 用户关键路径：登录、编辑导航、发布、查看公开页、切换主题。
 test.describe('用户登录', () => {
@@ -129,6 +130,22 @@ test.describe('用户工作台', () => {
     // registry 在样式表加载成功后才写 data-theme，断言它即断言整条链路。
     await expect(root).toHaveAttribute('data-theme', 'slate-dark', { timeout: 10000 });
     await expect(page.locator('link[data-theme-style]')).toHaveCount(1);
+  });
+
+  test('导入 zip 主题并应用', async ({ page }) => {
+    await page.goto('/app/themes');
+    await page.getByRole('button', { name: /导入主题/ }).click();
+    await page.getByRole('button', { name: /上传 zip|zip/i }).click();
+    await page.locator('[data-testid="theme-zip-input"]').setInputFiles(THEME_ZIP);
+    await page.getByRole('button', { name: /导入/ }).last().click();
+    await expect(page.getByText(/已导入主题/)).toBeVisible({ timeout: 15000 });
+    // 我的主题分组出现，卡片可选用。
+    await expect(page.getByText('我的主题')).toBeVisible();
+    // 卡片本体的可访问名以「Lilac」开头（含 subtitle）；同一分组内还有
+    // 「升级主题 Lilac」「卸载主题 Lilac」两枚 hover 操作按钮也含 Lilac 子串，
+    // 必须锚定开头才能唯一命中卡片本体。
+    await page.getByRole('button', { name: /^Lilac/ }).click();
+    await expect(page.getByText(/主题已写入草稿：「Lilac」/)).toBeVisible();
   });
 
   test('导入书签并导出备份', async ({ page }) => {
