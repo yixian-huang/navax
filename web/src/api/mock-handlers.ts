@@ -149,6 +149,13 @@ function contractPageResponse() {
   };
 }
 
+// 与真实后端一致：发布/预览响应携带锁定的主题版本。mock 直接复用
+// mockThemes 里的稳定假哈希，满足契约的 ^v[0-9a-f]{32}$。
+function mockThemeVersionId(themeId: string): string {
+  return mockThemes.find(theme => theme.id === themeId)?.currentVersionId
+    ?? 'v00000000000000000000000000000001';
+}
+
 // 把已发布页投影为公开契约（PublishedPageContract）：分类内嵌 sites，owner 独立对象。
 // settings 从来源自身的 themeId/layout 构造，不依赖当前编辑作用域。
 function contractPublishedResponse(source: MockPublishedPage | MockPageState, kind: 'system' | 'personal', subdomain: string) {
@@ -178,6 +185,7 @@ function contractPublishedResponse(source: MockPublishedPage | MockPageState, ki
     categories: source.categories,
     subdomain: subdomain || null,
     publishedAt: source.publishedAt,
+    themeVersionId: mockThemeVersionId(source.themeId),
     etag: `"mock-${source.id}-${background.type}-${background.value.slice(0, 24)}"`,
   };
 }
@@ -808,6 +816,16 @@ handlers.push((url, init) => {
     }
     return Promise.resolve(jsonResponse({ code: 'OK', data: page.publishSettings, meta: { message: '', detail: '' } }));
   }
+  if (url === `${API_BASE}/navigation/preview`) {
+    // 草稿预览的契约形状与公开读取一致；mock 保真度以形状为准。
+    const currentSub = getMockSubdomain();
+    const previewPage = contractPublishedResponse(mockPublishedPage, 'personal', currentSub?.subdomain || '');
+    return Promise.resolve(jsonResponse({
+      code: 'OK',
+      data: { ...previewPage, snapshotId: `preview_${previewPage.id}` },
+      meta: { message: '', detail: '' },
+    }));
+  }
   if (url.startsWith(`${API_BASE}/navigation/public/`)) {
     const slug = url.split('/').pop() || '';
     if (slug === 'nav') {
@@ -1074,6 +1092,9 @@ function mapContractUrlToLegacy(url: string): string {
     legacyPath = `${API_BASE}/auth/invite/${token}/validate`;
   } else if (path === `${API_BASE}/me/profile`) {
     legacyPath = `${API_BASE}/auth/profile`;
+  } else if (/^\/api\/v1\/pages\/[^/]+\/preview$/.test(path)) {
+    legacyPath = `${API_BASE}/navigation/preview`;
+    keepSearch = false;
   } else if (path === `${API_BASE}/pages/current` || /^\/api\/v1\/pages\/[^/]+$/.test(path)) {
     legacyPath = `${API_BASE}/navigation/page`;
     keepSearch = false;
