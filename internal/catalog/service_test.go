@@ -67,6 +67,10 @@ func TestThemesReturnsEnabledSeeded(t *testing.T) {
 		if theme.CurrentVersionID == "" || theme.CSSHref == "" {
 			t.Fatalf("主题缺少版本或样式地址: %+v", theme)
 		}
+		// sourceType 应该是 builtin
+		if theme.SourceType != "builtin" {
+			t.Fatalf("种子主题应有 SourceType=builtin, got %q", theme.SourceType)
+		}
 	}
 
 	// 停用一个主题后不应再出现。

@@ -308,6 +308,8 @@ export interface Theme {
   scope?: 'catalog' | 'private';
   vibe?: 'serious' | 'cute';
   swatches?: [string, string, string];
+  sourceType?: 'builtin' | 'github' | 'upload';
+  sourceUrl?: string;
   /** @deprecated 使用 default。 */
   isDefault?: boolean;
   /** @deprecated 使用 enabled。 */

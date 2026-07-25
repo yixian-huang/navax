@@ -212,7 +212,8 @@ func (s *SQLStore) invitation(ctx context.Context, invitationID string) (Invitat
 const themeSelect = `
 	SELECT themes.id, themes.name, themes.version, themes.author, themes.description,
 	       themes.mode, themes.preview, themes.enabled, themes.is_default,
-	       themes.current_version_id, themes.scope, theme_versions.manifest_json
+	       themes.current_version_id, themes.scope, themes.source_type, themes.source_url,
+	       theme_versions.manifest_json
 	FROM themes
 	LEFT JOIN theme_versions ON theme_versions.id = themes.current_version_id`
 
@@ -450,16 +451,22 @@ func scanInvitation(row rowScanner) (Invitation, error) {
 
 func scanTheme(row rowScanner) (Theme, error) {
 	var item Theme
-	var currentVersionID, manifestJSON sql.NullString
+	var currentVersionID, manifestJSON, sourceType, sourceURL sql.NullString
 	if err := row.Scan(&item.ID, &item.Name, &item.Version, &item.Author, &item.Description,
 		&item.Mode, &item.Preview, &item.Enabled, &item.Default,
-		&currentVersionID, &item.Scope, &manifestJSON); err != nil {
+		&currentVersionID, &item.Scope, &sourceType, &sourceURL, &manifestJSON); err != nil {
 		return Theme{}, err
 	}
 	// 无编译版本的主题保持零值,序列化层据此省略字段——缺省即「不可选用」。
 	if currentVersionID.Valid && currentVersionID.String != "" {
 		item.CurrentVersionID = currentVersionID.String
 		item.CSSHref = "/api/v1/public/themes/" + currentVersionID.String + ".css"
+	}
+	if sourceType.Valid && sourceType.String != "" {
+		item.SourceType = sourceType.String
+	}
+	if sourceURL.Valid && sourceURL.String != "" {
+		item.SourceURL = sourceURL.String
 	}
 	if manifestJSON.Valid && manifestJSON.String != "" {
 		var manifest themes.Manifest

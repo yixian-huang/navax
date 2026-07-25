@@ -371,6 +371,7 @@ export const mockThemes: Theme[] = [
     cssHref: '/api/v1/public/themes/v00000000000000000000000000000001.css',
     tier: 1, scope: 'catalog', vibe: 'serious',
     swatches: ['#fafafa', '#8a8f98', '#1c1f24'],
+    sourceType: 'builtin',
   },
   {
     id: 'slate-dark', name: 'Slate Dark', subtitle: '克制·夜间', version: '1.0.0', author: 'nav.ax',
@@ -380,6 +381,7 @@ export const mockThemes: Theme[] = [
     cssHref: '/api/v1/public/themes/v00000000000000000000000000000002.css',
     tier: 1, scope: 'catalog', vibe: 'serious',
     swatches: ['#16181d', '#6f757e', '#e8eaed'],
+    sourceType: 'builtin',
   },
   {
     id: 'sakura', name: 'Sakura', subtitle: '樱花·魔法', version: '1.0.0', author: 'nav.ax',
@@ -389,6 +391,7 @@ export const mockThemes: Theme[] = [
     cssHref: '/api/v1/public/themes/v00000000000000000000000000000003.css',
     tier: 1, scope: 'catalog', vibe: 'cute',
     swatches: ['#fef5f7', '#e88da5', '#8ecfba'],
+    sourceType: 'builtin',
   },
 ];
 

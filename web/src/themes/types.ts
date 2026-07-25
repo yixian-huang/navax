@@ -15,6 +15,9 @@ export interface ThemeMeta {
   description: string;
   swatches: [string, string, string];
   vibe: 'serious' | 'cute';
+  scope?: 'catalog' | 'private';
+  sourceType?: 'builtin' | 'github' | 'upload';
+  sourceUrl?: string;
 }
 
 export interface ThemePackage {
@@ -59,6 +62,9 @@ export function themePackageFromApi(theme: Theme): ThemePackage | null {
       description: theme.description ?? '',
       swatches: theme.swatches ?? PLACEHOLDER_SWATCHES,
       vibe: theme.vibe ?? 'serious',
+      scope: theme.scope,
+      sourceType: theme.sourceType,
+      sourceUrl: theme.sourceUrl,
     },
   };
 }
@@ -85,6 +91,9 @@ export function themeDisplayFromApi(theme: Theme): ThemePackage {
       description: theme.description ?? '',
       swatches: theme.swatches ?? PLACEHOLDER_SWATCHES,
       vibe: theme.vibe ?? 'serious',
+      scope: theme.scope,
+      sourceType: theme.sourceType,
+      sourceUrl: theme.sourceUrl,
     },
   };
 }

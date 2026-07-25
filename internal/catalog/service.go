@@ -115,7 +115,7 @@ func (s *Service) Themes(ctx context.Context, actorID string) ([]adminpkg.Theme,
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT themes.id, themes.name, themes.version, themes.author, themes.description,
 		       themes.mode, themes.preview, themes.enabled, themes.is_default,
-		       themes.current_version_id, themes.scope,
+		       themes.current_version_id, themes.scope, themes.source_type, themes.source_url,
 		       theme_versions.manifest_json
 		FROM themes `+themes.EligibilityJoin+`
 		WHERE `+themes.EligibilityWhere+`
@@ -132,7 +132,7 @@ func (s *Service) Themes(ctx context.Context, actorID string) ([]adminpkg.Theme,
 		)
 		if err := rows.Scan(&theme.ID, &theme.Name, &theme.Version, &theme.Author, &theme.Description,
 			&theme.Mode, &theme.Preview, &theme.Enabled, &theme.Default,
-			&theme.CurrentVersionID, &theme.Scope, &manifestJSON); err != nil {
+			&theme.CurrentVersionID, &theme.Scope, &theme.SourceType, &theme.SourceURL, &manifestJSON); err != nil {
 			return nil, err
 		}
 		theme.CSSHref = "/api/v1/public/themes/" + theme.CurrentVersionID + ".css"
