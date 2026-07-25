@@ -200,6 +200,13 @@ func TestUninstallPrivateRejectsForeignTheme(t *testing.T) {
 func TestInstallPrivateReinstallReenablesTombstonedTheme(t *testing.T) {
 	db := newTestDB(t)
 	store := NewStore(db)
+	// 需要一个可用的默认主题:墓碑主题解析后应当无错误地回落到它
+	// (store.go 的注释与 TestResolveEligibleVersionRespectsDisabledPrivateTheme
+	// 都是这个语义),而不是把「默认主题本身不可用」的 ErrDefaultThemeUnavailable
+	// 错认成「墓碑生效」的证据。
+	if err := SyncBuiltin(t.Context(), store, time.Now().UTC()); err != nil {
+		t.Fatalf("SyncBuiltin() error = %v", err)
+	}
 	seedUser(t, store, "usr_uni_0003")
 	first := installSample(t, store, "usr_uni_0003", "lilac", 10)
 	seedSnapshotReferencing(t, db, "snp_uni_0003", first.VersionID)
@@ -208,8 +215,10 @@ func TestInstallPrivateReinstallReenablesTombstonedTheme(t *testing.T) {
 	if err != nil || removed {
 		t.Fatalf("UninstallPrivate() = %v, %v; want tombstone", removed, err)
 	}
-	if _, err := store.ResolveEligibleVersion(t.Context(), first.ThemeID, "usr_uni_0003"); err == nil {
-		t.Fatal("tombstoned theme must not resolve before reinstall")
+	if got, err := store.ResolveEligibleVersion(t.Context(), first.ThemeID, "usr_uni_0003"); err != nil {
+		t.Fatalf("ResolveEligibleVersion() before reinstall error = %v, want fallback to default", err)
+	} else if got == first.VersionID {
+		t.Fatal("tombstoned theme must not resolve to its own version before reinstall")
 	}
 
 	reinstalled, err := store.InstallPrivate(t.Context(), "usr_uni_0003", "lilac", "upload", "", "digest-reinstall", 10,
