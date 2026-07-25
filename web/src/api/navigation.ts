@@ -298,6 +298,14 @@ export const navigationApi = {
     return envelope(response, normalizePublishedPage(response.data));
   },
 
+  // 草稿预览与公开读取共用同一契约形状与 normalize 逻辑。
+  getPreview: async (pageId: string) => {
+    const response = await request<ApiResponse<PublishedPageContract>>(
+      `/pages/${encodeURIComponent(pageId)}/preview`,
+    );
+    return envelope(response, normalizePublishedPage(response.data));
+  },
+
   getThemes: () => request<ApiResponse<Theme[]>>('/themes'),
 
   getPlatformSites: async (params?: { category?: string; search?: string; page?: number; pageSize?: number }) => {

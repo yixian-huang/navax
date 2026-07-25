@@ -72,6 +72,8 @@ export interface PublicNavigationViewProps {
   } | null;
   /** Custom empty state when page is 404 / unpublished. */
   empty404?: ReactNode;
+  /** 预览态置 false:page_view 与 site_click 都不上报公开统计。 */
+  trackEvents?: boolean;
 }
 
 export default function PublicNavigationView({
@@ -83,9 +85,10 @@ export default function PublicNavigationView({
   showBrowserGuide = false,
   share = null,
   empty404,
+  trackEvents = true,
 }: PublicNavigationViewProps) {
   const now = useClock();
-  const recordSiteClick = usePublicEventTracker(page?.id, page?.snapshotId);
+  const recordSiteClick = usePublicEventTracker(trackEvents ? page?.id : undefined, page?.snapshotId);
 
   const [query, setQuery] = useState('');
   const [engine, setEngine] = useState<SearchEngine>('google');
