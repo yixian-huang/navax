@@ -63,70 +63,93 @@ func (s *Store) UpsertVersion(ctx context.Context, packageID string, compiled Co
 	if !allowedSourceTypes[sourceType] {
 		return "", fmt.Errorf("themes: unsupported source type %q", sourceType)
 	}
+
+	var versionID string
+	err := database.WithinTx(ctx, s.db, nil, func(tx *sql.Tx) error {
+		id, err := upsertVersionTx(ctx, tx, packageID, compiled, sourceType, sourceRef, now)
+		if err != nil {
+			return err
+		}
+		versionID = id
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	return versionID, nil
+}
+
+// upsertVersionTx 是 UpsertVersion 的事务体，未导出以便 InstallPrivate 之类的
+// 调用方在同一事务里复用（避免嵌套事务或先提交再补写导致的中间状态可见）。
+func upsertVersionTx(ctx context.Context, tx *sql.Tx, packageID string, compiled Compiled, sourceType, sourceRef string, now time.Time) (string, error) {
 	manifestJSON, err := json.Marshal(compiled.Manifest)
 	if err != nil {
 		return "", fmt.Errorf("themes: marshal manifest: %w", err)
 	}
 
-	versionID := ""
-	err = database.WithinTx(ctx, s.db, nil, func(tx *sql.Tx) error {
-		var exists int
-		switch err := tx.QueryRowContext(ctx, `SELECT 1 FROM themes WHERE id = ?`, packageID).Scan(&exists); {
-		case errors.Is(err, sql.ErrNoRows):
-			return fmt.Errorf("%w: theme %q", ErrNotFound, packageID)
-		case err != nil:
-			return err
-		}
+	var exists int
+	switch err := tx.QueryRowContext(ctx, `SELECT 1 FROM themes WHERE id = ?`, packageID).Scan(&exists); {
+	case errors.Is(err, sql.ErrNoRows):
+		return "", fmt.Errorf("%w: theme %q", ErrNotFound, packageID)
+	case err != nil:
+		return "", err
+	}
 
-		// 显式指定冲突目标：只有内容重复才是「已存在」。主键冲突（同一 id 落在
-		// 另一个 theme_id 上）应当报错而不是被静默吞掉。
-		result, err := tx.ExecContext(ctx, `
-			INSERT INTO theme_versions(
-				id, theme_id, version, source_ref, manifest_json,
-				compiled_css, content_hash, status, imported_by, created_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', NULL, ?)
-			ON CONFLICT (theme_id, content_hash) DO NOTHING`,
-			compiled.VersionID, packageID, compiled.Manifest.Version, sourceRef, string(manifestJSON),
-			compiled.CSS, compiled.ContentHash, dbTime(now))
-		if err != nil {
-			return err
-		}
-		inserted, err := result.RowsAffected()
-		if err != nil {
-			return err
-		}
-
-		var status string
-		if err := tx.QueryRowContext(ctx,
-			`SELECT id, status FROM theme_versions WHERE theme_id = ? AND content_hash = ?`,
-			packageID, compiled.ContentHash,
-		).Scan(&versionID, &status); err != nil {
-			return err
-		}
-
-		if inserted > 0 {
-			if err := insertVersionAssets(ctx, tx, versionID, compiled.Assets); err != nil {
-				return err
-			}
-		}
-
-		// 撤销过的版本不因一次重新导入而复活：撤销是运维动作，静默回滚它会让
-		// kill switch 形同虚设。触发器也会拦，但这里给出可读的原因。
-		if status != VersionStatusActive {
-			return fmt.Errorf("themes: version %s of theme %s is %s and cannot become current", versionID, packageID, status)
-		}
-
-		if _, err := tx.ExecContext(ctx, `
-			UPDATE themes
-			SET current_version_id = ?, source_type = ?, updated_at = ?
-			WHERE id = ?`,
-			versionID, sourceType, dbTime(now), packageID); err != nil {
-			return err
-		}
-		return nil
-	})
+	// 显式指定冲突目标：只有内容重复才是「已存在」。主键冲突（同一 id 落在
+	// 另一个 theme_id 上）应当报错而不是被静默吞掉。
+	result, err := tx.ExecContext(ctx, `
+		INSERT INTO theme_versions(
+			id, theme_id, version, source_ref, manifest_json,
+			compiled_css, content_hash, status, imported_by, created_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', NULL, ?)
+		ON CONFLICT (theme_id, content_hash) DO NOTHING`,
+		compiled.VersionID, packageID, compiled.Manifest.Version, sourceRef, string(manifestJSON),
+		compiled.CSS, compiled.ContentHash, dbTime(now))
 	if err != nil {
 		return "", err
+	}
+	inserted, err := result.RowsAffected()
+	if err != nil {
+		return "", err
+	}
+
+	var versionID, status string
+	if err := tx.QueryRowContext(ctx,
+		`SELECT id, status FROM theme_versions WHERE theme_id = ? AND content_hash = ?`,
+		packageID, compiled.ContentHash,
+	).Scan(&versionID, &status); err != nil {
+		return "", err
+	}
+
+	if inserted > 0 {
+		if err := insertVersionAssets(ctx, tx, versionID, compiled.Assets); err != nil {
+			return "", err
+		}
+	}
+
+	// 撤销过的版本不因一次重新导入而复活：撤销是运维动作，静默回滚它会让
+	// kill switch 形同虚设。触发器也会拦，但这里给出可读的原因。
+	if status != VersionStatusActive {
+		return "", fmt.Errorf("themes: version %s of theme %s is %s and cannot become current", versionID, packageID, status)
+	}
+
+	// 回写 manifest 展示元数据：themes 行的这些列否则永远停留在迁移种子值，
+	// 列表 API 会吐与实际包不符的文案（内置与第三方同样受益）。
+	preview := ""
+	for _, asset := range compiled.Assets {
+		if asset.Path == "preview.png" {
+			preview = AssetBasePath(compiled.VersionID) + "preview.png"
+			break
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE themes SET current_version_id = ?, source_type = ?, name = ?, description = ?,
+		       mode = ?, version = ?, preview = ?, spec_version = ?, updated_at = ?
+		WHERE id = ?`,
+		versionID, sourceType, compiled.Manifest.Name, compiled.Manifest.Description,
+		compiled.Manifest.Mode, compiled.Manifest.Version, preview, compiled.Manifest.SpecVersion,
+		dbTime(now), packageID); err != nil {
+		return "", fmt.Errorf("update theme pointer: %w", err)
 	}
 	return versionID, nil
 }
