@@ -19,6 +19,7 @@ import {
   Import,
   RefreshCw,
   Loader2,
+  Search,
 } from 'lucide-react';
 import { themeRegistry } from '@/themes/registry';
 import { useToast } from '@/components/base/Toast';
@@ -75,6 +76,9 @@ export default function ThemesPage() {
   const [upgradingId, setUpgradingId] = useState<string | null>(null);
   const pendingUpgradeIdRef = useRef<string | null>(null);
   const upgradeZipInputRef = useRef<HTMLInputElement>(null);
+  const [checkingUpdateId, setCheckingUpdateId] = useState<string | null>(null);
+  // themeId → 最近一次「检查更新」的结果，只用来高亮既有升级入口，不做轮询。
+  const [updateAvailableMap, setUpdateAvailableMap] = useState<Record<string, boolean>>({});
 
   const [bgConfig, setBgConfig] = useState<BgConfig>(emptyBg());
   const bgConfigRef = useRef(bgConfig);
@@ -210,6 +214,7 @@ export default function ThemesPage() {
     try {
       const response = await themesApi.importGitHub(pkg.meta.sourceUrl);
       await queryClient.invalidateQueries({ queryKey: ['navigation', 'themes'] });
+      setUpdateAvailableMap(current => ({ ...current, [pkg.id]: false }));
       toast('success', `已升级主题「${response.data.name}」`);
     } catch (cause) {
       toast('error', cause instanceof Error ? cause.message : '主题升级失败');
@@ -233,6 +238,7 @@ export default function ThemesPage() {
     void themesApi.importZip(file)
       .then(async response => {
         await queryClient.invalidateQueries({ queryKey: ['navigation', 'themes'] });
+        setUpdateAvailableMap(current => ({ ...current, [themeId]: false }));
         toast('success', `已升级主题「${response.data.name}」`);
       })
       .catch(cause => {
@@ -240,6 +246,23 @@ export default function ThemesPage() {
       })
       .finally(() => setUpgradingId(null));
   }, [queryClient, toast]);
+
+  const handleCheckUpdate = useCallback(async (pkg: ThemePackage) => {
+    setCheckingUpdateId(pkg.id);
+    try {
+      const response = await themesApi.checkUpdate(pkg.id);
+      setUpdateAvailableMap(current => ({ ...current, [pkg.id]: response.data.hasUpdate }));
+      if (response.data.hasUpdate) {
+        toast('success', '有新版本，可点重新拉取更新');
+      } else {
+        toast('info', '已是最新');
+      }
+    } catch (cause) {
+      toast('error', cause instanceof ApiError ? (cause.detail || cause.message) : '检查更新失败');
+    } finally {
+      setCheckingUpdateId(null);
+    }
+  }, [toast]);
 
   const handleUninstall = useCallback(async (pkg: ThemePackage) => {
     try {
@@ -502,17 +525,46 @@ export default function ThemesPage() {
     );
   };
 
-  // 私有主题卡片：复用 renderThemeCard 渲染本体，外面叠一层操作条（升级 / 卸载），
-  // 不改 renderThemeCard 签名——目录主题不需要这两枚按钮。
+  // 私有主题卡片：复用 renderThemeCard 渲染本体，外面叠一层操作条（检查更新 /
+  // 升级 / 卸载），不改 renderThemeCard 签名——目录主题不需要这些按钮。
   const renderMyThemeCard = (pkg: ThemePackage) => {
     const isUpgrading = upgradingId === pkg.id;
+    const isCheckingUpdate = checkingUpdateId === pkg.id;
     const canUpgradeGithub = pkg.meta.sourceType === 'github' && Boolean(pkg.meta.sourceUrl);
     const canUpgradeUpload = pkg.meta.sourceType === 'upload';
+    // upload 主题没有上游可比对，不提供「检查更新」——只有 github 主题的
+    // sourceRef 能对上游 HEAD 做比对。
+    const canCheckUpdate = pkg.meta.sourceType === 'github';
+    const hasUpdate = updateAvailableMap[pkg.id] === true;
 
     return (
       <div key={pkg.id} className="relative group">
         {renderThemeCard(pkg)}
-        <div className="absolute right-1.5 top-1.5 flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+        <div
+          className={cn(
+            'absolute right-1.5 top-1.5 flex items-center gap-1 transition-opacity',
+            hasUpdate ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100',
+          )}
+        >
+          {canCheckUpdate && (
+            <button
+              type="button"
+              disabled={isCheckingUpdate}
+              onClick={(event) => {
+                event.stopPropagation();
+                void handleCheckUpdate(pkg);
+              }}
+              className="h-6 w-6 rounded-md bg-black/55 text-white hover:bg-black/70 disabled:opacity-40 flex items-center justify-center transition-colors"
+              aria-label={`检查主题 ${pkg.meta.name} 更新`}
+              title="检查更新"
+            >
+              {isCheckingUpdate ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Search className="w-3.5 h-3.5" />
+              )}
+            </button>
+          )}
           {(canUpgradeGithub || canUpgradeUpload) && (
             <button
               type="button"
@@ -522,9 +574,12 @@ export default function ThemesPage() {
                 if (canUpgradeGithub) void handleUpgradeGithub(pkg);
                 else handleUpgradeZipPick(pkg);
               }}
-              className="h-6 w-6 rounded-md bg-black/55 text-white hover:bg-black/70 disabled:opacity-40 flex items-center justify-center transition-colors"
-              aria-label={`升级主题 ${pkg.meta.name}`}
-              title="升级"
+              className={cn(
+                'h-6 w-6 rounded-md text-white disabled:opacity-40 flex items-center justify-center transition-colors',
+                hasUpdate ? 'bg-amber-500 hover:bg-amber-600 ring-2 ring-amber-300' : 'bg-black/55 hover:bg-black/70',
+              )}
+              aria-label={`升级主题 ${pkg.meta.name}${hasUpdate ? '（有新版本）' : ''}`}
+              title={hasUpdate ? '有新版本，点击升级' : '升级'}
             >
               {isUpgrading ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />

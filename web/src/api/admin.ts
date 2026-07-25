@@ -12,6 +12,7 @@ import type {
   PlatformSite,
   PlatformCategory,
   Theme,
+  ThemeVersionRow,
   SystemSettings,
   AuditEntry,
   PaginatedResponse,
@@ -129,6 +130,12 @@ export const adminApi = {
 
   updateThemeState: (themeId: string, data: { enabled?: boolean; default?: boolean; status?: 'active' | 'disabled' }) =>
     request<ApiResponse<Theme>>(`/admin/themes/${themeId}`, { method: 'PATCH', body: data }),
+
+  getThemeVersions: (themeId: string) =>
+    request<ApiResponse<ThemeVersionRow[]>>(`/admin/themes/${encodeURIComponent(themeId)}/versions`),
+
+  setThemeVersionStatus: (versionId: string, status: 'active' | 'disabled') =>
+    request<ApiResponse<ThemeVersionRow>>(`/admin/theme-versions/${encodeURIComponent(versionId)}`, { method: 'PATCH', body: { status } }),
 
   // Settings
   getSystemSettings: () =>

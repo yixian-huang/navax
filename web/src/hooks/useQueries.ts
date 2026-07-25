@@ -591,6 +591,18 @@ export function useUpdateAdminThemeState() {
   });
 }
 
+export function useSetThemeVersionStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ versionId, status }: { versionId: string; status: 'active' | 'disabled' }) =>
+      adminApi.setThemeVersionStatus(versionId, status),
+    // 非当前版本停用/启用不改 Theme.status（那只反映当前版本），但主题卡的
+    // 「查看版本」面板依赖本地 state 刷新；这里顺带失效 admin/themes 只是为了
+    // 与既有主题级 mutation 保持一致，不依赖它驱动版本面板本身的更新。
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'themes'] }),
+  });
+}
+
 // ---- Admin: All Links ----
 export function useAdminLinks(params?: { search?: string; ownerId?: string; page?: number; pageSize?: number }) {
   return useQuery({

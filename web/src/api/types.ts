@@ -321,6 +321,24 @@ export interface Theme {
   isActive?: boolean;
 }
 
+export interface ThemeVersionRow {
+  versionId: string;
+  version: string;
+  sourceRef: string;
+  status: 'active' | 'disabled';
+  createdAt: string;
+  importedBy?: string;
+  isCurrent: boolean;
+  snapshotRefs: number;
+}
+
+export interface ThemeUpdateStatus {
+  sourceType: 'builtin' | 'github' | 'upload';
+  hasUpdate: boolean;
+  currentSha: string;
+  latestSha: string;
+}
+
 export type AssetKind = 'avatar' | 'background' | 'site-icon';
 
 export type BackgroundMediaScope = 'instance' | 'user';
