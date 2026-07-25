@@ -123,6 +123,14 @@ test.describe('用户工作台', () => {
     await expect(page.getByText(/主题已写入草稿：「Slate Dark」/)).toBeVisible();
   });
 
+  test('草稿预览呈现所选主题', async ({ page }) => {
+    await page.goto('/app/preview');
+    const root = page.locator('[data-nx="page-root"]');
+    // registry 在样式表加载成功后才写 data-theme，断言它即断言整条链路。
+    await expect(root).toHaveAttribute('data-theme', 'slate-dark', { timeout: 10000 });
+    await expect(page.locator('link[data-theme-style]')).toHaveCount(1);
+  });
+
   test('导入书签并导出备份', async ({ page }) => {
     await page.goto('/app/import-export');
 

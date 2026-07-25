@@ -83,14 +83,14 @@ test.describe('游客', () => {
 
   test('主题样式经内容寻址的 link 供应', async ({ page }) => {
     await page.goto('/');
+    // 发布路径必然锁定主题版本——条件断言会静默空过，这里必须有 link。
     const link = page.locator('link[data-theme-style]');
-    if (await link.count()) {
-      const href = await link.first().getAttribute('href');
-      expect(href).toMatch(/\/api\/v1\/public\/themes\/v[0-9a-f]{32}\.css$/);
-      const response = await page.request.get(href!);
-      expect(response.status()).toBe(200);
-      expect(response.headers()['cache-control']).toContain('immutable');
-    }
+    await expect(link).toHaveCount(1);
+    const href = await link.first().getAttribute('href');
+    expect(href).toMatch(/\/api\/v1\/public\/themes\/v[0-9a-f]{32}\.css$/);
+    const response = await page.request.get(href!);
+    expect(response.status()).toBe(200);
+    expect(response.headers()['cache-control']).toContain('immutable');
   });
 
   // 直接注入「编译产物形状」的恶意 CSS，绕过校验器——本用例验证的是
