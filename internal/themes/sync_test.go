@@ -75,10 +75,10 @@ func TestSyncBuiltinWritesBackManifestMetadata(t *testing.T) {
 		t.Fatalf("BuiltinPackages() error = %v", err)
 	}
 	for _, pkg := range packages {
-		var name, description, mode, version string
+		var name, author, description, mode, version string
 		var specVersion int
-		if err := db.QueryRow(`SELECT name, description, mode, version, spec_version FROM themes WHERE id = ?`,
-			pkg.Manifest.ID).Scan(&name, &description, &mode, &version, &specVersion); err != nil {
+		if err := db.QueryRow(`SELECT name, author, description, mode, version, spec_version FROM themes WHERE id = ?`,
+			pkg.Manifest.ID).Scan(&name, &author, &description, &mode, &version, &specVersion); err != nil {
 			t.Fatalf("read %s: %v", pkg.Manifest.ID, err)
 		}
 		if name != pkg.Manifest.Name || mode != pkg.Manifest.Mode || version != pkg.Manifest.Version || specVersion != pkg.Manifest.SpecVersion {
@@ -86,6 +86,9 @@ func TestSyncBuiltinWritesBackManifestMetadata(t *testing.T) {
 		}
 		if description != pkg.Manifest.Description {
 			t.Fatalf("%s description = %q, want %q", pkg.Manifest.ID, description, pkg.Manifest.Description)
+		}
+		if author != pkg.Manifest.Author {
+			t.Fatalf("%s author = %q, want %q", pkg.Manifest.ID, author, pkg.Manifest.Author)
 		}
 	}
 	// 内置包都没有 preview.png，preview 列保持空串。
