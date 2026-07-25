@@ -5,6 +5,7 @@
 
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   Check,
   Paintbrush,
@@ -15,6 +16,9 @@ import {
   Link2,
   Library,
   UserRound,
+  Import,
+  RefreshCw,
+  Loader2,
 } from 'lucide-react';
 import { themeRegistry } from '@/themes/registry';
 import { useToast } from '@/components/base/Toast';
@@ -23,9 +27,11 @@ import { cn } from '@/lib/utils';
 import { draftSaveToastMessage } from '@/lib/publish-state';
 import { themePackagesFromApi, type ThemePackage } from '@/themes/types';
 import { useMyPage, useThemes, useUpdatePageSettings } from '@/hooks/useQueries';
-import { ErrorState, LoadingSkeleton } from '@/components/base/SharedUI';
+import { ErrorState, LoadingSkeleton, ConfirmDialog } from '@/components/base/SharedUI';
+import { ThemeImportDialog } from '@/components/base/ThemeImportDialog';
 import { getPublicConfig } from '@/api/assets';
 import { backgroundsApi } from '@/api/backgrounds';
+import { themesApi } from '@/api/themes';
 import { ApiError } from '@/api/client';
 import { useAuth } from '@/hooks/useAuth';
 import type { BackgroundMedia } from '@/api/types';
@@ -62,6 +68,13 @@ export default function ThemesPage() {
   const [previewRoot, setPreviewRoot] = useState<HTMLDivElement | null>(null);
   const { toast } = useToast();
   const { markSaving, markSaved } = useSaveStatus();
+  const queryClient = useQueryClient();
+
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [uninstallTarget, setUninstallTarget] = useState<ThemePackage | null>(null);
+  const [upgradingId, setUpgradingId] = useState<string | null>(null);
+  const pendingUpgradeIdRef = useRef<string | null>(null);
+  const upgradeZipInputRef = useRef<HTMLInputElement>(null);
 
   const [bgConfig, setBgConfig] = useState<BgConfig>(emptyBg());
   const bgConfigRef = useRef(bgConfig);
@@ -115,8 +128,16 @@ export default function ThemesPage() {
   );
   const themeById = useMemo(() => new Map(themes.map(pkg => [pkg.id, pkg])), [themes]);
 
-  const seriousThemes = useMemo(() => themes.filter(t => t.meta.vibe === 'serious'), [themes]);
-  const cuteThemes = useMemo(() => themes.filter(t => t.meta.vibe === 'cute'), [themes]);
+  // 私有主题只出现在「我的主题」分组，不重复出现在 Classic / Kawaii 里。
+  const myThemes = useMemo(() => themes.filter(t => t.meta.scope === 'private'), [themes]);
+  const seriousThemes = useMemo(
+    () => themes.filter(t => t.meta.vibe === 'serious' && t.meta.scope !== 'private'),
+    [themes],
+  );
+  const cuteThemes = useMemo(
+    () => themes.filter(t => t.meta.vibe === 'cute' && t.meta.scope !== 'private'),
+    [themes],
+  );
 
   useEffect(() => {
     if (!page?.settings) return;
@@ -178,6 +199,57 @@ export default function ThemesPage() {
       setPendingId(null);
     }
   }, [activeId, page?.settings, page?.publication, themeById, toast, markSaving, markSaved, updateSettings]);
+
+  const handleImported = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ['navigation', 'themes'] });
+  }, [queryClient]);
+
+  const handleUpgradeGithub = useCallback(async (pkg: ThemePackage) => {
+    if (!pkg.meta.sourceUrl) return;
+    setUpgradingId(pkg.id);
+    try {
+      const response = await themesApi.importGitHub(pkg.meta.sourceUrl);
+      await queryClient.invalidateQueries({ queryKey: ['navigation', 'themes'] });
+      toast('success', `已升级主题「${response.data.name}」`);
+    } catch (cause) {
+      toast('error', cause instanceof Error ? cause.message : '主题升级失败');
+    } finally {
+      setUpgradingId(null);
+    }
+  }, [queryClient, toast]);
+
+  const handleUpgradeZipPick = useCallback((pkg: ThemePackage) => {
+    pendingUpgradeIdRef.current = pkg.id;
+    upgradeZipInputRef.current?.click();
+  }, []);
+
+  const handleUpgradeZipChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    const themeId = pendingUpgradeIdRef.current;
+    pendingUpgradeIdRef.current = null;
+    if (!file || !themeId) return;
+    setUpgradingId(themeId);
+    void themesApi.importZip(file)
+      .then(async response => {
+        await queryClient.invalidateQueries({ queryKey: ['navigation', 'themes'] });
+        toast('success', `已升级主题「${response.data.name}」`);
+      })
+      .catch(cause => {
+        toast('error', cause instanceof Error ? cause.message : '主题升级失败');
+      })
+      .finally(() => setUpgradingId(null));
+  }, [queryClient, toast]);
+
+  const handleUninstall = useCallback(async (pkg: ThemePackage) => {
+    try {
+      await themesApi.uninstall(pkg.id);
+      await queryClient.invalidateQueries({ queryKey: ['navigation', 'themes'] });
+      toast('info', '已卸载。若曾被历史发布引用，名额暂不释放。');
+    } catch (cause) {
+      toast('error', cause instanceof Error ? cause.message : '主题卸载失败');
+    }
+  }, [queryClient, toast]);
 
   const persistBackground = useCallback(async (next: BgConfig) => {
     if (!page?.settings) return;
@@ -430,6 +502,54 @@ export default function ThemesPage() {
     );
   };
 
+  // 私有主题卡片：复用 renderThemeCard 渲染本体，外面叠一层操作条（升级 / 卸载），
+  // 不改 renderThemeCard 签名——目录主题不需要这两枚按钮。
+  const renderMyThemeCard = (pkg: ThemePackage) => {
+    const isUpgrading = upgradingId === pkg.id;
+    const canUpgradeGithub = pkg.meta.sourceType === 'github' && Boolean(pkg.meta.sourceUrl);
+    const canUpgradeUpload = pkg.meta.sourceType === 'upload';
+
+    return (
+      <div key={pkg.id} className="relative group">
+        {renderThemeCard(pkg)}
+        <div className="absolute right-1.5 top-1.5 flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+          {(canUpgradeGithub || canUpgradeUpload) && (
+            <button
+              type="button"
+              disabled={isUpgrading}
+              onClick={(event) => {
+                event.stopPropagation();
+                if (canUpgradeGithub) void handleUpgradeGithub(pkg);
+                else handleUpgradeZipPick(pkg);
+              }}
+              className="h-6 w-6 rounded-md bg-black/55 text-white hover:bg-black/70 disabled:opacity-40 flex items-center justify-center transition-colors"
+              aria-label={`升级主题 ${pkg.meta.name}`}
+              title="升级"
+            >
+              {isUpgrading ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <RefreshCw className="w-3.5 h-3.5" />
+              )}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              setUninstallTarget(pkg);
+            }}
+            className="h-6 w-6 rounded-md bg-black/55 text-white hover:bg-red-500/85 flex items-center justify-center transition-colors"
+            aria-label={`卸载主题 ${pkg.meta.name}`}
+            title="卸载"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   const renderMediaTile = (media: BackgroundMedia, scope: 'preset' | 'mine') => {
     const selected = bgConfig.mediaId === media.id || bgConfig.value === media.url;
     const thumb = media.mediaKind === 'video' ? (media.posterUrl || media.url) : media.url;
@@ -498,17 +618,27 @@ export default function ThemesPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <div className="flex items-center gap-2.5 mb-1">
-          <div className="w-8 h-8 rounded-lg bg-primary-500 flex items-center justify-center">
-            <Paintbrush className="w-4 h-4 text-background-50" />
+      <div className="mb-6 flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <div className="flex items-center gap-2.5 mb-1">
+            <div className="w-8 h-8 rounded-lg bg-primary-500 flex items-center justify-center">
+              <Paintbrush className="w-4 h-4 text-background-50" />
+            </div>
+            <h1 className="text-2xl font-bold font-heading text-foreground-950">主题设置</h1>
           </div>
-          <h1 className="text-2xl font-bold font-heading text-foreground-950">主题设置</h1>
+          <p className="text-sm text-foreground-400 mt-1">
+            选择当前导航页的主题与背景（含「站长精选」）。上传与改动先写入草稿；公开首页要看到效果，请到「发布」页点「发布更新」。
+            管理员请确认顶部为「管理主站」（system），不是「我的导航」。共 {themes.length} 套主题
+          </p>
         </div>
-        <p className="text-sm text-foreground-400 mt-1">
-          选择当前导航页的主题与背景（含「站长精选」）。上传与改动先写入草稿；公开首页要看到效果，请到「发布」页点「发布更新」。
-          管理员请确认顶部为「管理主站」（system），不是「我的导航」。共 {themes.length} 套主题
-        </p>
+        <button
+          type="button"
+          onClick={() => setImportDialogOpen(true)}
+          className="h-9 px-4 rounded-lg bg-primary-500 text-background-50 dark:text-foreground-950 text-sm font-medium hover:bg-primary-600 transition-colors duration-150 whitespace-nowrap inline-flex items-center gap-1.5"
+        >
+          <Import className="w-4 h-4" />
+          导入主题
+        </button>
       </div>
 
       {/* Background library */}
@@ -851,6 +981,29 @@ export default function ThemesPage() {
         </div>
       )}
 
+      {myThemes.length > 0 && (
+        <div className="mb-8">
+          <h3 className="text-sm font-semibold text-foreground-700 mb-3 flex items-center gap-2">
+            <span className="w-1.5 h-4 rounded-full bg-accent-400" />
+            我的主题
+          </h3>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
+            {myThemes.map(renderMyThemeCard)}
+          </div>
+        </div>
+      )}
+
+      {myThemes.some(t => t.meta.sourceType === 'upload') && (
+        <input
+          ref={upgradeZipInputRef}
+          type="file"
+          accept=".zip"
+          data-testid="theme-upgrade-input"
+          onChange={handleUpgradeZipChange}
+          className="hidden"
+        />
+      )}
+
       {seriousThemes.length > 0 && (
         <div className="mb-8">
           <h3 className="text-sm font-semibold text-foreground-700 mb-3 flex items-center gap-2">
@@ -874,6 +1027,24 @@ export default function ThemesPage() {
           </div>
         </div>
       )}
+
+      <ThemeImportDialog
+        open={importDialogOpen}
+        onClose={() => setImportDialogOpen(false)}
+        onImported={handleImported}
+      />
+
+      <ConfirmDialog
+        open={uninstallTarget !== null}
+        onClose={() => setUninstallTarget(null)}
+        onConfirm={() => {
+          if (uninstallTarget) void handleUninstall(uninstallTarget);
+        }}
+        title="卸载主题"
+        description={`确定要卸载「${uninstallTarget?.meta.name ?? ''}」吗？若当前草稿正使用该主题，发布时会回落到默认主题。`}
+        confirmLabel="卸载"
+        danger
+      />
     </div>
   );
 }
