@@ -317,6 +317,94 @@ func (s *SQLStore) UpdateTheme(ctx context.Context, themeID string, patch ThemeP
 	return s.Theme(ctx, themeID)
 }
 
+func (s *SQLStore) ListThemeVersions(ctx context.Context, themeID string) ([]ThemeVersion, error) {
+	var exists int
+	if err := s.db.QueryRowContext(ctx, `SELECT 1 FROM themes WHERE id = ?`, themeID).Scan(&exists); errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	} else if err != nil {
+		return nil, err
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT tv.id, tv.version, tv.source_ref, tv.status, tv.created_at,
+		       COALESCE(users.username, ''),
+		       (tv.id = themes.current_version_id) AS is_current,
+		       (SELECT COUNT(*) FROM published_snapshots ps WHERE ps.theme_version_id = tv.id) AS snapshot_refs
+		FROM theme_versions tv
+		JOIN themes ON themes.id = tv.theme_id
+		LEFT JOIN users ON users.id = tv.imported_by
+		WHERE tv.theme_id = ?
+		ORDER BY tv.created_at DESC, tv.id`, themeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]ThemeVersion, 0)
+	for rows.Next() {
+		var v ThemeVersion
+		var isCurrent int
+		if err := rows.Scan(&v.VersionID, &v.Version, &v.SourceRef, &v.Status, &v.CreatedAt, &v.ImportedBy, &isCurrent, &v.SnapshotRefs); err != nil {
+			return nil, err
+		}
+		v.IsCurrent = isCurrent == 1
+		items = append(items, v)
+	}
+	return items, rows.Err()
+}
+
+func (s *SQLStore) SetVersionStatus(ctx context.Context, versionID, status string, now time.Time, audit AuditRecord) (ThemeVersion, error) {
+	err := database.WithinTx(ctx, s.db, nil, func(tx *sql.Tx) error {
+		// 读该版本所属主题的 is_default 与 current_version_id,判守卫。
+		var themeID string
+		var isDefault bool
+		var currentVersionID sql.NullString
+		err := tx.QueryRowContext(ctx, `
+			SELECT themes.id, themes.is_default, themes.current_version_id
+			FROM theme_versions tv JOIN themes ON themes.id = tv.theme_id
+			WHERE tv.id = ?`, versionID).Scan(&themeID, &isDefault, &currentVersionID)
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		} else if err != nil {
+			return err
+		}
+		if status == themes.VersionStatusDisabled && isDefault && currentVersionID.Valid && currentVersionID.String == versionID {
+			return ErrDefaultThemeVersion
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE theme_versions SET status = ? WHERE id = ?`, status, versionID); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE themes SET updated_at = ? WHERE id = ?`, dbTime(now), themeID); err != nil {
+			return err
+		}
+		return insertAudit(ctx, tx, audit)
+	})
+	if err != nil {
+		return ThemeVersion{}, err
+	}
+	return s.versionByID(ctx, versionID)
+}
+
+// versionByID 回读单个版本行(供 SetVersionStatus 返回)。
+func (s *SQLStore) versionByID(ctx context.Context, versionID string) (ThemeVersion, error) {
+	var v ThemeVersion
+	var isCurrent int
+	err := s.db.QueryRowContext(ctx, `
+		SELECT tv.id, tv.version, tv.source_ref, tv.status, tv.created_at,
+		       COALESCE(users.username, ''),
+		       (tv.id = themes.current_version_id),
+		       (SELECT COUNT(*) FROM published_snapshots ps WHERE ps.theme_version_id = tv.id)
+		FROM theme_versions tv JOIN themes ON themes.id = tv.theme_id
+		LEFT JOIN users ON users.id = tv.imported_by
+		WHERE tv.id = ?`, versionID).Scan(&v.VersionID, &v.Version, &v.SourceRef, &v.Status, &v.CreatedAt, &v.ImportedBy, &isCurrent, &v.SnapshotRefs)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ThemeVersion{}, ErrNotFound
+	}
+	if err != nil {
+		return ThemeVersion{}, err
+	}
+	v.IsCurrent = isCurrent == 1
+	return v, nil
+}
+
 func (s *SQLStore) Settings(ctx context.Context) (SystemSettings, error) {
 	var settings SystemSettings
 	var rootDomain sql.NullString

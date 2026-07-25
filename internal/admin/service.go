@@ -242,6 +242,17 @@ type DiscoverPatch struct {
 	Tags     *[]string
 }
 
+type ThemeVersion struct {
+	VersionID    string
+	Version      string
+	SourceRef    string
+	Status       string
+	CreatedAt    string
+	ImportedBy   string
+	IsCurrent    bool
+	SnapshotRefs int
+}
+
 type Store interface {
 	OverviewCounts(context.Context, time.Time) (Counts, error)
 	ListUsers(context.Context, UserFilter) (Page[auth.User], error)
@@ -254,6 +265,8 @@ type Store interface {
 	ListThemes(context.Context) ([]Theme, error)
 	Theme(context.Context, string) (Theme, error)
 	UpdateTheme(context.Context, string, ThemePatch, time.Time, AuditRecord) (Theme, error)
+	ListThemeVersions(context.Context, string) ([]ThemeVersion, error)
+	SetVersionStatus(context.Context, string, string, time.Time, AuditRecord) (ThemeVersion, error)
 	Settings(context.Context) (SystemSettings, error)
 	UpdateSettings(context.Context, SystemSettingsPatch, time.Time, AuditRecord) (SystemSettings, error)
 	AppendAudit(context.Context, AuditRecord) error
@@ -434,6 +447,31 @@ func (s *Service) UpdateTheme(ctx context.Context, actor Actor, themeID string, 
 		return Theme{}, err
 	}
 	return s.store.UpdateTheme(ctx, themeID, patch, s.now().UTC(), audit)
+}
+
+func (s *Service) ThemeVersions(ctx context.Context, actor Actor, themeID string) ([]ThemeVersion, error) {
+	if err := authorize(actor); err != nil {
+		return nil, err
+	}
+	return s.store.ListThemeVersions(ctx, themeID)
+}
+
+func (s *Service) SetThemeVersionStatus(ctx context.Context, actor Actor, versionID, status, requestID string) (ThemeVersion, error) {
+	if err := authorize(actor); err != nil {
+		return ThemeVersion{}, err
+	}
+	if status != "active" && status != "disabled" {
+		return ThemeVersion{}, ErrInvalidInput
+	}
+	action := "theme.version.enable"
+	if status == "disabled" {
+		action = "theme.version.disable"
+	}
+	audit, err := s.audit(actor, action, "theme_version", versionID, map[string]any{"status": status}, requestID)
+	if err != nil {
+		return ThemeVersion{}, err
+	}
+	return s.store.SetVersionStatus(ctx, versionID, status, s.now().UTC(), audit)
 }
 
 func (s *Service) Settings(ctx context.Context, actor Actor) (SystemSettings, error) {
