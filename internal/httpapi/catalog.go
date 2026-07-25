@@ -5,18 +5,25 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/yixian-huang/navax/internal/auth"
 	"github.com/yixian-huang/navax/internal/catalog"
 )
 
-type CatalogHandler struct{ service *catalog.Service }
+type CatalogHandler struct {
+	service     *catalog.Service
+	authService *auth.Service
+}
 
-func NewCatalogHandler(service *catalog.Service) *CatalogHandler {
-	return &CatalogHandler{service: service}
+func NewCatalogHandler(service *catalog.Service, authService *auth.Service) *CatalogHandler {
+	return &CatalogHandler{service: service, authService: authService}
 }
 
 func (h *CatalogHandler) Mount(router chi.Router) {
 	router.Get("/public/config", h.config)
-	router.Get("/themes", h.themes)
+	// /themes 本身对匿名开放，但要在调用方恰好带着有效会话时叠加其私有
+	// 主题（见 h.themes 的注释）——这条路由不在 protected 分组里，只能
+	// 靠 OptionalSession 单独尝试解析，解析失败也不阻断请求。
+	router.With(OptionalSession(h.authService)).Get("/themes", h.themes)
 	router.Get("/public/directory", h.directory)
 	router.Get("/public/discover", h.discover)
 }

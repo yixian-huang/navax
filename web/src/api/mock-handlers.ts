@@ -31,7 +31,7 @@ import {
 import { mockAnalyticsResponse, getDailyStatsForDays, getTopSitesForLimit } from '@/mocks/analytics';
 import { mockDiscoveredPages } from '@/mocks/discover';
 import type { MockPageState, MockPublishedPage } from '@/mocks/data';
-import type { AuthSession, CreateCategoryRequest, UpdateSiteRequest, ReorderRequest, Category, Site, CreateSiteRequest, User, BackgroundMedia } from '@/api/types';
+import type { AuthSession, CreateCategoryRequest, UpdateSiteRequest, ReorderRequest, Category, Site, CreateSiteRequest, User, BackgroundMedia, Theme } from '@/api/types';
 
 type MockAuthenticatedSession = AuthSession & { authenticated: true; user: User };
 
@@ -548,6 +548,60 @@ handlers.push(async (url, init) => {
   return null;
 });
 
+// ---- Theme import ----
+// 契约里私有主题的 id 是导入时生成的不透明行 ID（真实后端用
+// identity.New("thm") = thm_<32 位十六进制>），不是主题包 slug——两个用户
+// 导入同名主题包不会互相冲突。mock 不解析 zip/仓库内容，只投影一个固定
+// 形状的私有主题，字段满足 openapi 的 Theme/ThemeId/ThemeVersionId 契约。
+let mockPrivateThemeSeq = 0;
+const mockPrivateThemes: Theme[] = [];
+
+function mockPrivateThemeVersionId(seq: number): string {
+  return `v${seq.toString(16).padStart(32, '0')}`;
+}
+
+handlers.push(async (url, init) => {
+  const method = init?.method || 'GET';
+  if (url === `${API_BASE}/me/themes/import` && method === 'POST') {
+    mockPrivateThemeSeq += 1;
+    const seq = mockPrivateThemeSeq;
+    const versionId = mockPrivateThemeVersionId(seq);
+    const theme: Theme = {
+      id: `thm_mock_priv_${seq}`,
+      name: `导入主题 ${seq}`,
+      subtitle: '开发 mock',
+      version: '1.0.0',
+      author: 'mock-import',
+      description: '开发 mock 导入的私有主题，用于演练导入流程。',
+      mode: 'light',
+      preview: '',
+      enabled: true,
+      default: false,
+      currentVersionId: versionId,
+      cssHref: `/api/v1/public/themes/${versionId}.css`,
+      tier: 1,
+      scope: 'private',
+      vibe: 'serious',
+      swatches: ['#f5f3ff', '#8b5cf6', '#1e1b4b'],
+    };
+    mockPrivateThemes.push(theme);
+    return jsonResponse({ code: 'OK', data: theme, meta: { message: '主题已导入', detail: '' } }, 201);
+  }
+  if (url.startsWith(`${API_BASE}/me/themes/`) && method === 'DELETE') {
+    const id = decodeURIComponent(url.slice(`${API_BASE}/me/themes/`.length));
+    const idx = mockPrivateThemes.findIndex(theme => theme.id === id);
+    if (idx === -1) {
+      return jsonResponse({ code: 'NotFound', data: null, meta: { message: '主题不存在', detail: '' } }, 404);
+    }
+    mockPrivateThemes.splice(idx, 1);
+    return new Response(null, { status: 204 });
+  }
+  if (url === `${API_BASE}/themes/validate` && method === 'POST') {
+    return jsonResponse({ code: 'OK', data: { valid: true, errors: [] }, meta: { message: '', detail: '' } });
+  }
+  return null;
+});
+
 // ---- Navigation handlers ----
 handlers.push((url, init) => {
   if (/\/pages\/[^/]+\/settings$/.test(url)) {
@@ -859,7 +913,7 @@ handlers.push((url, init) => {
     ));
   }
   if (url === `${API_BASE}/navigation/themes`) {
-    return Promise.resolve(jsonResponse({ code: 'OK', data: mockThemes, meta: { message: '', detail: '' } }));
+    return Promise.resolve(jsonResponse({ code: 'OK', data: [...mockThemes, ...mockPrivateThemes], meta: { message: '', detail: '' } }));
   }
   // Subdomain
   if (url === `${API_BASE}/navigation/subdomain`) {
@@ -1029,7 +1083,7 @@ handlers.push((url, init) => {
     return Promise.resolve(jsonResponse({ code: 'OK', data: mockPlatformCategories, meta: { message: '', detail: '' } }));
   }
   if (url === `${API_BASE}/admin/themes`) {
-    return Promise.resolve(jsonResponse({ code: 'OK', data: mockThemes, meta: { message: '', detail: '' } }));
+    return Promise.resolve(jsonResponse({ code: 'OK', data: [...mockThemes, ...mockPrivateThemes], meta: { message: '', detail: '' } }));
   }
   if (url === `${API_BASE}/admin/settings`) {
     return Promise.resolve(jsonResponse({ code: 'OK', data: mockSystemSettings, meta: { message: '', detail: '' } }));

@@ -62,6 +62,8 @@ const cases: Case[] = [
   { name: '访问统计概览', path: '/api/v1/me/analytics/overview', method: 'get', status: '200', url: '/api/v1/me/analytics/overview' },
   { name: '访问统计分布', path: '/api/v1/me/analytics/breakdown', method: 'get', status: '200', url: '/api/v1/me/analytics/breakdown' },
   { name: '资源上传', path: '/api/v1/assets', method: 'post', status: '201', url: '/api/v1/assets', init: { method: 'POST' } },
+  { name: '导入主题', path: '/api/v1/me/themes/import', method: 'post', status: '201', url: '/api/v1/me/themes/import', init: { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ githubUrl: 'https://github.com/e2e/lilac' }) } },
+  { name: '主题包校验', path: '/api/v1/themes/validate', method: 'post', status: '200', url: '/api/v1/themes/validate', init: { method: 'POST' } },
 ];
 
 beforeAll(() => {
