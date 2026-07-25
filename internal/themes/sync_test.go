@@ -47,9 +47,9 @@ func TestSyncBuiltinServesEveryBuiltinTheme(t *testing.T) {
 	}
 	for _, pkg := range packages {
 		t.Run(pkg.Manifest.ID, func(t *testing.T) {
-			versionID, resolveErr := store.ResolvePackageVersion(t.Context(), pkg.Manifest.ID)
+			versionID, resolveErr := store.ResolveEligibleVersion(t.Context(), pkg.Manifest.ID, "")
 			if resolveErr != nil {
-				t.Fatalf("ResolvePackageVersion() error = %v", resolveErr)
+				t.Fatalf("ResolveEligibleVersion() error = %v", resolveErr)
 			}
 			css, _, status, cssErr := store.VersionCSS(t.Context(), versionID)
 			if cssErr != nil {

@@ -198,61 +198,6 @@ func (s *Store) VersionAsset(ctx context.Context, versionID, path string) (Asset
 	return asset, nil
 }
 
-// ResolvePackageVersion 把一个 themeId 解析成可下发的版本 ID。
-//
-// 顺序：直接命中 → 别名表 → 默认主题。未知、已下架、当前版本被撤销的主题都
-// 走到回落，因此调用方永远拿到一个可用版本或一个明确的错误，不会拿到空串。
-// 注意这里只做包级可用性判定；私有主题的归属判定（eligible 谓词的 actor 分支）
-// 属于调用方。
-func (s *Store) ResolvePackageVersion(ctx context.Context, themeID string) (string, error) {
-	candidates := make([]string, 0, 2)
-	if trimmed := strings.TrimSpace(themeID); trimmed != "" {
-		candidates = append(candidates, trimmed)
-		if alias, ok := themeIDAliases[trimmed]; ok {
-			candidates = append(candidates, alias)
-		}
-	}
-	for _, candidate := range candidates {
-		versionID, err := s.serviceableVersion(ctx, `themes.id = ?`, candidate)
-		if err != nil {
-			return "", err
-		}
-		if versionID != "" {
-			return versionID, nil
-		}
-	}
-
-	versionID, err := s.serviceableVersion(ctx, `themes.is_default = 1`)
-	if err != nil {
-		return "", err
-	}
-	if versionID == "" {
-		return "", ErrDefaultThemeUnavailable
-	}
-	return versionID, nil
-}
-
-// serviceableVersion 返回匹配主题的当前版本 ID，不可下发时返回空串。
-// 「可下发」= 主题启用 + 有当前版本 + 该版本仍是 active。
-func (s *Store) serviceableVersion(ctx context.Context, condition string, args ...any) (string, error) {
-	var versionID string
-	err := s.db.QueryRowContext(ctx, `
-		SELECT themes.current_version_id
-		FROM themes
-		JOIN theme_versions ON theme_versions.id = themes.current_version_id
-		WHERE `+condition+`
-		  AND themes.enabled = 1
-		  AND theme_versions.status = 'active'
-		LIMIT 1`, args...).Scan(&versionID)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", nil
-	}
-	if err != nil {
-		return "", err
-	}
-	return versionID, nil
-}
-
 func dbTime(value time.Time) string { return value.UTC().Format(time.RFC3339Nano) }
 
 // 可用性谓词（eligibility）。列表、选择、预览、发布必须复用同一份判定，
