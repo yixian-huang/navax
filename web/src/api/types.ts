@@ -310,6 +310,11 @@ export interface Theme {
   swatches?: [string, string, string];
   sourceType?: 'builtin' | 'github' | 'upload';
   sourceUrl?: string;
+  /** 私有主题的导入者;目录主题没有 owner。 */
+  ownerId?: string;
+  ownerName?: string;
+  /** 当前版本的状态;停用后该版本从用户可选列表消失。无当前版本时缺省。 */
+  status?: 'active' | 'disabled';
   /** @deprecated 使用 default。 */
   isDefault?: boolean;
   /** @deprecated 使用 enabled。 */

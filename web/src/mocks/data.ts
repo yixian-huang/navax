@@ -366,7 +366,7 @@ export const mockThemes: Theme[] = [
   {
     id: 'slate', name: 'Slate', subtitle: '克制·当代', version: '1.0.0', author: 'nav.ax',
     description: '中性冷灰基底，克制的当代排版。', mode: 'light', preview: '',
-    enabled: true, default: true, isDefault: true, isActive: true,
+    enabled: true, default: true, isDefault: true, isActive: true, status: 'active',
     currentVersionId: 'v00000000000000000000000000000001',
     cssHref: '/api/v1/public/themes/v00000000000000000000000000000001.css',
     tier: 1, scope: 'catalog', vibe: 'serious',
@@ -376,7 +376,7 @@ export const mockThemes: Theme[] = [
   {
     id: 'slate-dark', name: 'Slate Dark', subtitle: '克制·夜间', version: '1.0.0', author: 'nav.ax',
     description: '深色版本的中性冷灰。', mode: 'dark', preview: '',
-    enabled: true, default: false, isDefault: false, isActive: false,
+    enabled: true, default: false, isDefault: false, isActive: false, status: 'active',
     currentVersionId: 'v00000000000000000000000000000002',
     cssHref: '/api/v1/public/themes/v00000000000000000000000000000002.css',
     tier: 1, scope: 'catalog', vibe: 'serious',
@@ -386,7 +386,7 @@ export const mockThemes: Theme[] = [
   {
     id: 'sakura', name: 'Sakura', subtitle: '樱花·魔法', version: '1.0.0', author: 'nav.ax',
     description: '梦幻樱花粉 × 薄荷绿点缀。', mode: 'light', preview: '',
-    enabled: true, default: false, isDefault: false, isActive: false,
+    enabled: true, default: false, isDefault: false, isActive: false, status: 'active',
     currentVersionId: 'v00000000000000000000000000000003',
     cssHref: '/api/v1/public/themes/v00000000000000000000000000000003.css',
     tier: 1, scope: 'catalog', vibe: 'cute',

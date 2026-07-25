@@ -597,6 +597,9 @@ handlers.push(async (url, init) => {
       preview: '',
       enabled: true,
       default: false,
+      status: 'active',
+      ownerId: 'usr_001',
+      ownerName: 'lucaspeng',
       currentVersionId: versionId,
       cssHref: `/api/v1/public/themes/${versionId}.css`,
       tier: 1,
@@ -1106,6 +1109,17 @@ handlers.push((url, init) => {
   }
   if (url === `${API_BASE}/admin/themes`) {
     return Promise.resolve(jsonResponse({ code: 'OK', data: [...mockThemes, ...mockPrivateThemes], meta: { message: '', detail: '' } }));
+  }
+  if (url.startsWith(`${API_BASE}/admin/themes/`) && (init?.method || 'GET') === 'PATCH') {
+    const id = decodeURIComponent(url.slice(`${API_BASE}/admin/themes/`.length));
+    let body: { enabled?: boolean; default?: boolean; status?: 'active' | 'disabled' };
+    try { body = JSON.parse(init?.body || ''); } catch { return Promise.resolve(jsonResponse({ code: 'InvalidParameter', data: null, meta: { message: '请求格式错误', detail: '' } }, 400)); }
+    const theme = [...mockThemes, ...mockPrivateThemes].find(t => t.id === id);
+    if (!theme) return Promise.resolve(jsonResponse({ code: 'NotFound', data: null, meta: { message: '主题不存在', detail: '' } }, 404));
+    if (body.enabled !== undefined) theme.enabled = body.enabled;
+    if (body.default !== undefined) theme.default = body.default;
+    if (body.status !== undefined) theme.status = body.status;
+    return Promise.resolve(jsonResponse({ code: 'OK', data: theme, meta: { message: '主题已更新', detail: '' } }));
   }
   if (url === `${API_BASE}/admin/settings`) {
     return Promise.resolve(jsonResponse({ code: 'OK', data: mockSystemSettings, meta: { message: '', detail: '' } }));

@@ -1802,7 +1802,7 @@ components:
     CategoryId: { in: path, name: categoryId, required: true, schema: { $ref: '#/components/schemas/Id' } }
     SiteId: { in: path, name: siteId, required: true, schema: { $ref: '#/components/schemas/Id' } }
     InvitationId: { in: path, name: invitationId, required: true, schema: { $ref: '#/components/schemas/Id' } }
-    ThemeId: { in: path, name: themeId, required: true, schema: { $ref: '#/components/schemas/Id' } }
+    ThemeId: { in: path, name: themeId, required: true, schema: { $ref: '#/components/schemas/ThemeId' } }
     ThemeVersionId: { in: path, name: versionId, required: true, schema: { $ref: '#/components/schemas/ThemeVersionId' } }
     BackupId: { in: path, name: backupId, required: true, schema: { $ref: '#/components/schemas/Id' } }
     Slug: { in: path, name: slug, required: true, schema: { type: string, pattern: '^[a-z0-9](?:[a-z0-9-]{1,46}[a-z0-9])$', minLength: 3, maxLength: 48 } }
