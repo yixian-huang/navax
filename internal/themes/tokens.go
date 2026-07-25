@@ -2,7 +2,6 @@ package themes
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 )
 
@@ -100,5 +99,3 @@ func writeTokenGroup(b *strings.Builder, prefix string, values, fallback map[str
 		fmt.Fprintf(b, "  %s%s: %s;\n", prefix, key, merged[key])
 	}
 }
-
-var _ = sort.Strings
