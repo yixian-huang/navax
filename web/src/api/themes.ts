@@ -1,5 +1,5 @@
 import { request } from './client';
-import type { ApiResponse, Theme } from './types';
+import type { ApiResponse, Theme, ThemeUpdateStatus } from './types';
 
 export const themesApi = {
   importZip: (file: File) => {
@@ -14,4 +14,6 @@ export const themesApi = {
     }),
   uninstall: (themeId: string) =>
     request<ApiResponse<null>>(`/me/themes/${encodeURIComponent(themeId)}`, { method: 'DELETE' }),
+  checkUpdate: (themeId: string) =>
+    request<ApiResponse<ThemeUpdateStatus>>(`/me/themes/${encodeURIComponent(themeId)}/check-update`, { method: 'POST' }),
 };

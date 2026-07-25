@@ -4,16 +4,17 @@
 // ============================================================
 
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { Check, Paintbrush, Upload, Trash2, Film, Image as ImageIcon, Library } from 'lucide-react';
+import { Check, Paintbrush, Upload, Trash2, Film, Image as ImageIcon, Library, ChevronDown, ChevronUp } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useToast } from '@/components/base/Toast';
 import { cn } from '@/lib/utils';
 import { themeDisplayFromApi, type ThemePackage } from '@/themes/types';
-import { useAdminThemes, useUpdateAdminThemeState } from '@/hooks/useQueries';
+import { useAdminThemes, useUpdateAdminThemeState, useSetThemeVersionStatus } from '@/hooks/useQueries';
 import { ErrorState, LoadingSkeleton } from '@/components/base/SharedUI';
 import { backgroundsApi } from '@/api/backgrounds';
+import { adminApi } from '@/api/admin';
 import { ApiError } from '@/api/client';
-import type { BackgroundMedia } from '@/api/types';
+import type { BackgroundMedia, ThemeVersionRow } from '@/api/types';
 
 const UPLOAD_ACCEPT = 'image/png,image/jpeg,image/jpg,image/gif,image/webp,video/mp4,video/webm';
 const MAX_INSTANCE_PRESETS = 12;
@@ -141,6 +142,47 @@ export default function AdminThemesPage() {
     });
   }, [updateTheme, toast]);
 
+  // 版本面板：一次只展开一张卡，用局部 state 存展开的 themeId 及其版本列表，
+  // 不进 TanStack Query 缓存——面板关闭即丢弃，重新展开总是拉取最新。
+  const [expandedThemeId, setExpandedThemeId] = useState<string | null>(null);
+  const [versionRows, setVersionRows] = useState<ThemeVersionRow[]>([]);
+  const [versionsLoading, setVersionsLoading] = useState(false);
+  const [versionActionId, setVersionActionId] = useState<string | null>(null);
+  const setVersionStatus = useSetThemeVersionStatus();
+
+  const handleToggleVersions = useCallback(async (pkg: ThemePackage) => {
+    if (expandedThemeId === pkg.id) {
+      setExpandedThemeId(null);
+      setVersionRows([]);
+      return;
+    }
+    setExpandedThemeId(pkg.id);
+    setVersionRows([]);
+    setVersionsLoading(true);
+    try {
+      const res = await adminApi.getThemeVersions(pkg.id);
+      setVersionRows(res.data);
+    } catch (cause) {
+      toast('error', cause instanceof ApiError ? (cause.detail || cause.message) : '加载版本列表失败');
+      setExpandedThemeId(null);
+    } finally {
+      setVersionsLoading(false);
+    }
+  }, [expandedThemeId, toast]);
+
+  const handleSetVersionStatus = useCallback(async (row: ThemeVersionRow, next: 'active' | 'disabled') => {
+    setVersionActionId(row.versionId);
+    try {
+      const res = await setVersionStatus.mutateAsync({ versionId: row.versionId, status: next });
+      setVersionRows(current => current.map(v => (v.versionId === row.versionId ? res.data : v)));
+      toast('success', next === 'disabled' ? '版本已停用' : '版本已启用');
+    } catch (cause) {
+      toast('error', cause instanceof ApiError ? (cause.detail || cause.message) : '操作失败');
+    } finally {
+      setVersionActionId(null);
+    }
+  }, [setVersionStatus, toast]);
+
   if (isLoading) return <LoadingSkeleton count={4} />;
   if (isError) {
     return <ErrorState message={error instanceof Error ? error.message : '加载主题失败'} onRetry={() => refetch()} />;
@@ -229,12 +271,74 @@ export default function AdminThemesPage() {
     );
   };
 
+  // 版本面板：sha 短号 / 状态徽章 / 快照引用数 / 当前版本标记；非当前版本
+  // 带停用启用按钮，当前版本沿用卡片既有的 B2a 停用控件，不在表里重复。
+  const renderVersionPanel = (pkg: ThemePackage) => {
+    if (expandedThemeId !== pkg.id) return null;
+    return (
+      <div className="mt-1.5 rounded-lg border border-background-200/70 bg-background-50 p-2">
+        {versionsLoading ? (
+          <div className="py-3 flex items-center justify-center">
+            <span className="w-4 h-4 rounded-full border-2 border-primary-400 border-t-transparent animate-spin" />
+          </div>
+        ) : versionRows.length === 0 ? (
+          <p className="py-2 text-center text-[11px] text-foreground-400">暂无版本记录</p>
+        ) : (
+          <table className="w-full text-left">
+            <thead>
+              <tr className="text-[10px] text-foreground-400">
+                <th className="pb-1 font-medium">SHA</th>
+                <th className="pb-1 font-medium">状态</th>
+                <th className="pb-1 font-medium">引用</th>
+                <th className="pb-1 font-medium">当前</th>
+                <th className="pb-1 font-medium text-right">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {versionRows.map(row => {
+                const busy = versionActionId === row.versionId;
+                return (
+                  <tr key={row.versionId} className="border-t border-background-200/60">
+                    <td className="py-1.5 pr-2 font-mono text-[11px] text-foreground-600">{row.sourceRef.slice(0, 7)}</td>
+                    <td className="py-1.5 pr-2">
+                      <span className={cn(
+                        'inline-block text-[10px] font-medium px-1.5 py-0.5 rounded-full',
+                        row.status === 'active' ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-500',
+                      )}>
+                        {row.status === 'active' ? '启用' : '已停用'}
+                      </span>
+                    </td>
+                    <td className="py-1.5 pr-2 text-[11px] text-foreground-400">{row.snapshotRefs}</td>
+                    <td className="py-1.5 pr-2 text-[11px] text-foreground-400">{row.isCurrent ? '是' : ''}</td>
+                    <td className="py-1.5 text-right">
+                      {!row.isCurrent && (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => void handleSetVersionStatus(row, row.status === 'disabled' ? 'active' : 'disabled')}
+                          className="underline text-[11px] text-foreground-500 hover:text-foreground-700 disabled:opacity-40"
+                          aria-label={`${row.status === 'disabled' ? '启用' : '停用'}主题 ${pkg.meta.name} 版本 ${row.sourceRef.slice(0, 7)}`}
+                        >
+                          {busy ? '处理中…' : row.status === 'disabled' ? '启用' : '停用'}
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+    );
+  };
+
   // 治理叠层：复用 renderThemeCard 渲染本体，外面叠一层 owner / 状态徽章 /
-  // 停用按钮，不改 renderThemeCard 签名——目录主题不需要这些控件。
+  // 停用按钮 / 版本面板入口，不改 renderThemeCard 签名——目录主题不需要这些控件。
   const renderGovernedCard = (pkg: ThemePackage, showOwner: boolean) => (
     <div key={pkg.id} className="relative">
       {renderThemeCard(pkg)}
-      <div className="mt-1 flex items-center gap-2 text-xs text-foreground-400">
+      <div className="mt-1 flex items-center gap-2 flex-wrap text-xs text-foreground-400">
         {showOwner && pkg.meta.ownerName && <span>作者：{pkg.meta.ownerName}</span>}
         {pkg.meta.status === 'disabled' && <span className="text-red-500">已停用版本</span>}
         {pkg.id !== activeId && pkg.meta.status && (
@@ -247,7 +351,20 @@ export default function AdminThemesPage() {
             {pkg.meta.status === 'disabled' ? '启用版本' : '停用版本'}
           </button>
         )}
+        {pkg.meta.status && (
+          <button
+            type="button"
+            onClick={() => void handleToggleVersions(pkg)}
+            className="ml-auto inline-flex items-center gap-0.5 underline hover:text-foreground-600"
+            aria-label={`${expandedThemeId === pkg.id ? '收起' : '展开'}主题 ${pkg.meta.name} 版本列表`}
+            aria-expanded={expandedThemeId === pkg.id}
+          >
+            查看版本
+            {expandedThemeId === pkg.id ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+          </button>
+        )}
       </div>
+      {renderVersionPanel(pkg)}
     </div>
   );
 
