@@ -48,7 +48,16 @@ func (s *Store) InstallPrivate(ctx context.Context, ownerID, slug, sourceType, s
 				return err
 			}
 			if owned >= quota {
-				return ErrQuotaExceeded
+				// 配额满:先回收无快照引用的墓碑(它们对 owner 不可见却占位),再重算。
+				if _, err := reclaimTombstones(ctx, tx, ownerID, now); err != nil {
+					return err
+				}
+				if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM themes WHERE owner_id = ?`, ownerID).Scan(&owned); err != nil {
+					return err
+				}
+				if owned >= quota {
+					return ErrQuotaExceeded
+				}
 			}
 			themeID, err = identity.New("thm")
 			if err != nil {
@@ -130,14 +139,8 @@ func (s *Store) UninstallPrivate(ctx context.Context, ownerID, themeID string, n
 			_, err := tx.ExecContext(ctx, `UPDATE themes SET enabled = 0, updated_at = ? WHERE id = ?`, dbTime(now), themeID)
 			return err
 		}
-		// 物理删除:先摘 current 指针(theme_versions_current_guard 才放行删版本)。
-		if _, err := tx.ExecContext(ctx, `UPDATE themes SET current_version_id = NULL, updated_at = ? WHERE id = ?`, dbTime(now), themeID); err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(ctx, `DELETE FROM theme_versions WHERE theme_id = ?`, themeID); err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(ctx, `DELETE FROM themes WHERE id = ?`, themeID); err != nil {
+		// 物理删除:无快照引用,可安全回收。
+		if err := deleteThemeTx(ctx, tx, themeID, now); err != nil {
 			return err
 		}
 		removed = true
@@ -147,4 +150,63 @@ func (s *Store) UninstallPrivate(ctx context.Context, ownerID, themeID string, n
 		return false, err
 	}
 	return removed, nil
+}
+
+// deleteThemeTx 物理删除单个主题:先摘 current 指针(theme_versions_current_guard
+// 才放行删版本),再删版本与行。调用方需已确认该主题无 published_snapshots 引用。
+func deleteThemeTx(ctx context.Context, tx *sql.Tx, themeID string, now time.Time) error {
+	if _, err := tx.ExecContext(ctx, `UPDATE themes SET current_version_id = NULL, updated_at = ? WHERE id = ?`, dbTime(now), themeID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM theme_versions WHERE theme_id = ?`, themeID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM themes WHERE id = ?`, themeID); err != nil {
+		return err
+	}
+	return nil
+}
+
+// reclaimTombstones 回收该 owner 的可回收墓碑:scope=private、enabled=0、且其全部
+// 版本都不再被任何 published_snapshots 引用。返回回收数量。墓碑对 owner 不可见
+// 却占配额,回收在配额压力时自动发生。
+func reclaimTombstones(ctx context.Context, tx *sql.Tx, ownerID string, now time.Time) (int, error) {
+	rows, err := tx.QueryContext(ctx, `
+		SELECT id FROM themes WHERE scope = 'private' AND owner_id = ? AND enabled = 0`, ownerID)
+	if err != nil {
+		return 0, err
+	}
+	var tombstones []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		tombstones = append(tombstones, id)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return 0, err
+	}
+	rows.Close()
+
+	reclaimed := 0
+	for _, themeID := range tombstones {
+		var refs int
+		if err := tx.QueryRowContext(ctx, `
+			SELECT COUNT(*) FROM published_snapshots
+			WHERE theme_version_id IN (SELECT id FROM theme_versions WHERE theme_id = ?)`,
+			themeID).Scan(&refs); err != nil {
+			return 0, err
+		}
+		if refs > 0 {
+			continue
+		}
+		if err := deleteThemeTx(ctx, tx, themeID, now); err != nil {
+			return 0, err
+		}
+		reclaimed++
+	}
+	return reclaimed, nil
 }

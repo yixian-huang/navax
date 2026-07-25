@@ -276,3 +276,59 @@ func TestInstallPrivateReinstallReenablesTombstonedTheme(t *testing.T) {
 		t.Fatalf("owner resolve after reinstall = %q, %v; want %q", got, err, reinstalled.VersionID)
 	}
 }
+
+func TestInstallPrivateReclaimsUnreferencedTombstonesUnderQuota(t *testing.T) {
+	db := newTestDB(t)
+	store := NewStore(db)
+	seedUser(t, store, "usr_recl_0001")
+
+	// 配额=2。装两个:one(将转墓碑,无引用)、two(将转墓碑,有快照引用)。
+	one := installSample(t, store, "usr_recl_0001", "one", 2)
+	two := installSample(t, store, "usr_recl_0001", "two", 2)
+
+	// 给 two 造一条快照引用,使其卸载后成为"有引用墓碑"。
+	stamp := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := db.Exec(`INSERT INTO published_snapshots (id, page_id, draft_revision, slug, visibility, payload_json, etag, published_at, theme_version_id)
+		VALUES ('snp_recl_0001', 'page_system_root', 1, 'recl', 'public', '{}', 'W/"x"', ?, ?)`,
+		stamp, two.VersionID); err != nil {
+		t.Fatalf("seed snapshot: %v", err)
+	}
+
+	// 卸载两个:one 无引用→物理删(配额腾出);two 有引用→墓碑(占配额)。
+	if removed, err := store.UninstallPrivate(t.Context(), "usr_recl_0001", one.ThemeID, time.Now().UTC()); err != nil || !removed {
+		t.Fatalf("uninstall one: removed=%v err=%v", removed, err)
+	}
+	if removed, err := store.UninstallPrivate(t.Context(), "usr_recl_0001", two.ThemeID, time.Now().UTC()); err != nil || removed {
+		t.Fatalf("uninstall two: want tombstone, removed=%v err=%v", removed, err)
+	}
+	// 现在 owner 名下:two(墓碑,占配额)。装 three + four 应无问题(配额 2,占 1)。
+	installSample(t, store, "usr_recl_0001", "three", 2)
+	// 此刻名下 two(墓碑)+ three = 2,已满。装 four 前若不回收会 ErrQuotaExceeded;
+	// 但 two 仍有引用,不可回收 → 确实应满 → four 被拒。
+	if _, err := store.InstallPrivate(t.Context(), "usr_recl_0001", "four", "upload", "", "d4", 2,
+		func(themeID string) (Compiled, error) { return Compile(samplePackage(t), themeID) }, time.Now().UTC()); !errors.Is(err, ErrQuotaExceeded) {
+		t.Fatalf("four should be rejected (two still referenced): %v", err)
+	}
+
+	// 移除对 two 的快照引用 → two 变为可回收墓碑。
+	if _, err := db.Exec(`DELETE FROM published_snapshots WHERE id = 'snp_recl_0001'`); err != nil {
+		t.Fatal(err)
+	}
+	// 再装 four:配额满 → 回收 two(现无引用)→ 腾出 → 安装成功。
+	four, err := store.InstallPrivate(t.Context(), "usr_recl_0001", "four", "upload", "", "d4b", 2,
+		func(themeID string) (Compiled, error) { return Compile(samplePackage(t), themeID) }, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("four should install after reclaiming two: %v", err)
+	}
+	if four.ThemeID == "" {
+		t.Fatal("four not installed")
+	}
+	// two 已被物理删。
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM themes WHERE id = ?`, two.ThemeID).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatal("reclaimable tombstone two should have been physically deleted")
+	}
+}
