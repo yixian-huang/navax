@@ -521,3 +521,58 @@ func TestUpdateThemeStatusRejectsThemeWithoutCurrentVersion(t *testing.T) {
 		t.Fatalf("err = %v, want ErrNoCurrentVersion", err)
 	}
 }
+
+func TestListAndDisableThemeVersion(t *testing.T) {
+	ctx := context.Background()
+	db, err := database.OpenAndMigrate(ctx, database.Config{Path: ":memory:", MaxOpenConns: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	if err := themes.SyncBuiltin(ctx, themes.NewStore(db), time.Now().UTC()); err != nil {
+		t.Fatalf("SyncBuiltin() error = %v", err)
+	}
+	insertTestUser(t, db, "usr_admin_ver", "admin", "admin@example.com", "admin", time.Now().UTC())
+	store := NewSQLStore(db)
+
+	// sakura 单版本、当前、非默认。
+	versions, err := store.ListThemeVersions(ctx, "sakura")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(versions) != 1 || !versions[0].IsCurrent || versions[0].Status != "active" {
+		t.Fatalf("unexpected versions: %+v", versions)
+	}
+	sakuraVersion := versions[0].VersionID
+
+	// 停用 sakura 当前版本(非默认,允许)。audit_logs.detail_json 有
+	// CHECK(json_valid(...)),insertAudit 原样写入 Detail,直连 store 的调用
+	// 需要像 (*Service).audit 一样自带合法 JSON,不能留空字符串。
+	audit := AuditRecord{AuditEntry: AuditEntry{ID: "aud_ver_1", ActorID: "usr_admin_ver", ActorName: "admin", Action: "theme.version.disable", TargetType: "theme_version", TargetID: sakuraVersion, Detail: "{}", CreatedAt: time.Now().UTC()}}
+	updated, err := store.SetVersionStatus(ctx, sakuraVersion, "disabled", time.Now().UTC(), audit)
+	if err != nil || updated.Status != "disabled" {
+		t.Fatalf("disable sakura version: %+v err=%v", updated, err)
+	}
+
+	// 停用 slate(默认主题)当前版本 → 拒绝。
+	sv, err := store.ListThemeVersions(ctx, "slate")
+	if err != nil {
+		t.Fatal(err)
+	}
+	slateVersion := sv[0].VersionID
+	audit2 := AuditRecord{AuditEntry: AuditEntry{ID: "aud_ver_2", ActorID: "usr_admin_ver", ActorName: "admin", Action: "theme.version.disable", TargetType: "theme_version", TargetID: slateVersion, CreatedAt: time.Now().UTC()}}
+	if _, err := store.SetVersionStatus(ctx, slateVersion, "disabled", time.Now().UTC(), audit2); !errors.Is(err, ErrDefaultThemeVersion) {
+		t.Fatalf("disabling default current version must be rejected, got %v", err)
+	}
+
+	// 未知版本 → ErrNotFound。
+	audit3 := AuditRecord{AuditEntry: AuditEntry{ID: "aud_ver_3", ActorID: "usr_admin_ver", ActorName: "admin", Action: "theme.version.disable", TargetType: "theme_version", TargetID: "vzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", CreatedAt: time.Now().UTC()}}
+	if _, err := store.SetVersionStatus(ctx, "vzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", "disabled", time.Now().UTC(), audit3); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unknown version want ErrNotFound, got %v", err)
+	}
+
+	// themeID 不存在 → ErrNotFound。
+	if _, err := store.ListThemeVersions(ctx, "no-such-theme"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unknown theme want ErrNotFound, got %v", err)
+	}
+}
