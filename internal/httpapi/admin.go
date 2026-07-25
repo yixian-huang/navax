@@ -301,14 +301,15 @@ func (h *AdminHandler) themes(w http.ResponseWriter, r *http.Request) {
 
 func (h *AdminHandler) updateTheme(w http.ResponseWriter, r *http.Request) {
 	var request struct {
-		Enabled *bool `json:"enabled"`
-		Default *bool `json:"default"`
+		Enabled *bool   `json:"enabled"`
+		Default *bool   `json:"default"`
+		Status  *string `json:"status"`
 	}
 	if !decodeJSON(w, r, &request) {
 		return
 	}
 	item, err := h.service.UpdateTheme(r.Context(), actorFromRequest(r), chi.URLParam(r, "themeId"), adminpkg.ThemePatch{
-		Enabled: request.Enabled, Default: request.Default, RequestID: middleware.GetReqID(r.Context()),
+		Enabled: request.Enabled, Default: request.Default, Status: request.Status, RequestID: middleware.GetReqID(r.Context()),
 	})
 	if err != nil {
 		h.writeError(w, r, err)
@@ -449,6 +450,10 @@ func (h *AdminHandler) writeError(w http.ResponseWriter, r *http.Request, err er
 		WriteError(w, r, http.StatusConflict, "CONFLICT", "默认主题必须保持启用", nil)
 	case errors.Is(err, adminpkg.ErrPrivateDefault):
 		WriteError(w, r, http.StatusConflict, "PRIVATE_THEME_DEFAULT", "私有主题不能设为实例默认主题", nil)
+	case errors.Is(err, adminpkg.ErrDefaultThemeVersion):
+		WriteError(w, r, http.StatusConflict, "DEFAULT_THEME_VERSION", "不能停用默认主题的当前版本", nil)
+	case errors.Is(err, adminpkg.ErrNoCurrentVersion):
+		WriteError(w, r, http.StatusConflict, "NO_CURRENT_VERSION", "该主题没有可停用的当前版本", nil)
 	case errors.Is(err, adminpkg.ErrInvitationState):
 		WriteError(w, r, http.StatusConflict, "CONFLICT", "邀请已被撤销", nil)
 	case errors.Is(err, adminpkg.ErrConflict):

@@ -250,7 +250,8 @@ func (s *SQLStore) UpdateTheme(ctx context.Context, themeID string, patch ThemeP
 	err := database.WithinTx(ctx, s.db, nil, func(tx *sql.Tx) error {
 		var currentDefault bool
 		var scope string
-		if err := tx.QueryRowContext(ctx, "SELECT is_default, scope FROM themes WHERE id = ?", themeID).Scan(&currentDefault, &scope); errors.Is(err, sql.ErrNoRows) {
+		var currentVersionID sql.NullString
+		if err := tx.QueryRowContext(ctx, "SELECT is_default, scope, current_version_id FROM themes WHERE id = ?", themeID).Scan(&currentDefault, &scope, &currentVersionID); errors.Is(err, sql.ErrNoRows) {
 			return ErrNotFound
 		} else if err != nil {
 			return err
@@ -273,6 +274,20 @@ func (s *SQLStore) UpdateTheme(ctx context.Context, themeID string, patch ThemeP
 				return ErrDefaultTheme
 			}
 			if _, err := tx.ExecContext(ctx, "UPDATE themes SET enabled = ?, updated_at = ? WHERE id = ?", *patch.Enabled, dbTime(now), themeID); err != nil {
+				return err
+			}
+		}
+		if patch.Status != nil {
+			if currentDefault && *patch.Status == "disabled" {
+				return ErrDefaultThemeVersion
+			}
+			if !currentVersionID.Valid || currentVersionID.String == "" {
+				return ErrNoCurrentVersion
+			}
+			if _, err := tx.ExecContext(ctx, "UPDATE theme_versions SET status = ? WHERE id = ?", *patch.Status, currentVersionID.String); err != nil {
+				return err
+			}
+			if _, err := tx.ExecContext(ctx, "UPDATE themes SET updated_at = ? WHERE id = ?", dbTime(now), themeID); err != nil {
 				return err
 			}
 		}
