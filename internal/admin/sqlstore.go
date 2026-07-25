@@ -11,6 +11,7 @@ import (
 
 	"github.com/yixian-huang/navax/internal/auth"
 	"github.com/yixian-huang/navax/internal/database"
+	"github.com/yixian-huang/navax/internal/themes"
 )
 
 type SQLStore struct{ db *sql.DB }
@@ -205,10 +206,19 @@ func (s *SQLStore) invitation(ctx context.Context, invitationID string) (Invitat
 	return item, err
 }
 
+// 管理后台是全量只读视图:停用的、尚无编译版本的主题也要出现,因此这里
+// 是 LEFT JOIN 而不是 catalog 侧的 eligibility 谓词(设计文档 §8.1:
+// 管理员目录不复用 eligible)。
+const themeSelect = `
+	SELECT themes.id, themes.name, themes.version, themes.author, themes.description,
+	       themes.mode, themes.preview, themes.enabled, themes.is_default,
+	       themes.current_version_id, themes.scope, theme_versions.manifest_json
+	FROM themes
+	LEFT JOIN theme_versions ON theme_versions.id = themes.current_version_id`
+
 func (s *SQLStore) ListThemes(ctx context.Context) ([]Theme, error) {
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, name, version, author, description, mode, preview, enabled, is_default
-		FROM themes ORDER BY is_default DESC, name, id`)
+	rows, err := s.db.QueryContext(ctx, themeSelect+`
+		ORDER BY themes.is_default DESC, themes.name, themes.id`)
 	if err != nil {
 		return nil, err
 	}
@@ -225,9 +235,8 @@ func (s *SQLStore) ListThemes(ctx context.Context) ([]Theme, error) {
 }
 
 func (s *SQLStore) Theme(ctx context.Context, themeID string) (Theme, error) {
-	item, err := scanTheme(s.db.QueryRowContext(ctx, `
-		SELECT id, name, version, author, description, mode, preview, enabled, is_default
-		FROM themes WHERE id = ?`, themeID))
+	item, err := scanTheme(s.db.QueryRowContext(ctx, themeSelect+`
+		WHERE themes.id = ?`, themeID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return Theme{}, ErrNotFound
 	}
@@ -437,8 +446,28 @@ func scanInvitation(row rowScanner) (Invitation, error) {
 
 func scanTheme(row rowScanner) (Theme, error) {
 	var item Theme
-	err := row.Scan(&item.ID, &item.Name, &item.Version, &item.Author, &item.Description, &item.Mode, &item.Preview, &item.Enabled, &item.Default)
-	return item, err
+	var currentVersionID, manifestJSON sql.NullString
+	if err := row.Scan(&item.ID, &item.Name, &item.Version, &item.Author, &item.Description,
+		&item.Mode, &item.Preview, &item.Enabled, &item.Default,
+		&currentVersionID, &item.Scope, &manifestJSON); err != nil {
+		return Theme{}, err
+	}
+	// 无编译版本的主题保持零值,序列化层据此省略字段——缺省即「不可选用」。
+	if currentVersionID.Valid && currentVersionID.String != "" {
+		item.CurrentVersionID = currentVersionID.String
+		item.CSSHref = "/api/v1/public/themes/" + currentVersionID.String + ".css"
+	}
+	if manifestJSON.Valid && manifestJSON.String != "" {
+		var manifest themes.Manifest
+		if err := json.Unmarshal([]byte(manifestJSON.String), &manifest); err != nil {
+			return Theme{}, err
+		}
+		item.Subtitle = manifest.Subtitle
+		item.Tier = manifest.Tier
+		item.Vibe = manifest.Vibe
+		item.Swatches = manifest.Swatches
+	}
+	return item, nil
 }
 
 type auditExecer interface {
