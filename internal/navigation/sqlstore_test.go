@@ -463,8 +463,8 @@ func testNavigationService(t *testing.T) (*sql.DB, *Service) {
 		t.Fatalf("SyncBuiltin() error = %v", err)
 	}
 	store := NewSQLStore(db)
-	store.SetThemeVersionResolver(func(ctx context.Context, tx *sql.Tx, themeID, actorID string) (string, error) {
-		return themes.ResolveEligibleVersion(ctx, tx, themeID, actorID)
+	store.SetThemeVersionResolver(func(ctx context.Context, q ThemeQueryer, themeID, actorID string) (string, error) {
+		return themes.ResolveEligibleVersion(ctx, q, themeID, actorID)
 	})
 	return db, NewService(store)
 }
