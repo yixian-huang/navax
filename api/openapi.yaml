@@ -1190,6 +1190,7 @@ paths:
         '200': { $ref: '#/components/responses/ThemeValidationResponse' }
         '401': { $ref: '#/components/responses/ErrorResponse' }
         '413': { $ref: '#/components/responses/ErrorResponse' }
+        '415': { $ref: '#/components/responses/ErrorResponse' }
         '422': { $ref: '#/components/responses/ErrorResponse' }
 
   /api/v1/admin/overview:

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"mime"
+	"mime/multipart"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -67,7 +68,9 @@ func (h *ThemeImportHandler) importTheme(w http.ResponseWriter, r *http.Request)
 		h.writeImportError(w, r, err)
 		return
 	}
-	// 201 返回与列表一致的 Theme 形状,前端免二次映射。
+	// 201 返回与列表一致的 Theme 形状,前端免二次映射。回查失败或未命中时,
+	// 宁可 500 也不要吐一个不满足 Theme schema 的裁剪响应——导入本身已经
+	// 成功落库,客户端刷新主题列表即可看到,不需要靠这次响应兜底。
 	items, listErr := h.catalogService.Themes(r.Context(), session.User.ID)
 	if listErr == nil {
 		for _, item := range items {
@@ -77,7 +80,7 @@ func (h *ThemeImportHandler) importTheme(w http.ResponseWriter, r *http.Request)
 			}
 		}
 	}
-	WriteJSON(w, r, http.StatusCreated, map[string]any{"id": installed.ThemeID, "slug": installed.Slug, "currentVersionId": installed.VersionID})
+	WriteError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "主题已导入,但读取详情失败,请刷新主题列表", nil)
 }
 
 // readArchive 按 assets.go 的模式取 multipart 的 file 字段,压缩包硬上限。
@@ -85,7 +88,12 @@ func (h *ThemeImportHandler) readArchive(w http.ResponseWriter, r *http.Request)
 	maximum := int64(themes.MaxArchiveBytes)
 	r.Body = http.MaxBytesReader(w, r.Body, maximum+themeArchiveOverhead)
 	if err := r.ParseMultipartForm(themeArchiveOverhead); err != nil {
-		WriteError(w, r, http.StatusRequestEntityTooLarge, "PAYLOAD_TOO_LARGE", "压缩包超过体积上限", nil)
+		var maxBytesError *http.MaxBytesError
+		if errors.As(err, &maxBytesError) || errors.Is(err, multipart.ErrMessageTooLarge) {
+			WriteError(w, r, http.StatusRequestEntityTooLarge, "PAYLOAD_TOO_LARGE", "压缩包超过体积上限", nil)
+			return nil, false
+		}
+		WriteError(w, r, http.StatusUnprocessableEntity, "VALIDATION_FAILED", "multipart 上传内容无效", nil)
 		return nil, false
 	}
 	defer func() {
@@ -141,6 +149,11 @@ func (h *ThemeImportHandler) uninstall(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ThemeImportHandler) validate(w http.ResponseWriter, r *http.Request) {
+	mediaType, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if mediaType != "multipart/form-data" {
+		WriteError(w, r, http.StatusUnsupportedMediaType, "UNSUPPORTED_MEDIA_TYPE", "请使用 multipart/form-data 上传 zip", nil)
+		return
+	}
 	data, ok := h.readArchive(w, r)
 	if !ok {
 		return
