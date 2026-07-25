@@ -105,7 +105,11 @@ type UpdateStatus struct {
 }
 
 // CheckUpdate 检查某 owner 的私有主题有无 upstream 新版(只查不升)。
-// 仅 github 来源做网络解析;upload 来源直接返回无更新。
+// 仅 github 来源做网络解析;upload 来源直接返回无更新。github 来源里,
+// 通过 extraHosts 白名单(如自建 Gitea)导入的主题同样落 source_type =
+// "github"(见 ImportGitHub),但那些主机没有 commits API、无法解析 HEAD——
+// ResolveHeadSHA 用 ErrUpdateCheckUnsupported 表达这一点,这里接住并优雅
+// 退化为「无法确认、视为无更新」,而不是把这种主机能力缺口报成错误。
 func (s *Service) CheckUpdate(ctx context.Context, ownerID, themeID string) (UpdateStatus, error) {
 	sourceType, sourceURL, currentRef, err := s.store.PrivateThemeSource(ctx, ownerID, themeID)
 	if err != nil {
@@ -116,6 +120,9 @@ func (s *Service) CheckUpdate(ctx context.Context, ownerID, themeID string) (Upd
 	}
 	latest, err := s.github.ResolveHeadSHA(ctx, sourceURL, "")
 	if err != nil {
+		if errors.Is(err, ErrUpdateCheckUnsupported) {
+			return UpdateStatus{SourceType: "github", HasUpdate: false, CurrentSha: currentRef}, nil
+		}
 		return UpdateStatus{}, err
 	}
 	return UpdateStatus{SourceType: "github", HasUpdate: latest != currentRef, CurrentSha: currentRef, LatestSha: latest}, nil

@@ -24,6 +24,11 @@ var (
 	ErrHostNotAllowed = errors.New("theme import host not allowed")
 	// ErrUpstream:上游仓库不可达/不存在——上游问题(502)。
 	ErrUpstream = errors.New("theme import upstream failed")
+	// ErrUpdateCheckUnsupported:主机在白名单内(已通过 parseRepoURL 校验,
+	// 不是 SSRF 拒绝),但没有等价于 GitHub commits API 的接口,无法在不
+	// 下载的前提下解析 HEAD。调用方(Service.CheckUpdate)应把它当作
+	// 「无法确认、视为无更新」优雅退化,而不是报错。
+	ErrUpdateCheckUnsupported = errors.New("theme update check not supported for this host")
 )
 
 var shaPattern = regexp.MustCompile(`^[0-9a-f]{40}$`)
@@ -147,7 +152,10 @@ func (c *GitHubClient) FetchTarball(ctx context.Context, rawURL, ref string) (Fe
 
 // ResolveHeadSHA 解析仓库某 ref 的 commit sha,但不下载 tarball——供更新检查用。
 // github.com 走 api.github.com/commits;缺省 ref 用默认分支 HEAD。追加白名单主机
-// 没有等价的 commits API,直接把 ref 原样返回(调用方据此判断是否要求显式 ref)。
+// 没有等价的 commits API:显式给了 ref 就原样返回(FetchTarball 场景——调用方
+// 已经知道自己要哪个 ref,这里只是回显);ref 留空(CheckUpdate 场景——想问
+// "现在最新是什么")则报 ErrUpdateCheckUnsupported,不是 ErrHostNotAllowed:
+// 主机本身合法,只是没有能力回答这个问题。
 func (c *GitHubClient) ResolveHeadSHA(ctx context.Context, rawURL, ref string) (string, error) {
 	owner, repo, host, err := parseRepoURL(rawURL, c.extraHosts)
 	if err != nil {
@@ -155,7 +163,7 @@ func (c *GitHubClient) ResolveHeadSHA(ctx context.Context, rawURL, ref string) (
 	}
 	if host != "github.com" {
 		if strings.TrimSpace(ref) == "" {
-			return "", fmt.Errorf("%w: 该主机需要显式 ref", ErrHostNotAllowed)
+			return "", ErrUpdateCheckUnsupported
 		}
 		return ref, nil
 	}
