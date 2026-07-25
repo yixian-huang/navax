@@ -327,7 +327,7 @@ func (s *SQLStore) ListThemeVersions(ctx context.Context, themeID string) ([]The
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT tv.id, tv.version, tv.source_ref, tv.status, tv.created_at,
 		       COALESCE(users.username, ''),
-		       (tv.id = themes.current_version_id) AS is_current,
+		       COALESCE((tv.id = themes.current_version_id), 0) AS is_current,
 		       (SELECT COUNT(*) FROM published_snapshots ps WHERE ps.theme_version_id = tv.id) AS snapshot_refs
 		FROM theme_versions tv
 		JOIN themes ON themes.id = tv.theme_id
@@ -390,7 +390,7 @@ func (s *SQLStore) versionByID(ctx context.Context, versionID string) (ThemeVers
 	err := s.db.QueryRowContext(ctx, `
 		SELECT tv.id, tv.version, tv.source_ref, tv.status, tv.created_at,
 		       COALESCE(users.username, ''),
-		       (tv.id = themes.current_version_id),
+		       COALESCE((tv.id = themes.current_version_id), 0),
 		       (SELECT COUNT(*) FROM published_snapshots ps WHERE ps.theme_version_id = tv.id)
 		FROM theme_versions tv JOIN themes ON themes.id = tv.theme_id
 		LEFT JOIN users ON users.id = tv.imported_by

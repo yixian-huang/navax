@@ -268,3 +268,21 @@ func TestResolveHeadSHARejectsDisallowedHost(t *testing.T) {
 		t.Fatalf("err = %v, want ErrHostNotAllowed", err)
 	}
 }
+
+// TestResolveHeadSHADegradesForExtraHostRegardlessOfRef 确认追加白名单主机
+// (无 commits API 等价物)一律报 ErrUpdateCheckUnsupported,不管 ref 是否为
+// 空——这里只是没有能力回答"最新是什么"，不该在 ref 非空时原样回显它
+// (那是 FetchTarball 的语义，唯一调用方 CheckUpdate 恒传空 ref，回显分支
+// 是永远不会被触达的死代码)。
+func TestResolveHeadSHADegradesForExtraHostRegardlessOfRef(t *testing.T) {
+	client := NewGitHubClient(publicResolver("git.example.com"), roundTripFunc(func(*http.Request) (*http.Response, error) {
+		t.Fatal("must not reach network")
+		return nil, nil
+	}), []string{"git.example.com"}, "")
+	if _, err := client.ResolveHeadSHA(context.Background(), "https://git.example.com/alice/lilac", ""); !errors.Is(err, ErrUpdateCheckUnsupported) {
+		t.Fatalf("empty ref: err = %v, want ErrUpdateCheckUnsupported", err)
+	}
+	if sha, err := client.ResolveHeadSHA(context.Background(), "https://git.example.com/alice/lilac", "v1.2.0"); !errors.Is(err, ErrUpdateCheckUnsupported) || sha != "" {
+		t.Fatalf("non-empty ref: sha = %q, err = %v, want (\"\", ErrUpdateCheckUnsupported)", sha, err)
+	}
+}
