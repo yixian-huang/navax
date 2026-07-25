@@ -169,6 +169,11 @@
 - `multipart/form-data`，字段名 `file`：zip 上传。
 - `application/json`：`{"githubUrl": "https://github.com/{owner}/{repo}", "ref": "<可选>"}`，从 GitHub 拉取 tarball 后走同一条解包/校验/编译管线。
 
+  `ref` 请直接传分支名、标签名或 40 位 commit sha（如 `main`、`v1.2.0`）——
+  不要传 `refs/heads/main` 这种带斜杠的完整引用形式。服务端会对整个 `ref`
+  做 `url.PathEscape` 再拼进 `commits/{ref}` 这一段路径，斜杠会被转义成
+  `%2F`，导致 GitHub API 找不到这个 ref 而拉取失败。
+
 两条路径落库时都会：
 
 - **锁定来源**：GitHub 导入把 `ref` 解析为具体的 40 位 commit sha 后记入

@@ -613,7 +613,7 @@ handlers.push(async (url, init) => {
     const id = decodeURIComponent(url.slice(`${API_BASE}/me/themes/`.length));
     const idx = mockPrivateThemes.findIndex(theme => theme.id === id);
     if (idx === -1) {
-      return jsonResponse({ code: 'NotFound', data: null, meta: { message: '主题不存在', detail: '' } }, 404);
+      return jsonResponse({ code: 'NOT_FOUND', data: null, meta: { message: '主题不存在', detail: '' } }, 404);
     }
     mockPrivateThemes.splice(idx, 1);
     return new Response(null, { status: 204 });

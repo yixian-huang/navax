@@ -374,6 +374,16 @@ func TestAPIContract(t *testing.T) {
 			t.Fatalf("列表缺少导入的主题 %s", importedID)
 		}
 
+		// 匿名(无会话)看不到别人的私有主题。这是唯一端到端覆盖
+		// OptionalSession 真按 Cookie 解析 actorID(而不是恒定放行/恒定拒绝)
+		// 的断言:/api/v1/themes 本身对匿名开放(200),但响应体不得包含
+		// importedID——否则任何人都能靠猜测/枚举 id 蹭到别人的私有主题。
+		anonymous := guest.call(t, http.MethodGet, "/api/v1/themes", nil)
+		mustStatus(t, anonymous, http.StatusOK, "匿名读取主题列表")
+		if strings.Contains(string(anonymous.body), importedID) {
+			t.Fatalf("匿名列表泄露了他人私有主题 %s", importedID)
+		}
+
 		// 应用到自己的页面并发布，公开读锁定其版本。PUT /settings 是全量替换
 		// （PageSettingsUpdate = PageSettings 全字段 + expectedRevision），
 		// 因此要在取回的完整 settings 上原地改 themeId，再补上 expectedRevision。

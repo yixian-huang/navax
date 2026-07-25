@@ -88,6 +88,94 @@ func TestExtractZipRejectsHostileArchives(t *testing.T) {
 	}
 }
 
+// TestExtractZipRejectsDuplicateEntries 确认同名条目被拒绝，而不是静默地
+// 后者覆盖前者——静默覆盖会让校验/编译看到的内容与作者实际打包的内容不一致，
+// 且两个条目各自都占用了解压预算，不能被 len(files) 掩盖。
+func TestExtractZipRejectsDuplicateEntries(t *testing.T) {
+	var buf bytes.Buffer
+	w := zip.NewWriter(&buf)
+	for _, data := range [][]byte{[]byte("first"), []byte("second")} {
+		f, err := w.Create("theme.css")
+		if err != nil {
+			t.Fatalf("zip create: %v", err)
+		}
+		if _, err := f.Write(data); err != nil {
+			t.Fatalf("zip write: %v", err)
+		}
+	}
+	if err := w.Close(); err != nil {
+		t.Fatalf("zip close: %v", err)
+	}
+
+	_, err := ExtractZip(buf.Bytes())
+	if !errors.Is(err, ErrInvalidArchive) {
+		t.Fatalf("err = %v, want ErrInvalidArchive", err)
+	}
+	if !strings.Contains(err.Error(), "重复条目") {
+		t.Fatalf("err = %q, want mention of 重复条目", err.Error())
+	}
+}
+
+// TestExtractTarGzRejectsDuplicateEntries 是上面 zip 用例的 tar.gz 版本。
+func TestExtractTarGzRejectsDuplicateEntries(t *testing.T) {
+	archive := makeTarGz(t, []tarEntry{
+		{name: "theme.css", data: []byte("first")},
+		{name: "theme.css", data: []byte("second")},
+	})
+	_, err := ExtractTarGz(archive)
+	if !errors.Is(err, ErrInvalidArchive) {
+		t.Fatalf("err = %v, want ErrInvalidArchive", err)
+	}
+	if !strings.Contains(err.Error(), "重复条目") {
+		t.Fatalf("err = %q, want mention of 重复条目", err.Error())
+	}
+}
+
+// TestExtractDiscardsMacOSJunkBeforeStrippingTopLevelDir 确认 __MACOSX/ 资源
+// 分支与散落各处的 .DS_Store 被丢弃，且这一步发生在“共享单一顶层目录”判定
+// 之前——垃圾条目引入了第二个顶层目录，若不先丢弃就会让本该被剥离的
+// GitHub 风格外层目录保留下来，theme.json 落在错误的深度。
+func TestExtractDiscardsMacOSJunkBeforeStrippingTopLevelDir(t *testing.T) {
+	files, err := ExtractZip(makeZip(t, map[string][]byte{
+		"lilac/theme.json":            []byte("{}"),
+		"lilac/theme.css":             []byte("i{}"),
+		"lilac/.DS_Store":             []byte("junk"),
+		".DS_Store":                   []byte("junk"),
+		"__MACOSX/lilac/._theme.json": []byte("resource-fork"),
+		"__MACOSX/._lilac":            []byte("resource-fork"),
+	}))
+	if err != nil {
+		t.Fatalf("ExtractZip() error = %v", err)
+	}
+	if _, ok := files["theme.json"]; !ok {
+		t.Fatalf("top-level dir not stripped after discarding junk: %v", keysOf(files))
+	}
+	if _, ok := files["theme.css"]; !ok {
+		t.Fatalf("theme.css missing after discarding junk: %v", keysOf(files))
+	}
+	for name := range files {
+		if strings.HasPrefix(name, "__MACOSX/") || strings.HasSuffix(name, ".DS_Store") {
+			t.Fatalf("junk entry survived extraction: %q", name)
+		}
+	}
+}
+
+func TestCleanArchivePathAcceptsDotSlashPrefix(t *testing.T) {
+	files, err := ExtractZip(makeZip(t, map[string][]byte{"./theme.json": []byte("{}")}))
+	if err != nil {
+		t.Fatalf("ExtractZip() error = %v", err)
+	}
+	if _, ok := files["theme.json"]; !ok {
+		t.Fatalf("./ prefix must normalize to theme.json: %v", keysOf(files))
+	}
+
+	for _, name := range []string{"../x", "/etc/x"} {
+		if _, err := ExtractZip(makeZip(t, map[string][]byte{name: []byte("x")})); !errors.Is(err, ErrInvalidArchive) {
+			t.Fatalf("%q err = %v, want ErrInvalidArchive", name, err)
+		}
+	}
+}
+
 func TestExtractZipEnforcesBudgets(t *testing.T) {
 	// 文件数超限。
 	many := map[string][]byte{}
