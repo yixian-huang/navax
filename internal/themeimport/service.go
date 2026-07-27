@@ -63,8 +63,8 @@ func packageFromZip(zipData []byte) (themes.Package, error) {
 // install 是 ImportZip/ImportGitHub 共用的落库步骤:compile 回调只做纯 CPU
 // 的 themes.Compile,真正的网络拉取(GitHub tarball)必须在调用 install 之前
 // 完成,不能挪进事务内的 compile 回调。
-func (s *Service) install(ctx context.Context, ownerID string, pkg themes.Package, sourceType, sourceURL, sourceRef string) (themes.InstalledTheme, error) {
-	return s.store.InstallPrivate(ctx, ownerID, pkg.Manifest.ID, sourceType, sourceURL, sourceRef, s.quota,
+func (s *Service) install(ctx context.Context, ownerID string, pkg themes.Package, sourceType, sourceURL, sourceRef, sourceGitRef string) (themes.InstalledTheme, error) {
+	return s.store.InstallPrivate(ctx, ownerID, pkg.Manifest.ID, sourceType, sourceURL, sourceRef, sourceGitRef, s.quota,
 		func(themeID string) (themes.Compiled, error) { return themes.Compile(pkg, themeID) }, s.now().UTC())
 }
 
@@ -74,7 +74,7 @@ func (s *Service) ImportZip(ctx context.Context, ownerID string, zipData []byte)
 	if err != nil {
 		return themes.InstalledTheme{}, err
 	}
-	return s.install(ctx, ownerID, pkg, "upload", "", themes.ContentDigest(zipData))
+	return s.install(ctx, ownerID, pkg, "upload", "", themes.ContentDigest(zipData), "")
 }
 
 // ImportGitHub 拉取仓库 tarball 并安装;source_ref 锁定 commit sha。
@@ -93,7 +93,7 @@ func (s *Service) ImportGitHub(ctx context.Context, ownerID, repoURL, ref string
 	if err != nil {
 		return themes.InstalledTheme{}, err
 	}
-	return s.install(ctx, ownerID, pkg, "github", fetched.CanonicalURL, fetched.SHA)
+	return s.install(ctx, ownerID, pkg, "github", fetched.CanonicalURL, fetched.SHA, ref)
 }
 
 // UpdateStatus 是更新检查结果。upload 来源无 upstream,HasUpdate 恒 false。
@@ -111,14 +111,14 @@ type UpdateStatus struct {
 // ResolveHeadSHA 用 ErrUpdateCheckUnsupported 表达这一点,这里接住并优雅
 // 退化为「无法确认、视为无更新」,而不是把这种主机能力缺口报成错误。
 func (s *Service) CheckUpdate(ctx context.Context, ownerID, themeID string) (UpdateStatus, error) {
-	sourceType, sourceURL, currentRef, err := s.store.PrivateThemeSource(ctx, ownerID, themeID)
+	sourceType, sourceURL, currentRef, gitRef, err := s.store.PrivateThemeSource(ctx, ownerID, themeID)
 	if err != nil {
 		return UpdateStatus{}, err
 	}
 	if sourceType != "github" {
 		return UpdateStatus{SourceType: sourceType}, nil
 	}
-	latest, err := s.github.ResolveHeadSHA(ctx, sourceURL, "")
+	latest, err := s.github.ResolveHeadSHA(ctx, sourceURL, gitRef)
 	if err != nil {
 		if errors.Is(err, ErrUpdateCheckUnsupported) {
 			return UpdateStatus{SourceType: "github", HasUpdate: false, CurrentSha: currentRef}, nil

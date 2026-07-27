@@ -20,7 +20,7 @@ func seedUser(t *testing.T, store *Store, id string) {
 
 func installSample(t *testing.T, store *Store, ownerID, slug string, quota int) InstalledTheme {
 	t.Helper()
-	installed, err := store.InstallPrivate(t.Context(), ownerID, slug, "upload", "", "digest-"+slug, quota,
+	installed, err := store.InstallPrivate(t.Context(), ownerID, slug, "upload", "", "digest-"+slug, "", quota,
 		func(themeID string) (Compiled, error) { return Compile(samplePackage(t), themeID) }, time.Now().UTC())
 	if err != nil {
 		t.Fatalf("InstallPrivate(%s) error = %v", slug, err)
@@ -64,7 +64,7 @@ func TestInstallPrivateSameSlugUpgrades(t *testing.T) {
 
 	first := installSample(t, store, "usr_inst_0002", "lilac", 10)
 	// 变更 CSS 产生新 content hash → 升级为新版本,行数不变。
-	upgraded, err := store.InstallPrivate(t.Context(), "usr_inst_0002", "lilac", "upload", "", "digest-2", 10,
+	upgraded, err := store.InstallPrivate(t.Context(), "usr_inst_0002", "lilac", "upload", "", "digest-2", "", 10,
 		func(themeID string) (Compiled, error) {
 			pkg := samplePackage(t)
 			pkg.CSS = append(pkg.CSS, []byte("\n[data-nx=\"clock\"] { opacity: 0.9; }")...)
@@ -92,13 +92,13 @@ func TestInstallPrivateEnforcesQuota(t *testing.T) {
 
 	installSample(t, store, "usr_inst_0003", "one", 2)
 	installSample(t, store, "usr_inst_0003", "two", 2)
-	_, err := store.InstallPrivate(t.Context(), "usr_inst_0003", "three", "upload", "", "d3", 2,
+	_, err := store.InstallPrivate(t.Context(), "usr_inst_0003", "three", "upload", "", "d3", "", 2,
 		func(themeID string) (Compiled, error) { return Compile(samplePackage(t), themeID) }, time.Now().UTC())
 	if !errors.Is(err, ErrQuotaExceeded) {
 		t.Fatalf("err = %v, want ErrQuotaExceeded", err)
 	}
 	// 升级不占额度:配额已满仍可升级既有 slug。
-	if _, err := store.InstallPrivate(t.Context(), "usr_inst_0003", "one", "upload", "", "d4", 2,
+	if _, err := store.InstallPrivate(t.Context(), "usr_inst_0003", "one", "upload", "", "d4", "", 2,
 		func(themeID string) (Compiled, error) {
 			pkg := samplePackage(t)
 			pkg.CSS = append(pkg.CSS, []byte("\n[data-nx=\"clock\"] { opacity: 0.8; }")...)
@@ -120,7 +120,7 @@ func TestInstallPrivateUpgradeRejectsInvalidSourceType(t *testing.T) {
 
 	installed := installSample(t, store, "usr_inst_bad_source", "lilac", 10)
 
-	_, err := store.InstallPrivate(t.Context(), "usr_inst_bad_source", "lilac", "not-a-real-source-type", "", "digest-lilac-2", 10,
+	_, err := store.InstallPrivate(t.Context(), "usr_inst_bad_source", "lilac", "not-a-real-source-type", "", "digest-lilac-2", "", 10,
 		func(themeID string) (Compiled, error) { return Compile(samplePackage(t), themeID) }, time.Now().UTC())
 	if err == nil {
 		t.Fatal("upgrade with an invalid source type was accepted")
@@ -253,7 +253,7 @@ func TestInstallPrivateReinstallReenablesTombstonedTheme(t *testing.T) {
 		t.Fatal("tombstoned theme must not resolve to its own version before reinstall")
 	}
 
-	reinstalled, err := store.InstallPrivate(t.Context(), "usr_uni_0003", "lilac", "upload", "", "digest-reinstall", 10,
+	reinstalled, err := store.InstallPrivate(t.Context(), "usr_uni_0003", "lilac", "upload", "", "digest-reinstall", "", 10,
 		func(themeID string) (Compiled, error) {
 			pkg := samplePackage(t)
 			pkg.CSS = append(pkg.CSS, []byte("\n[data-nx=\"clock\"] { opacity: 0.7; }")...)
@@ -305,7 +305,7 @@ func TestInstallPrivateReclaimsUnreferencedTombstonesUnderQuota(t *testing.T) {
 	three := installSample(t, store, "usr_recl_0001", "three", 2)
 	// 此刻名下 two(墓碑)+ three = 2,已满。装 four 前若不回收会 ErrQuotaExceeded;
 	// 但 two 仍有引用,不可回收 → 确实应满 → four 被拒。
-	if _, err := store.InstallPrivate(t.Context(), "usr_recl_0001", "four", "upload", "", "d4", 2,
+	if _, err := store.InstallPrivate(t.Context(), "usr_recl_0001", "four", "upload", "", "d4", "", 2,
 		func(themeID string) (Compiled, error) { return Compile(samplePackage(t), themeID) }, time.Now().UTC()); !errors.Is(err, ErrQuotaExceeded) {
 		t.Fatalf("four should be rejected (two still referenced): %v", err)
 	}
@@ -315,7 +315,7 @@ func TestInstallPrivateReclaimsUnreferencedTombstonesUnderQuota(t *testing.T) {
 		t.Fatal(err)
 	}
 	// 再装 four:配额满 → 回收 two(现无引用)→ 腾出 → 安装成功。
-	four, err := store.InstallPrivate(t.Context(), "usr_recl_0001", "four", "upload", "", "d4b", 2,
+	four, err := store.InstallPrivate(t.Context(), "usr_recl_0001", "four", "upload", "", "d4b", "", 2,
 		func(themeID string) (Compiled, error) { return Compile(samplePackage(t), themeID) }, time.Now().UTC())
 	if err != nil {
 		t.Fatalf("four should install after reclaiming two: %v", err)
@@ -364,7 +364,7 @@ func TestInstallPrivateSkipsTombstoneWithDisabledVersionMemory(t *testing.T) {
 
 	// 配额已满(1)。装 two 会触发 reclaimTombstones；one 按引用计数本可回收,
 	// 但带 disabled 版本记忆 → 应被跳过 → 配额仍满 → two 应被拒。
-	if _, err := store.InstallPrivate(t.Context(), "usr_recl_disab_0001", "two", "upload", "", "d2", 1,
+	if _, err := store.InstallPrivate(t.Context(), "usr_recl_disab_0001", "two", "upload", "", "d2", "", 1,
 		func(themeID string) (Compiled, error) { return Compile(samplePackage(t), themeID) }, time.Now().UTC()); !errors.Is(err, ErrQuotaExceeded) {
 		t.Fatalf("two should be rejected (one's disabled-version tombstone must not be reclaimed): %v", err)
 	}
