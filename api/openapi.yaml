@@ -1172,6 +1172,31 @@ paths:
         '204': { description: 已卸载(物理删除或转墓碑) }
         '401': { $ref: '#/components/responses/ErrorResponse' }
         '404': { $ref: '#/components/responses/ErrorResponse' }
+  /api/v1/me/themes/{themeId}/catalog-request:
+    post:
+      tags: [Themes]
+      operationId: submitThemeCatalogRequest
+      description: 私有主题所有者提交官方目录审核申请。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ThemeId'
+      responses:
+        '201': { $ref: '#/components/responses/ThemeCatalogRequestResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+        '422': { $ref: '#/components/responses/ErrorResponse' }
+    delete:
+      tags: [Themes]
+      operationId: cancelThemeCatalogRequest
+      description: 撤回本人待审核的目录申请。
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ThemeId'
+      responses:
+        '204': { description: 已撤回 }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/themes/validate:
     post:
       tags: [Themes]
@@ -1544,6 +1569,43 @@ paths:
         '401': { $ref: '#/components/responses/ErrorResponse' }
         '403': { $ref: '#/components/responses/ErrorResponse' }
         '409': { $ref: '#/components/responses/ErrorResponse' }
+  /api/v1/admin/theme-catalog-requests:
+    get:
+      tags: [Admin]
+      operationId: listThemeCatalogRequests
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - in: query
+          name: status
+          schema: { $ref: '#/components/schemas/ThemeCatalogRequestStatus' }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200': { $ref: '#/components/responses/ThemeCatalogRequestsResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+  /api/v1/admin/theme-catalog-requests/{requestId}:
+    patch:
+      tags: [Admin]
+      operationId: reviewThemeCatalogRequest
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - in: path
+          name: requestId
+          required: true
+          schema: { $ref: '#/components/schemas/Id' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ThemeCatalogReviewRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/ThemeCatalogRequestResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+        '422': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/admin/discover:
     get:
       tags: [Admin]
@@ -1892,6 +1954,8 @@ components:
     ThemeResponse: { description: 主题, content: { application/json: { schema: { $ref: '#/components/schemas/ThemeEnvelope' } } } }
     ThemeVersionsResponse: { description: 主题版本列表, content: { application/json: { schema: { $ref: '#/components/schemas/ThemeVersionsEnvelope' } } } }
     ThemeVersionResponse: { description: 主题版本, content: { application/json: { schema: { $ref: '#/components/schemas/ThemeVersionEnvelope' } } } }
+    ThemeCatalogRequestResponse: { description: 目录审核申请, content: { application/json: { schema: { $ref: '#/components/schemas/ThemeCatalogRequestEnvelope' } } } }
+    ThemeCatalogRequestsResponse: { description: 目录审核申请列表, content: { application/json: { schema: { $ref: '#/components/schemas/ThemeCatalogRequestsEnvelope' } } } }
     ThemeValidationResponse: { description: 主题包 dry-run 校验结果, content: { application/json: { schema: { $ref: '#/components/schemas/ThemeValidationEnvelope' } } } }
     ThemeUpdateStatusResponse: { description: 主题更新检查结果, content: { application/json: { schema: { $ref: '#/components/schemas/ThemeUpdateStatusEnvelope' } } } }
     DiscoverResponse: { description: 发现页, content: { application/json: { schema: { $ref: '#/components/schemas/DiscoverEnvelope' } } } }
@@ -2464,6 +2528,8 @@ components:
         ownerId: { $ref: '#/components/schemas/Id' }
         ownerName: { type: string }
         status: { type: string, enum: [active, disabled] }
+        catalogRequestStatus: { type: string, enum: [pending, rejected], description: 私有主题当前是否有未终结的目录审核申请;已批准的直接体现为 scope=catalog,不在此字段保留。 }
+        catalogRequestReason: { type: string, maxLength: 300 }
     ThemeVersionId:
       type: string
       description: 主题版本 ID，由编译产物的内容哈希派生，因此不可变。
@@ -2482,6 +2548,28 @@ components:
         importedBy: { type: string }
         isCurrent: { type: boolean }
         snapshotRefs: { type: integer }
+    ThemeCatalogRequestStatus: { type: string, enum: [pending, approved, rejected, revoked] }
+    ThemeCatalogRequest:
+      type: object
+      description: 私有主题提交官方目录的审核申请。
+      required: [id, themeId, themeName, slug, ownerId, status, appliedAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        themeId: { $ref: '#/components/schemas/ThemeId' }
+        themeName: { type: string }
+        slug: { type: string }
+        ownerId: { $ref: '#/components/schemas/Id' }
+        ownerName: { type: string }
+        status: { $ref: '#/components/schemas/ThemeCatalogRequestStatus' }
+        reason: { type: string, maxLength: 300 }
+        appliedAt: { $ref: '#/components/schemas/Timestamp' }
+        reviewedAt: { oneOf: [{ $ref: '#/components/schemas/Timestamp' }, { type: 'null' }] }
+    ThemeCatalogReviewRequest:
+      type: object
+      required: [decision]
+      properties:
+        decision: { type: string, enum: [approve, reject] }
+        reason: { type: string, maxLength: 300 }
     ThemeManifestV1:
       type: object
       description: |
@@ -3082,6 +3170,8 @@ components:
     ThemeUpdateStatusEnvelope: { allOf: [{ $ref: '#/components/schemas/EnvelopeBase' }, { type: object, properties: { data: { $ref: '#/components/schemas/ThemeUpdateStatus' } }, required: [data] }] }
     ThemeVersionEnvelope: { allOf: [{ $ref: '#/components/schemas/EnvelopeBase' }, { type: object, properties: { data: { $ref: '#/components/schemas/ThemeVersion' } }, required: [data] }] }
     ThemeVersionsEnvelope: { allOf: [{ $ref: '#/components/schemas/EnvelopeBase' }, { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/ThemeVersion' } } }, required: [data] }] }
+    ThemeCatalogRequestEnvelope: { allOf: [{ $ref: '#/components/schemas/EnvelopeBase' }, { type: object, properties: { data: { $ref: '#/components/schemas/ThemeCatalogRequest' } }, required: [data] }] }
+    ThemeCatalogRequestsEnvelope: { allOf: [{ $ref: '#/components/schemas/PaginatedEnvelopeBase' }, { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/ThemeCatalogRequest' } } }, required: [data] }] }
     DiscoverEnvelope: { allOf: [{ $ref: '#/components/schemas/PaginatedEnvelopeBase' }, { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/DiscoverPage' } } }, required: [data] }] }
     DirectoryEnvelope: { allOf: [{ $ref: '#/components/schemas/PaginatedEnvelopeBase' }, { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/DirectorySite' } } }, required: [data] }] }
     DirectoryCategoriesEnvelope: { allOf: [{ $ref: '#/components/schemas/EnvelopeBase' }, { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/DirectoryCategory' } } }, required: [data] }] }
