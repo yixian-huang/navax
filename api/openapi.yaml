@@ -1549,6 +1549,7 @@ paths:
         '200': { $ref: '#/components/responses/SubdomainsResponse' }
         '401': { $ref: '#/components/responses/ErrorResponse' }
         '403': { $ref: '#/components/responses/ErrorResponse' }
+        '422': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/admin/subdomains/{requestId}:
     patch:
       tags: [Admin]
@@ -1584,6 +1585,7 @@ paths:
         '200': { $ref: '#/components/responses/ThemeCatalogRequestsResponse' }
         '401': { $ref: '#/components/responses/ErrorResponse' }
         '403': { $ref: '#/components/responses/ErrorResponse' }
+        '422': { $ref: '#/components/responses/ErrorResponse' }
   /api/v1/admin/theme-catalog-requests/{requestId}:
     patch:
       tags: [Admin]
