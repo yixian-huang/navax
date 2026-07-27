@@ -1,5 +1,5 @@
 import { request } from './client';
-import type { ApiResponse, Theme, ThemeUpdateStatus } from './types';
+import type { AdminThemeCatalogRequest, ApiResponse, Theme, ThemeUpdateStatus } from './types';
 
 export const themesApi = {
   importZip: (file: File) => {
@@ -17,7 +17,7 @@ export const themesApi = {
   checkUpdate: (themeId: string) =>
     request<ApiResponse<ThemeUpdateStatus>>(`/me/themes/${encodeURIComponent(themeId)}/check-update`, { method: 'POST' }),
   submitCatalogRequest: (themeId: string) =>
-    request<ApiResponse<unknown>>(`/me/themes/${encodeURIComponent(themeId)}/catalog-request`, { method: 'POST' }),
+    request<ApiResponse<AdminThemeCatalogRequest>>(`/me/themes/${encodeURIComponent(themeId)}/catalog-request`, { method: 'POST' }),
   cancelCatalogRequest: (themeId: string) =>
     request<ApiResponse<null>>(`/me/themes/${encodeURIComponent(themeId)}/catalog-request`, { method: 'DELETE' }),
 };
