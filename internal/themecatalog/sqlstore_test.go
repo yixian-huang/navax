@@ -165,4 +165,50 @@ func TestThemeCatalogRequestLifecycle(t *testing.T) {
 	if _, err := service.Review(ctx, admin, resubmitted.ID, "approve", "", "req-carol-approve-after-cancel"); !errors.Is(err, ErrInvalidTransition) {
 		t.Fatalf("approve after cancel error = %v", err)
 	}
+
+	// 审核期间主题被 owner 卸载(墓碑,enabled=0)→ 批准必须拒绝,否则会把一个
+	// 已不可见的主题晋升进官方目录。重新启用后审批恢复正常。
+	insertUser(t, db, "usr_dave_tcr", "dave", "dave@example.com", "user", now)
+	insertPrivateTheme(t, db, "thm_dave_tcr", "usr_dave_tcr", "borealis-two", "vdddddddddddddddddddddddddddddddd", now)
+	dave := Actor{ID: "usr_dave_tcr", Username: "dave", Role: "user", Status: "active"}
+	davePending, err := service.Request(ctx, dave, "thm_dave_tcr", "req-dave")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`UPDATE themes SET enabled = 0 WHERE id = ?`, "thm_dave_tcr"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Review(ctx, admin, davePending.ID, "approve", "", "req-dave-approve-tombstoned"); !errors.Is(err, ErrInvalidTransition) {
+		t.Fatalf("approve of tombstoned theme error = %v, want ErrInvalidTransition", err)
+	}
+	if _, err := db.Exec(`UPDATE themes SET enabled = 1 WHERE id = ?`, "thm_dave_tcr"); err != nil {
+		t.Fatal(err)
+	}
+	daveApproved, err := service.Review(ctx, admin, davePending.ID, "approve", "", "req-dave-approve")
+	if err != nil || daveApproved.Status != "approved" {
+		t.Fatalf("approve after re-enable = %+v, %v", daveApproved, err)
+	}
+
+	// 审核期间当前版本被管理员 kill-switch 停用(status='disabled')→ 批准
+	// 必须拒绝,不能把一个已停用的版本晋升为官方目录的当前版本。
+	insertUser(t, db, "usr_erin_tcr", "erin", "erin@example.com", "user", now)
+	insertPrivateTheme(t, db, "thm_erin_tcr", "usr_erin_tcr", "borealis-three", "veeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", now)
+	erin := Actor{ID: "usr_erin_tcr", Username: "erin", Role: "user", Status: "active"}
+	erinPending, err := service.Request(ctx, erin, "thm_erin_tcr", "req-erin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`UPDATE theme_versions SET status = 'disabled' WHERE id = ?`, "veeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Review(ctx, admin, erinPending.ID, "approve", "", "req-erin-approve-disabled-version"); !errors.Is(err, ErrInvalidTransition) {
+		t.Fatalf("approve of disabled version error = %v, want ErrInvalidTransition", err)
+	}
+	if _, err := db.Exec(`UPDATE theme_versions SET status = 'active' WHERE id = ?`, "veeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"); err != nil {
+		t.Fatal(err)
+	}
+	erinApproved, err := service.Review(ctx, admin, erinPending.ID, "approve", "", "req-erin-approve")
+	if err != nil || erinApproved.Status != "approved" {
+		t.Fatalf("approve after version reactivation = %+v, %v", erinApproved, err)
+	}
 }

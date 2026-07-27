@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/yixian-huang/navax/internal/database"
+	"github.com/yixian-huang/navax/internal/themes"
 )
 
 type SQLStore struct{ db *sql.DB }
@@ -133,12 +134,17 @@ func (s *SQLStore) List(ctx context.Context, status string, page, pageSize int) 
 }
 
 // Review is the approval/rejection transaction. On approve, it re-checks
-// the request's version_id still matches themes.current_version_id (the
-// upgrade lock in internal/themes should make a mismatch impossible, this
-// is a defensive backstop) and that the slug still has no catalog conflict
+// the theme is still enabled (an owner can tombstone-uninstall — or an
+// admin can kill-switch the current version — while the request sits in
+// the queue; neither is blocked by the pending-request upgrade lock, so
+// this is not merely defensive), that the request's version_id still
+// matches themes.current_version_id, that the matched version is still
+// status='active', and that the slug still has no catalog conflict
 // (another request could have been approved with the same slug in the
 // meantime), then flips themes.scope/owner_id in the same statement the
-// scope/owner trigger requires.
+// scope/owner trigger requires. Any of these failing returns
+// ErrInvalidTransition rather than silently promoting stale/disabled
+// content.
 func (s *SQLStore) Review(ctx context.Context, params ReviewParams) (Request, error) {
 	err := database.WithinTx(ctx, s.db, nil, func(tx *sql.Tx) error {
 		var status, themeID, versionID string
@@ -157,11 +163,27 @@ func (s *SQLStore) Review(ctx context.Context, params ReviewParams) (Request, er
 		case "approve":
 			targetStatus = "approved"
 			var currentVersionID, slug sql.NullString
-			if err := tx.QueryRowContext(ctx, `SELECT current_version_id, slug FROM themes WHERE id = ?`, themeID).
-				Scan(&currentVersionID, &slug); err != nil {
+			var enabled int
+			if err := tx.QueryRowContext(ctx, `SELECT current_version_id, slug, enabled FROM themes WHERE id = ?`, themeID).
+				Scan(&currentVersionID, &slug, &enabled); err != nil {
 				return err
 			}
+			if enabled == 0 {
+				// 主题在审核期间被 owner 卸载(墓碑,enabled=0)——申请留存但主题
+				// 已不可见,批准会把一个失效的主题晋升成官方目录条目。
+				return ErrInvalidTransition
+			}
 			if !currentVersionID.Valid || currentVersionID.String != versionID {
+				return ErrInvalidTransition
+			}
+			var versionStatus string
+			if err := tx.QueryRowContext(ctx, `SELECT status FROM theme_versions WHERE id = ?`, versionID).
+				Scan(&versionStatus); err != nil {
+				return err
+			}
+			if versionStatus != themes.VersionStatusActive {
+				// 当前版本在审核期间被管理员 kill-switch 停用——同上,不能把一个
+				// 已停用的版本晋升成官方目录的当前版本。
 				return ErrInvalidTransition
 			}
 			var conflict int
