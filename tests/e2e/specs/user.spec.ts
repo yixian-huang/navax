@@ -146,6 +146,13 @@ test.describe('用户工作台', () => {
     // 必须锚定开头才能唯一命中卡片本体。
     await page.getByRole('button', { name: /^Lilac/ }).click();
     await expect(page.getByText(/主题已写入草稿：「Lilac」/)).toBeVisible();
+
+    // 提交官方目录审核 → 撤回 → 恢复可再次提交。
+    await page.getByRole('button', { name: '提交官方目录' }).click();
+    await expect(page.getByText('审核中')).toBeVisible({ timeout: 10000 });
+    await page.getByRole('button', { name: '撤回' }).click();
+    await expect(page.getByText('审核中')).toHaveCount(0, { timeout: 10000 });
+    await expect(page.getByRole('button', { name: '提交官方目录' })).toBeVisible();
   });
 
   test('导入书签并导出备份', async ({ page }) => {
