@@ -1,26 +1,31 @@
 import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Check, Palette, RotateCw, ShieldX, X } from 'lucide-react';
-import { adminApi } from '@/api/admin';
 import type { AdminThemeCatalogRequest, ContractThemeCatalogRequestStatus, ThemeCatalogReviewRequest } from '@/api/types';
 import { EmptyState, ErrorState, LoadingSkeleton } from '@/components/base/SharedUI';
 import { FormField, FormSelect, FormTextarea } from '@/components/base/FormField';
 import { useToast } from '@/components/base/Toast';
-import { useThemeCatalogRequests } from '@/hooks/useQueries';
+import { useReviewThemeCatalogRequest, useThemeCatalogRequests } from '@/hooks/useQueries';
 
 const statusLabels: Record<ContractThemeCatalogRequestStatus, string> = { pending: '待审核', approved: '已批准', rejected: '已拒绝', revoked: '已撤回' };
 const statusStyles: Record<ContractThemeCatalogRequestStatus, string> = { pending: 'bg-primary-50 text-primary-700', approved: 'bg-accent-50 text-accent-700', rejected: 'bg-red-50 text-red-600', revoked: 'bg-background-100 text-foreground-500' };
 
 function ReviewDialog({ request, decision, onClose }: { request: AdminThemeCatalogRequest; decision: ThemeCatalogReviewRequest['decision']; onClose: () => void }) {
-  const queryClient = useQueryClient();
   const { toast } = useToast();
   const [reason, setReason] = useState('');
   const labels = { approve: '批准', reject: '拒绝' } as const;
-  const mutation = useMutation({
-    mutationFn: () => adminApi.reviewThemeCatalogRequest(request.id, { decision, ...(reason.trim() ? { reason: reason.trim() } : {}) }),
-    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ['admin', 'themes'] }); toast('success', `目录申请已${labels[decision]}`); onClose(); },
-    onError: (error: Error) => toast('error', error.message || '审核目录申请失败'),
-  });
+  // useReviewThemeCatalogRequest 的 onSuccess 已经失效 ['admin','themes']
+  // 前缀（含审核队列与主题网格），这里的 per-call 回调只负责本对话框自己
+  // 的 toast/关闭，不需要重复 invalidate。
+  const mutation = useReviewThemeCatalogRequest();
+  const submit = () => {
+    mutation.mutate(
+      { requestId: request.id, data: { decision, ...(reason.trim() ? { reason: reason.trim() } : {}) } },
+      {
+        onSuccess: () => { toast('success', `目录申请已${labels[decision]}`); onClose(); },
+        onError: (error: Error) => toast('error', error.message || '审核目录申请失败'),
+      },
+    );
+  };
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <button aria-label="关闭审核窗口" className="absolute inset-0 bg-black/30" onClick={onClose} />
@@ -37,7 +42,7 @@ function ReviewDialog({ request, decision, onClose }: { request: AdminThemeCatal
         </FormField>
         <div className="mt-4 flex justify-end gap-2">
           <button onClick={onClose} className="h-8 px-3 rounded-lg text-xs text-foreground-500 hover:bg-background-100">取消</button>
-          <button onClick={() => mutation.mutate()} disabled={mutation.isPending} className={`h-8 px-3 rounded-lg text-xs font-medium text-white flex items-center gap-1.5 disabled:opacity-50 ${decision === 'approve' ? 'bg-primary-500' : 'bg-red-600'}`}>
+          <button onClick={submit} disabled={mutation.isPending} className={`h-8 px-3 rounded-lg text-xs font-medium text-white flex items-center gap-1.5 disabled:opacity-50 ${decision === 'approve' ? 'bg-primary-500' : 'bg-red-600'}`}>
             {mutation.isPending ? <RotateCw className="w-3.5 h-3.5 animate-spin" /> : decision === 'approve' ? <Check className="w-3.5 h-3.5" /> : <ShieldX className="w-3.5 h-3.5" />}
             {labels[decision]}
           </button>
