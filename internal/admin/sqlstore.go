@@ -214,10 +214,15 @@ const themeSelect = `
 	       themes.mode, themes.preview, themes.enabled, themes.is_default,
 	       themes.current_version_id, themes.scope, themes.source_type, themes.source_url,
 	       themes.owner_id, users.username, theme_versions.status,
-	       theme_versions.manifest_json
+	       theme_versions.manifest_json, tcr.status, tcr.reason
 	FROM themes
 	LEFT JOIN theme_versions ON theme_versions.id = themes.current_version_id
-	LEFT JOIN users ON users.id = themes.owner_id`
+	LEFT JOIN users ON users.id = themes.owner_id
+	LEFT JOIN theme_catalog_requests tcr ON tcr.id = (
+		SELECT id FROM theme_catalog_requests
+		WHERE theme_id = themes.id AND status IN ('pending', 'rejected')
+		ORDER BY applied_at DESC LIMIT 1
+	)`
 
 func (s *SQLStore) ListThemes(ctx context.Context) ([]Theme, error) {
 	rows, err := s.db.QueryContext(ctx, themeSelect+`
@@ -576,10 +581,11 @@ func scanTheme(row rowScanner) (Theme, error) {
 	var item Theme
 	var currentVersionID, manifestJSON, sourceType, sourceURL sql.NullString
 	var ownerID, ownerName, status sql.NullString
+	var catalogRequestStatus, catalogRequestReason sql.NullString
 	if err := row.Scan(&item.ID, &item.Name, &item.Version, &item.Author, &item.Description,
 		&item.Mode, &item.Preview, &item.Enabled, &item.Default,
 		&currentVersionID, &item.Scope, &sourceType, &sourceURL,
-		&ownerID, &ownerName, &status, &manifestJSON); err != nil {
+		&ownerID, &ownerName, &status, &manifestJSON, &catalogRequestStatus, &catalogRequestReason); err != nil {
 		return Theme{}, err
 	}
 	// 无编译版本的主题保持零值,序列化层据此省略字段——缺省即「不可选用」。
@@ -601,6 +607,12 @@ func scanTheme(row rowScanner) (Theme, error) {
 	}
 	if status.Valid {
 		item.Status = status.String
+	}
+	if catalogRequestStatus.Valid {
+		item.CatalogRequestStatus = catalogRequestStatus.String
+	}
+	if catalogRequestReason.Valid {
+		item.CatalogRequestReason = catalogRequestReason.String
 	}
 	if manifestJSON.Valid && manifestJSON.String != "" {
 		var manifest themes.Manifest

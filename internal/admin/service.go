@@ -124,6 +124,10 @@ type Theme struct {
 	OwnerName        string
 	// Status 是当前版本的状态(active/disabled)。无当前版本时空串。
 	Status string
+	// CatalogRequestStatus 是该私有主题最近一条未终结(pending/rejected)的
+	// 目录审核申请状态;已批准的不在这里体现(scope 已经是 catalog)。
+	CatalogRequestStatus string
+	CatalogRequestReason string
 }
 
 type ThemePatch struct {

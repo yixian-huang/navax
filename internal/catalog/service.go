@@ -116,10 +116,15 @@ func (s *Service) Themes(ctx context.Context, actorID string) ([]adminpkg.Theme,
 		SELECT themes.id, themes.name, themes.version, themes.author, themes.description,
 		       themes.mode, themes.preview, themes.enabled, themes.is_default,
 		       themes.current_version_id, themes.scope, themes.source_type, themes.source_url,
-		       theme_versions.manifest_json
+		       theme_versions.manifest_json, tcr.status, tcr.reason
 		FROM themes `+themes.EligibilityJoin+`
+		LEFT JOIN theme_catalog_requests tcr ON tcr.id = (
+			SELECT id FROM theme_catalog_requests
+			WHERE theme_id = themes.id AND owner_id = ? AND status IN ('pending', 'rejected')
+			ORDER BY applied_at DESC LIMIT 1
+		)
 		WHERE `+themes.EligibilityWhere+`
-		ORDER BY themes.is_default DESC, themes.name, themes.id`, actorID)
+		ORDER BY themes.is_default DESC, themes.name, themes.id`, actorID, actorID)
 	if err != nil {
 		return nil, err
 	}
@@ -127,15 +132,23 @@ func (s *Service) Themes(ctx context.Context, actorID string) ([]adminpkg.Theme,
 	list := make([]adminpkg.Theme, 0)
 	for rows.Next() {
 		var (
-			theme        adminpkg.Theme
-			manifestJSON string
+			theme                                      adminpkg.Theme
+			manifestJSON                               string
+			catalogRequestStatus, catalogRequestReason sql.NullString
 		)
 		if err := rows.Scan(&theme.ID, &theme.Name, &theme.Version, &theme.Author, &theme.Description,
 			&theme.Mode, &theme.Preview, &theme.Enabled, &theme.Default,
-			&theme.CurrentVersionID, &theme.Scope, &theme.SourceType, &theme.SourceURL, &manifestJSON); err != nil {
+			&theme.CurrentVersionID, &theme.Scope, &theme.SourceType, &theme.SourceURL, &manifestJSON,
+			&catalogRequestStatus, &catalogRequestReason); err != nil {
 			return nil, err
 		}
 		theme.CSSHref = "/api/v1/public/themes/" + theme.CurrentVersionID + ".css"
+		if catalogRequestStatus.Valid {
+			theme.CatalogRequestStatus = catalogRequestStatus.String
+		}
+		if catalogRequestReason.Valid {
+			theme.CatalogRequestReason = catalogRequestReason.String
+		}
 		var manifest themes.Manifest
 		if err := json.Unmarshal([]byte(manifestJSON), &manifest); err != nil {
 			return nil, err

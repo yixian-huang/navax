@@ -322,6 +322,55 @@ func TestThemeListingIncludesOwnerAndStatus(t *testing.T) {
 	}
 }
 
+// TestThemeListingIncludesCatalogRequestStatus 确认待审核/被拒绝的目录申请
+// 状态随主题列表一起返回,已批准的不残留任何 catalogRequestStatus(scope
+// 已经是 catalog,字段本身就该是空)。
+func TestThemeListingIncludesCatalogRequestStatus(t *testing.T) {
+	ctx := context.Background()
+	db, err := database.OpenAndMigrate(ctx, database.Config{Path: ":memory:", MaxOpenConns: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	stamp := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := db.Exec(`INSERT INTO users (id, username, email, password_hash, role, status, created_at, updated_at)
+		VALUES ('usr_bob_tcr_dto', 'bob', 'bob@example.com', 'x', 'user', 'active', ?, ?)`, stamp, stamp); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO themes (id, name, version, author, description, mode, preview, enabled, is_default,
+			created_at, updated_at, slug, scope, owner_id, source_type)
+		VALUES ('thm_bob_tcr_dto', 'Bob Theme', '1.0.0', 'bob', '', 'light', '', 1, 0, ?, ?, 'bob-theme', 'private', 'usr_bob_tcr_dto', 'upload')`,
+		stamp, stamp); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO theme_versions (id, theme_id, version, source_ref, manifest_json, compiled_css, content_hash, status, created_at)
+		VALUES ('vbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', 'thm_bob_tcr_dto', '1.0.0', 'digest', '{}', 'x', 'hashbobtheme0001', 'active', ?)`, stamp); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`UPDATE themes SET current_version_id = 'vbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' WHERE id = 'thm_bob_tcr_dto'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO theme_catalog_requests(id, theme_id, owner_id, status, reason, version_id, applied_at)
+		VALUES ('tcr_bob_dto', 'thm_bob_tcr_dto', 'usr_bob_tcr_dto', 'rejected', '内容不合规', 'vbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', ?)`, stamp); err != nil {
+		t.Fatal(err)
+	}
+
+	store := NewSQLStore(db)
+	items, err := store.ListThemes(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got Theme
+	for _, item := range items {
+		if item.ID == "thm_bob_tcr_dto" {
+			got = item
+		}
+	}
+	if got.CatalogRequestStatus != "rejected" || got.CatalogRequestReason != "内容不合规" {
+		t.Fatalf("theme = %+v", got)
+	}
+}
+
 func TestUpdateThemeDisablesCurrentVersion(t *testing.T) {
 	ctx := context.Background()
 	db, err := database.OpenAndMigrate(ctx, database.Config{Path: ":memory:", MaxOpenConns: 1})
