@@ -270,10 +270,12 @@ func TestResolveHeadSHARejectsDisallowedHost(t *testing.T) {
 }
 
 // TestResolveHeadSHADegradesForExtraHostRegardlessOfRef 确认追加白名单主机
-// (无 commits API 等价物)一律报 ErrUpdateCheckUnsupported,不管 ref 是否为
-// 空——这里只是没有能力回答"最新是什么"，不该在 ref 非空时原样回显它
-// (那是 FetchTarball 的语义，唯一调用方 CheckUpdate 恒传空 ref，回显分支
-// 是永远不会被触达的死代码)。
+// (无 commits API 等价物)一律报 ErrUpdateCheckUnsupported，不管 ref 是否为
+// 空——ref 来自 themes.source_git_ref（Service.CheckUpdate 传入导入时持久化
+// 的原始 ref，可以非空），这里只是没有能力回答"最新是什么"，不该在 ref
+// 非空时原样回显它（那是 FetchTarball 对追加主机的语义：直接把未经验证的
+// ref 当 SHA 报回去；ResolveHeadSHA 承诺的是"解析出的 commit sha"，没有
+// 解析能力就该报错，不能伪装成解析结果）。
 func TestResolveHeadSHADegradesForExtraHostRegardlessOfRef(t *testing.T) {
 	client := NewGitHubClient(publicResolver("git.example.com"), roundTripFunc(func(*http.Request) (*http.Response, error) {
 		t.Fatal("must not reach network")
