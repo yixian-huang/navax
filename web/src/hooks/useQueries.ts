@@ -9,6 +9,7 @@ import { authApi } from '@/api/auth';
 import { navigationApi } from '@/api/navigation';
 import { analyticsApi } from '@/api/analytics';
 import { adminApi } from '@/api/admin';
+import { themesApi } from '@/api/themes';
 import type {
   CreateCategoryRequest,
   CreateSiteRequest,
@@ -24,6 +25,8 @@ import type {
   SubdomainRequest,
   ChangePasswordRequest,
   UpdateProfileRequest,
+  ContractThemeCatalogRequestStatus,
+  ThemeCatalogReviewRequest,
 } from '@/api/types';
 
 // ---- Auth ----
@@ -368,6 +371,22 @@ export function useThemes() {
   });
 }
 
+export function useSubmitCatalogRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (themeId: string) => themesApi.submitCatalogRequest(themeId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['navigation', 'themes'] }),
+  });
+}
+
+export function useCancelCatalogRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (themeId: string) => themesApi.cancelCatalogRequest(themeId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['navigation', 'themes'] }),
+  });
+}
+
 export function usePlatformDirectory(
   params?: { category?: string; search?: string; page?: number; pageSize?: number },
   enabled = true,
@@ -613,6 +632,25 @@ export function useSetThemeVersionStatus() {
     // invalidateQueries 默认做前缀（模糊）匹配：失效 ['admin','themes'] 会
     // 连带失效 ['admin','themes', themeId, 'versions']（useAdminThemeVersions
     // 的 queryKey），版本面板由此自动重新拉取——不再手动拼接/替换本地数组。
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'themes'] }),
+  });
+}
+
+export function useThemeCatalogRequests(status: ContractThemeCatalogRequestStatus | '', page: number, pageSize: number) {
+  return useQuery({
+    queryKey: ['admin', 'themes', 'catalog-requests', status, page, pageSize],
+    queryFn: async () => (await adminApi.getThemeCatalogRequests({ status: status || undefined, page, pageSize })).data,
+  });
+}
+
+export function useReviewThemeCatalogRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ requestId, data }: { requestId: string; data: ThemeCatalogReviewRequest }) =>
+      adminApi.reviewThemeCatalogRequest(requestId, data),
+    // 失效 ['admin','themes'] 前缀连带失效 ['admin','themes','catalog-requests',...]
+    // (本文件 useAdminThemeVersions 上方注释已解释这个前缀匹配惯例)——批准后
+    // 主题网格(官方目录/用户主题分组)和审核队列同时刷新,不需要手动 reload。
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'themes'] }),
   });
 }
