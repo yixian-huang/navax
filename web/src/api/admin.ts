@@ -34,6 +34,9 @@ import type {
   ContractSubdomainStatus,
   SubdomainReviewRequest,
   PasswordResetLink,
+  AdminThemeCatalogRequest,
+  ThemeCatalogReviewRequest,
+  ContractThemeCatalogRequestStatus,
 } from './types';
 
 function asPaginated<T>(response: ApiResponse<T[] | PaginatedResponse<T>>): ApiResponse<PaginatedResponse<T>> {
@@ -214,4 +217,11 @@ export const adminApi = {
 
   reviewSubdomainRequest: (requestId: string, data: SubdomainReviewRequest) =>
     request<ApiResponse<AdminSubdomainRequest>>(`/admin/subdomains/${requestId}`, { method: 'PATCH', body: data }),
+
+  // Operations: theme catalog review
+  getThemeCatalogRequests: (params?: { status?: ContractThemeCatalogRequestStatus; page?: number; pageSize?: number }) =>
+    request<ApiResponse<AdminThemeCatalogRequest[] | PaginatedResponse<AdminThemeCatalogRequest>>>('/admin/theme-catalog-requests', { params }).then(asPaginated),
+
+  reviewThemeCatalogRequest: (requestId: string, data: ThemeCatalogReviewRequest) =>
+    request<ApiResponse<AdminThemeCatalogRequest>>(`/admin/theme-catalog-requests/${requestId}`, { method: 'PATCH', body: data }),
 };

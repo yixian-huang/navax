@@ -612,6 +612,26 @@ handlers.push(async (url, init) => {
     mockPrivateThemes.push(theme);
     return jsonResponse({ code: 'OK', data: theme, meta: { message: '主题已导入', detail: '' } }, 201);
   }
+  if (url.endsWith('/catalog-request') && url.startsWith(`${API_BASE}/me/themes/`) && method === 'POST') {
+    const id = decodeURIComponent(url.slice(`${API_BASE}/me/themes/`.length, -'/catalog-request'.length));
+    const theme = mockPrivateThemes.find(item => item.id === id);
+    if (!theme) {
+      return jsonResponse({ code: 'NOT_FOUND', data: null, meta: { message: '主题不存在', detail: '' } }, 404);
+    }
+    theme.catalogRequestStatus = 'pending';
+    theme.catalogRequestReason = undefined;
+    return jsonResponse({
+      code: 'OK',
+      data: { id: `tcr_mock_${id}`, themeId: id, themeName: theme.name, slug: theme.id, ownerId: theme.ownerId, status: 'pending', reason: '', appliedAt: new Date().toISOString(), reviewedAt: null },
+      meta: { message: '已提交目录审核', detail: '' },
+    }, 201);
+  }
+  if (url.endsWith('/catalog-request') && url.startsWith(`${API_BASE}/me/themes/`) && method === 'DELETE') {
+    const id = decodeURIComponent(url.slice(`${API_BASE}/me/themes/`.length, -'/catalog-request'.length));
+    const theme = mockPrivateThemes.find(item => item.id === id);
+    if (theme) theme.catalogRequestStatus = undefined;
+    return new Response(null, { status: 204 });
+  }
   if (url.startsWith(`${API_BASE}/me/themes/`) && method === 'DELETE') {
     const id = decodeURIComponent(url.slice(`${API_BASE}/me/themes/`.length));
     const idx = mockPrivateThemes.findIndex(theme => theme.id === id);

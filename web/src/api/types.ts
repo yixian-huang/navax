@@ -315,6 +315,9 @@ export interface Theme {
   ownerName?: string;
   /** 当前版本的状态;停用后该版本从用户可选列表消失。无当前版本时缺省。 */
   status?: 'active' | 'disabled';
+  /** 未终结(pending/rejected)的目录审核申请状态;已批准的不体现在这里——scope 已经是 catalog。 */
+  catalogRequestStatus?: 'pending' | 'rejected';
+  catalogRequestReason?: string;
   /** @deprecated 使用 default。 */
   isDefault?: boolean;
   /** @deprecated 使用 enabled。 */
@@ -578,6 +581,26 @@ export interface AdminSubdomainRequest {
 
 export interface SubdomainReviewRequest {
   decision: 'approve' | 'reject' | 'revoke';
+  reason?: string;
+}
+
+export type ContractThemeCatalogRequestStatus = 'pending' | 'approved' | 'rejected' | 'revoked';
+
+export interface AdminThemeCatalogRequest {
+  id: string;
+  themeId: string;
+  themeName: string;
+  slug: string;
+  ownerId: string;
+  ownerName?: string;
+  status: ContractThemeCatalogRequestStatus;
+  reason: string;
+  appliedAt: string;
+  reviewedAt: string | null;
+}
+
+export interface ThemeCatalogReviewRequest {
+  decision: 'approve' | 'reject';
   reason?: string;
 }
 
