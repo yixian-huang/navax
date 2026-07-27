@@ -444,6 +444,53 @@ func TestAPIContract(t *testing.T) {
 		mustStatus(t, bad, http.StatusUnprocessableEntity, "坏包 422")
 	})
 
+	t.Run("主题目录审核", func(t *testing.T) {
+		imported := user.uploadMultipart(t, "/api/v1/me/themes/import", nil, "file", "catalogcand.zip", buildThemeZip(t, "catalogcand"))
+		mustStatus(t, imported, http.StatusCreated, "导入待审核主题")
+		themeID := stringField(t, imported.data(), "id", "待审核主题 ID")
+
+		submitted := user.call(t, http.MethodPost, "/api/v1/me/themes/"+themeID+"/catalog-request", nil)
+		mustStatus(t, submitted, http.StatusCreated, "提交目录审核")
+		requestID := stringField(t, submitted.data(), "id", "审核申请 ID")
+		if got := stringField(t, submitted.data(), "status", "审核申请状态"); got != "pending" {
+			t.Fatalf("submitted status = %q", got)
+		}
+
+		// 审核期间禁止升级。
+		locked := user.uploadMultipart(t, "/api/v1/me/themes/import", nil, "file", "catalogcand2.zip", buildThemeZip(t, "catalogcand"))
+		mustStatus(t, locked, http.StatusConflict, "审核期间升级被拒")
+
+		// 重复提交同一主题 → 409。
+		duplicate := user.call(t, http.MethodPost, "/api/v1/me/themes/"+themeID+"/catalog-request", nil)
+		mustStatus(t, duplicate, http.StatusConflict, "重复提交 409")
+
+		queue := admin.call(t, http.MethodGet, "/api/v1/admin/theme-catalog-requests?status=pending", nil)
+		mustStatus(t, queue, http.StatusOK, "目录审核队列")
+		if !strings.Contains(string(queue.body), requestID) {
+			t.Fatalf("审核队列缺少申请 %s", requestID)
+		}
+
+		approved := admin.call(t, http.MethodPatch, "/api/v1/admin/theme-catalog-requests/"+requestID,
+			map[string]any{"decision": "approve"})
+		mustStatus(t, approved, http.StatusOK, "批准目录申请")
+		if got := stringField(t, approved.data(), "status", "批准后状态"); got != "approved" {
+			t.Fatalf("approved status = %q", got)
+		}
+
+		publicList := guest.call(t, http.MethodGet, "/api/v1/themes", nil)
+		mustStatus(t, publicList, http.StatusOK, "公开主题列表")
+		if !strings.Contains(string(publicList.body), themeID) {
+			t.Fatalf("公开列表应含已批准主题 %s", themeID)
+		}
+
+		// 批准后 slug 释放给同 owner 的新私有导入；拿它验证 slug 冲突路径。
+		afterApproval := user.uploadMultipart(t, "/api/v1/me/themes/import", nil, "file", "catalogcand3.zip", buildThemeZip(t, "catalogcand"))
+		mustStatus(t, afterApproval, http.StatusCreated, "批准后重新导入同 slug 建私有副本")
+		conflictThemeID := stringField(t, afterApproval.data(), "id", "冲突主题 ID")
+		conflict := user.call(t, http.MethodPost, "/api/v1/me/themes/"+conflictThemeID+"/catalog-request", nil)
+		mustStatus(t, conflict, http.StatusUnprocessableEntity, "slug 冲突 422")
+	})
+
 	t.Run("公开目录与发现", func(t *testing.T) {
 		directory := guest.call(t, http.MethodGet, "/api/v1/public/directory", nil)
 		mustStatus(t, directory, http.StatusOK, "公开目录")
