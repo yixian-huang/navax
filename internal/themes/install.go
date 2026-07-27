@@ -29,7 +29,7 @@ type InstalledTheme struct {
 // 作用域用行 ID 而不是 slug,两个用户同名主题天然无碰撞(设计 §7.2)。
 // 同 owner 同 slug 重复导入即升级:不占新配额,切换 current 指针,已发布快照
 // 因锁版本不受影响。
-func (s *Store) InstallPrivate(ctx context.Context, ownerID, slug, sourceType, sourceURL, sourceRef string, quota int, compile func(themeID string) (Compiled, error), now time.Time) (InstalledTheme, error) {
+func (s *Store) InstallPrivate(ctx context.Context, ownerID, slug, sourceType, sourceURL, sourceRef, sourceGitRef string, quota int, compile func(themeID string) (Compiled, error), now time.Time) (InstalledTheme, error) {
 	ownerID = strings.TrimSpace(ownerID)
 	slug = strings.TrimSpace(slug)
 	if ownerID == "" || slug == "" {
@@ -70,11 +70,11 @@ func (s *Store) InstallPrivate(ctx context.Context, ownerID, slug, sourceType, s
 			}
 			if _, err := tx.ExecContext(ctx, `
 				INSERT INTO themes (id, name, version, author, description, mode, preview, enabled, is_default,
-				                    created_at, updated_at, slug, scope, owner_id, source_type, source_url, spec_version)
-				VALUES (?, ?, ?, ?, ?, ?, '', 1, 0, ?, ?, ?, 'private', ?, ?, ?, ?)`,
+				                    created_at, updated_at, slug, scope, owner_id, source_type, source_url, source_git_ref, spec_version)
+				VALUES (?, ?, ?, ?, ?, ?, '', 1, 0, ?, ?, ?, 'private', ?, ?, ?, ?, ?)`,
 				themeID, compiled.Manifest.Name, compiled.Manifest.Version, compiled.Manifest.Author,
 				compiled.Manifest.Description, compiled.Manifest.Mode, dbTime(now), dbTime(now),
-				slug, ownerID, sourceType, sourceURL, compiled.Manifest.SpecVersion); err != nil {
+				slug, ownerID, sourceType, sourceURL, sourceGitRef, compiled.Manifest.SpecVersion); err != nil {
 				return fmt.Errorf("insert private theme: %w", err)
 			}
 			versionID, err := upsertVersionTx(ctx, tx, themeID, compiled, sourceType, sourceRef, ownerID, now)
@@ -98,8 +98,8 @@ func (s *Store) InstallPrivate(ctx context.Context, ownerID, slug, sourceType, s
 			// enabled = 1：重装同 slug 等同于重新安装，必须能唤醒一个先前被
 			// UninstallPrivate 墓碑化(enabled = 0)的行，否则用户会永远卡在
 			// 一个自己看不到、也无法再次启用的主题上。
-			if _, err := tx.ExecContext(ctx, `UPDATE themes SET source_url = ?, enabled = 1, updated_at = ? WHERE id = ?`,
-				sourceURL, dbTime(now), themeID); err != nil {
+			if _, err := tx.ExecContext(ctx, `UPDATE themes SET source_url = ?, source_git_ref = ?, enabled = 1, updated_at = ? WHERE id = ?`,
+				sourceURL, sourceGitRef, dbTime(now), themeID); err != nil {
 				return err
 			}
 			result = InstalledTheme{ThemeID: themeID, Slug: slug, VersionID: versionID, Upgraded: true}

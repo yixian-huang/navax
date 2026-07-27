@@ -321,17 +321,18 @@ func (s *Store) ResolveEligibleVersion(ctx context.Context, themeID, actorID str
 	return ResolveEligibleVersion(ctx, s.db, themeID, actorID)
 }
 
-// PrivateThemeSource 返回某 owner 私有主题的来源类型、仓库 URL 与当前版本 source_ref。
-// 非本人或不存在统一 ErrNotFound（防枚举）。
-func (s *Store) PrivateThemeSource(ctx context.Context, ownerID, themeID string) (sourceType, sourceURL, currentRef string, err error) {
+// PrivateThemeSource 返回某 owner 私有主题的来源类型、仓库 URL、当前版本
+// source_ref(已解析 commit sha)与导入时使用的 git ref(分支/tag 名,空串
+// 代表默认分支)。非本人或不存在统一 ErrNotFound(防枚举)。
+func (s *Store) PrivateThemeSource(ctx context.Context, ownerID, themeID string) (sourceType, sourceURL, currentRef, gitRef string, err error) {
 	err = s.db.QueryRowContext(ctx, `
-		SELECT themes.source_type, themes.source_url, COALESCE(tv.source_ref, '')
+		SELECT themes.source_type, themes.source_url, COALESCE(tv.source_ref, ''), themes.source_git_ref
 		FROM themes
 		LEFT JOIN theme_versions tv ON tv.id = themes.current_version_id
 		WHERE themes.id = ? AND themes.scope = 'private' AND themes.owner_id = ?`,
-		themeID, ownerID).Scan(&sourceType, &sourceURL, &currentRef)
+		themeID, ownerID).Scan(&sourceType, &sourceURL, &currentRef, &gitRef)
 	if errors.Is(err, sql.ErrNoRows) {
-		return "", "", "", ErrNotFound
+		return "", "", "", "", ErrNotFound
 	}
-	return sourceType, sourceURL, currentRef, err
+	return sourceType, sourceURL, currentRef, gitRef, err
 }

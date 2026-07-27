@@ -307,6 +307,45 @@ func TestCheckUpdateDetectsNewCommit(t *testing.T) {
 	}
 }
 
+// TestCheckUpdateUsesImportedRefNotDefaultBranch 是本次 bugfix 的回归测试:
+// 从非默认分支导入后,CheckUpdate 必须复用该分支名重新解析 HEAD,而不是恒定
+// 对比默认分支——否则任何非默认分支/tag 导入的主题会永远显示"有更新"。假
+// transport 只认 .../commits/release/2.0 这一条路径,修复前 CheckUpdate
+// 恒传空 ref 会打到 .../commits/HEAD,命中 t.Fatalf。
+func TestCheckUpdateUsesImportedRefNotDefaultBranch(t *testing.T) {
+	service, _, _ := newServiceDB(t)
+	tarball := makeSampleTarGz(t)
+	branchSha := strings.Repeat("c", 40)
+	service.github = NewGitHubClient(publicResolver("api.github.com", "codeload.github.com"), roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		switch {
+		case r.URL.Host == "codeload.github.com":
+			return &http.Response{StatusCode: 200, Body: io.NopCloser(bytes.NewReader(tarball)), Header: http.Header{}}, nil
+		case strings.HasSuffix(r.URL.Path, "/commits/release/2.0"):
+			return respond(200, `{"sha":"`+branchSha+`"}`), nil
+		}
+		t.Fatalf("unexpected resolve path %s", r.URL.Path)
+		return nil, nil
+	}), nil, "")
+	installed, err := service.ImportGitHub(context.Background(), "usr_svc_0001", "https://github.com/e2e/lilac", "release/2.0")
+	if err != nil {
+		t.Fatalf("ImportGitHub: %v", err)
+	}
+
+	service.github = NewGitHubClient(publicResolver("api.github.com"), roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if !strings.HasSuffix(r.URL.Path, "/commits/release/2.0") {
+			t.Fatalf("CheckUpdate resolved wrong ref, path = %s (want .../commits/release/2.0)", r.URL.Path)
+		}
+		return respond(200, `{"sha":"`+branchSha+`"}`), nil
+	}), nil, "")
+	status, err := service.CheckUpdate(context.Background(), "usr_svc_0001", installed.ThemeID)
+	if err != nil {
+		t.Fatalf("CheckUpdate: %v", err)
+	}
+	if status.HasUpdate {
+		t.Fatalf("same branch sha compared against itself must report no update: %+v", status)
+	}
+}
+
 // TestCheckUpdateUploadHasNoUpstream 确认 upload 来源没有 upstream 可比对,
 // 直接返回 HasUpdate=false 而不去碰网络。
 func TestCheckUpdateUploadHasNoUpstream(t *testing.T) {
