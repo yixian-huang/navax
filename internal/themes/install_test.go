@@ -418,3 +418,39 @@ func TestInstallPrivateSkipsTombstoneWithDisabledVersionMemory(t *testing.T) {
 		t.Fatal("tombstone carrying disabled-version memory must survive reclamation")
 	}
 }
+
+// TestUninstallPrivateRevokesPendingCatalogRequest 确认 UninstallPrivate 在
+// 确认所有权后会自动撤回该主题任何 pending 的目录审核申请——否则卸载
+// (哪怕只是墓碑化)之后,管理员仍可能批准一条针对已卸载主题的申请,产生
+// 一个 enabled=0、owner_id 又被置空的目录主题,永久占住 slug 且无人能再
+// 启用它。用带快照引用的主题走「墓碑」分支,这样主题行与申请行都会留存,
+// 才能在卸载之后查到申请状态确实被翻成了 revoked(而不是被物理删除路径
+// 的 deleteThemeTx 一并抹掉,那样就无行可查了)。
+func TestUninstallPrivateRevokesPendingCatalogRequest(t *testing.T) {
+	db := newTestDB(t)
+	store := NewStore(db)
+	seedUser(t, store, "usr_uni_pending_0001")
+	installed := installSample(t, store, "usr_uni_pending_0001", "lilac", 10)
+	seedSnapshotReferencing(t, db, "snp_uni_pending_0001", installed.VersionID)
+
+	stamp := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := db.Exec(`
+		INSERT INTO theme_catalog_requests(id, theme_id, owner_id, status, reason, version_id, applied_at)
+		VALUES ('tcr_uni_pending_0001', ?, 'usr_uni_pending_0001', 'pending', '', ?, ?)`,
+		installed.ThemeID, installed.VersionID, stamp); err != nil {
+		t.Fatal(err)
+	}
+
+	removed, err := store.UninstallPrivate(t.Context(), "usr_uni_pending_0001", installed.ThemeID, time.Now().UTC())
+	if err != nil || removed {
+		t.Fatalf("UninstallPrivate() = %v, %v; want tombstone", removed, err)
+	}
+
+	var status string
+	if err := db.QueryRow(`SELECT status FROM theme_catalog_requests WHERE id = 'tcr_uni_pending_0001'`).Scan(&status); err != nil {
+		t.Fatal(err)
+	}
+	if status != "revoked" {
+		t.Fatalf("pending catalog request status = %q, want revoked after uninstall", status)
+	}
+}

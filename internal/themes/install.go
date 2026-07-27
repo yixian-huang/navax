@@ -140,6 +140,16 @@ func (s *Store) UninstallPrivate(ctx context.Context, ownerID, themeID string, n
 		if err != nil {
 			return err
 		}
+		// 所有权确认后立即自动撤回该主题任何待审的目录申请:卸载(不论物理删
+		// 除还是墓碑化)后主题不再处于「可被批准」的状态,不能让一条待审申请
+		// 悬在那,被管理员在用户卸载之后才批准——那会产生一个 enabled=0、
+		// owner_id 又被置空的目录主题,永久占住 slug 且无人能再启用它
+		// (Review approve 分支的 enabled 回查是这里的后备防线,见 themecatalog)。
+		if _, err := tx.ExecContext(ctx, `
+			UPDATE theme_catalog_requests SET status = 'revoked', reason = '主题已被所有者卸载', reviewed_at = ?
+			WHERE theme_id = ? AND status = 'pending'`, dbTime(now), themeID); err != nil {
+			return err
+		}
 		var refs int
 		if err := tx.QueryRowContext(ctx, `
 			SELECT COUNT(*) FROM published_snapshots
