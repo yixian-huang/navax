@@ -68,6 +68,26 @@ func TestThemeCatalogRequestLifecycle(t *testing.T) {
 		t.Fatalf("stranger request error = %v", err)
 	}
 
+	// catalog-scope 主题 → ErrNotFound(防枚举:owner_id=NULL 不应该暴露为内部错误)。
+	stamp := dbTime(now)
+	if _, err := db.Exec(`INSERT INTO themes (id, name, version, author, description, mode, preview, enabled, is_default,
+			created_at, updated_at, slug, scope, owner_id, source_type)
+		VALUES (?, 'catalog_theme', '1.0.0', 'owner', '', 'light', '', 1, 0, ?, ?, 'catalog-slug', 'catalog', NULL, 'upload')`,
+		"thm_catalog_tcr", stamp, stamp); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO theme_versions (id, theme_id, version, source_ref, manifest_json, compiled_css, content_hash, status, created_at)
+		VALUES (?, ?, '1.0.0', 'digest', '{}', 'x', 'hash-catalog', 'active', ?)`,
+		"vccccccccccccccccccccccccccccccccc", "thm_catalog_tcr", stamp); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`UPDATE themes SET current_version_id = ? WHERE id = ?`, "vccccccccccccccccccccccccccccccccc", "thm_catalog_tcr"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Request(ctx, alice, "thm_catalog_tcr", "req-catalog-not-found"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("catalog-scope request error = %v", err)
+	}
+
 	first, err := service.Request(ctx, alice, "thm_alice_tcr", "req-apply")
 	if err != nil {
 		t.Fatal(err)
