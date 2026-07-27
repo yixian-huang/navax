@@ -20,6 +20,8 @@ export interface ThemeMeta {
   sourceUrl?: string;
   ownerName?: string;
   status?: 'active' | 'disabled';
+  catalogRequestStatus?: 'pending' | 'rejected';
+  catalogRequestReason?: string;
 }
 
 export interface ThemePackage {
@@ -67,6 +69,8 @@ export function themePackageFromApi(theme: Theme): ThemePackage | null {
       scope: theme.scope,
       sourceType: theme.sourceType,
       sourceUrl: theme.sourceUrl,
+      catalogRequestStatus: theme.catalogRequestStatus,
+      catalogRequestReason: theme.catalogRequestReason,
     },
   };
 }
