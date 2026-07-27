@@ -20,6 +20,7 @@ export interface ThemeMeta {
   sourceUrl?: string;
   ownerName?: string;
   status?: 'active' | 'disabled';
+  /** 未终结(pending/rejected)的目录审核申请状态;已批准的不体现在这里——scope 已经是 catalog。 */
   catalogRequestStatus?: 'pending' | 'rejected';
   catalogRequestReason?: string;
 }
