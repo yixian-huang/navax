@@ -35,3 +35,9 @@ CREATE TABLE theme_catalog_requests (
 
 CREATE UNIQUE INDEX idx_theme_catalog_active ON theme_catalog_requests(theme_id) WHERE status = 'pending';
 CREATE INDEX idx_theme_catalog_status_time ON theme_catalog_requests(status, applied_at DESC);
+-- Serves the per-theme "latest catalog request" correlated subquery used to
+-- project catalogRequestStatus/catalogRequestReason onto a Theme DTO
+-- (internal/admin/sqlstore.go's themeSelect, internal/catalog/service.go's
+-- theme listing): theme_id = ? ORDER BY applied_at DESC, id DESC LIMIT 1.
+-- idx_theme_catalog_active can't serve this (partial, pending-only); this one can.
+CREATE INDEX idx_theme_catalog_theme_time ON theme_catalog_requests(theme_id, applied_at DESC);
