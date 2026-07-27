@@ -212,3 +212,101 @@ func TestThemeCatalogRequestLifecycle(t *testing.T) {
 		t.Fatalf("approve after version reactivation = %+v, %v", erinApproved, err)
 	}
 }
+
+// TestThemeCatalogReviewVersionMismatch covers the defensive backstop in
+// SQLStore.Review's approve branch: if theme_catalog_requests.version_id no
+// longer matches themes.current_version_id when an admin approves, the
+// approval must be rejected. Until an upstream "lock upgrades while a
+// catalog request is pending" guard exists at the InstallPrivate layer, this
+// check is the only thing standing between an admin and approving content
+// different from what they reviewed, so it needs its own coverage rather
+// than relying on the happy-path test never hitting it.
+func TestThemeCatalogReviewVersionMismatch(t *testing.T) {
+	ctx := context.Background()
+	db, err := database.OpenAndMigrate(ctx, database.Config{Path: ":memory:", MaxOpenConns: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	now := time.Date(2026, 7, 25, 12, 0, 0, 0, time.UTC)
+	insertUser(t, db, "usr_admin_vm", "owner", "admin-vm@example.com", "admin", now)
+	insertUser(t, db, "usr_dave_vm", "dave", "dave@example.com", "user", now)
+	insertPrivateTheme(t, db, "thm_dave_vm", "usr_dave_vm", "nebula", "v_dave_1", now)
+
+	service := NewService(NewSQLStore(db))
+	service.now = func() time.Time { return now }
+	admin := Actor{ID: "usr_admin_vm", Username: "owner", Role: "admin", Status: "active"}
+	dave := Actor{ID: "usr_dave_vm", Username: "dave", Role: "user", Status: "active"}
+
+	pending, err := service.Request(ctx, dave, "thm_dave_vm", "req-dave-apply")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 模拟审核期间主题被升级(上游"待审时锁定升级"防护尚未生效的场景):
+	// 直接写入第二个 active 版本,并把 current_version_id 改指向它,绕过
+	// service 层——这正是 Review 里 version_id 复检要拦住的情况。
+	stamp := dbTime(now)
+	if _, err := db.Exec(`INSERT INTO theme_versions (id, theme_id, version, source_ref, manifest_json, compiled_css, content_hash, status, created_at)
+		VALUES (?, ?, '2.0.0', 'digest', '{}', 'x', ?, 'active', ?)`,
+		"v_dave_2", "thm_dave_vm", "hash-thm_dave_vm-v2", stamp); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`UPDATE themes SET current_version_id = ? WHERE id = ?`, "v_dave_2", "thm_dave_vm"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := service.Review(ctx, admin, pending.ID, "approve", "", "req-dave-approve"); !errors.Is(err, ErrInvalidTransition) {
+		t.Fatalf("approve after version drift error = %v", err)
+	}
+}
+
+// TestThemeCatalogReviewSlugRaceRecheck covers the live slug re-check inside
+// SQLStore.Review's approve branch, as distinct from the submission-time
+// check in Create. Submission-time uniqueness is only enforced against
+// scope='catalog' themes (idx_themes_private_slug is scoped per-owner), so
+// two different owners can each have a pending request for a private theme
+// with the same slug. Once the first is approved, approving the second must
+// be caught by Review's own re-check, not by anything Create already did.
+func TestThemeCatalogReviewSlugRaceRecheck(t *testing.T) {
+	ctx := context.Background()
+	db, err := database.OpenAndMigrate(ctx, database.Config{Path: ":memory:", MaxOpenConns: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	now := time.Date(2026, 7, 25, 12, 0, 0, 0, time.UTC)
+	insertUser(t, db, "usr_admin_sr", "owner", "admin-sr@example.com", "admin", now)
+	insertUser(t, db, "usr_erin_sr", "erin", "erin@example.com", "user", now)
+	insertUser(t, db, "usr_frank_sr", "frank", "frank@example.com", "user", now)
+	insertPrivateTheme(t, db, "thm_erin_sr", "usr_erin_sr", "solstice", "v_erin_1", now)
+	insertPrivateTheme(t, db, "thm_frank_sr", "usr_frank_sr", "solstice", "v_frank_1", now)
+
+	service := NewService(NewSQLStore(db))
+	service.now = func() time.Time { return now }
+	admin := Actor{ID: "usr_admin_sr", Username: "owner", Role: "admin", Status: "active"}
+	erin := Actor{ID: "usr_erin_sr", Username: "erin", Role: "user", Status: "active"}
+	frank := Actor{ID: "usr_frank_sr", Username: "frank", Role: "user", Status: "active"}
+
+	// 两个不同 owner 的私有主题用同一个 slug 提交都应成功:提交期唯一性
+	// 只针对 scope='catalog',此时两者都还是 private。
+	erinRequest, err := service.Request(ctx, erin, "thm_erin_sr", "req-erin-apply")
+	if err != nil {
+		t.Fatal(err)
+	}
+	frankRequest, err := service.Request(ctx, frank, "thm_frank_sr", "req-frank-apply")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	approved, err := service.Review(ctx, admin, erinRequest.ID, "approve", "", "req-erin-approve")
+	if err != nil || approved.Status != "approved" {
+		t.Fatalf("first approve = %+v, %v", approved, err)
+	}
+
+	// 第二个请求审批时,提交期检查早已通过(当时两者都还是 private),
+	// 必须靠 Review 内部的实时复检拦下 slug 冲突。
+	if _, err := service.Review(ctx, admin, frankRequest.ID, "approve", "", "req-frank-approve"); !errors.Is(err, ErrSlugConflict) {
+		t.Fatalf("second approve slug race error = %v", err)
+	}
+}

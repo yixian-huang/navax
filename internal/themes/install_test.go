@@ -419,6 +419,65 @@ func TestInstallPrivateSkipsTombstoneWithDisabledVersionMemory(t *testing.T) {
 	}
 }
 
+// TestInstallPrivateReclaimsTombstoneWithResolvedCatalogRequest 确认配额压力
+// 下回收一个曾提交过目录审核(已了结,非 pending)的墓碑不会被
+// theme_catalog_requests 的历史记录挡住。migrations/0016 给
+// theme_catalog_requests.version_id 加了 ON DELETE CASCADE,所以回收内部
+// 调用的 deleteThemeTx 不需要手动清理这张表——这里钉住的是行为而不是实现:
+// 新导入本身不应因为墓碑带着已了结的审核历史而回滚。
+func TestInstallPrivateReclaimsTombstoneWithResolvedCatalogRequest(t *testing.T) {
+	db := newTestDB(t)
+	store := NewStore(db)
+	seedUser(t, store, "usr_recl_catalog_0001")
+
+	// 配额=1:装 one,占满唯一配额位。
+	one := installSample(t, store, "usr_recl_catalog_0001", "one", 1)
+
+	// 给 one 造一条已了结(非 pending)的目录审核历史。
+	stamp := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := db.Exec(`
+		INSERT INTO theme_catalog_requests(id, theme_id, owner_id, status, reason, version_id, applied_at, reviewed_at)
+		VALUES ('tcr_recl_0002', ?, 'usr_recl_catalog_0001', 'revoked', '', ?, ?, ?)`,
+		one.ThemeID, one.VersionID, stamp, stamp); err != nil {
+		t.Fatal(err)
+	}
+
+	// 造一条快照引用,让卸载走「墓碑化」分支而不是物理删除,这样 one 才能
+	// 变成 reclaimTombstones 会去扫描的 enabled=0 墓碑行。
+	if _, err := db.Exec(`INSERT INTO published_snapshots (id, page_id, draft_revision, slug, visibility, payload_json, etag, published_at, theme_version_id)
+		VALUES ('snp_recl_0002', 'page_system_root', 1, 'recl2', 'public', '{}', 'W/"y"', ?, ?)`,
+		stamp, one.VersionID); err != nil {
+		t.Fatalf("seed snapshot: %v", err)
+	}
+	if removed, err := store.UninstallPrivate(t.Context(), "usr_recl_catalog_0001", one.ThemeID, time.Now().UTC()); err != nil || removed {
+		t.Fatalf("uninstall one: want tombstone, removed=%v err=%v", removed, err)
+	}
+
+	// 移除快照引用 → one 变成无引用的墓碑,按引用计数与 disabled-version
+	// 记忆都够格回收,理论上唯一可能挡住它的就是 theme_catalog_requests 的
+	// 历史记录——CASCADE 修好后不应再挡。
+	if _, err := db.Exec(`DELETE FROM published_snapshots WHERE id = 'snp_recl_0002'`); err != nil {
+		t.Fatal(err)
+	}
+
+	// 配额已满(1),装 two 会触发 reclaimTombstones。
+	two, err := store.InstallPrivate(t.Context(), "usr_recl_catalog_0001", "two", "upload", "", "d2", "", 1,
+		func(themeID string) (Compiled, error) { return Compile(samplePackage(t), themeID) }, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("two should install after reclaiming one's tombstone: %v", err)
+	}
+	if two.ThemeID == "" {
+		t.Fatal("two not installed")
+	}
+	var themeCount int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM themes WHERE id = ?`, one.ThemeID).Scan(&themeCount); err != nil {
+		t.Fatal(err)
+	}
+	if themeCount != 0 {
+		t.Fatal("reclaimable tombstone one should have been physically deleted")
+	}
+}
+
 // TestUninstallPrivateRevokesPendingCatalogRequest 确认 UninstallPrivate 在
 // 确认所有权后会自动撤回该主题任何 pending 的目录审核申请——否则卸载
 // (哪怕只是墓碑化)之后,管理员仍可能批准一条针对已卸载主题的申请,产生
