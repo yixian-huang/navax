@@ -63,6 +63,7 @@ const cases: Case[] = [
   { name: '访问统计分布', path: '/api/v1/me/analytics/breakdown', method: 'get', status: '200', url: '/api/v1/me/analytics/breakdown' },
   { name: '资源上传', path: '/api/v1/assets', method: 'post', status: '201', url: '/api/v1/assets', init: { method: 'POST' } },
   { name: '导入主题', path: '/api/v1/me/themes/import', method: 'post', status: '201', url: '/api/v1/me/themes/import', init: { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ githubUrl: 'https://github.com/e2e/lilac' }) } },
+  { name: '提交主题目录审核', path: '/api/v1/me/themes/{themeId}/catalog-request', method: 'post', status: '201', url: '/api/v1/me/themes/thm_mock_priv_1/catalog-request', init: { method: 'POST' } },
   { name: '主题包校验', path: '/api/v1/themes/validate', method: 'post', status: '200', url: '/api/v1/themes/validate', init: { method: 'POST' } },
   { name: '卸载不存在的私有主题', path: '/api/v1/me/themes/{themeId}', method: 'delete', status: '404', url: '/api/v1/me/themes/thm_mock_does_not_exist', init: { method: 'DELETE' } },
   { name: '管理主题状态', path: '/api/v1/admin/themes/{themeId}', method: 'patch', status: '200', url: '/api/v1/admin/themes/slate', init: { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'active' }) } },
