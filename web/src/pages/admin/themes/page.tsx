@@ -14,6 +14,7 @@ import { ErrorState, LoadingSkeleton } from '@/components/base/SharedUI';
 import { backgroundsApi } from '@/api/backgrounds';
 import { ApiError } from '@/api/client';
 import type { BackgroundMedia, ThemeVersionRow } from '@/api/types';
+import CatalogRequestsSection from './components/CatalogRequestsSection';
 
 const UPLOAD_ACCEPT = 'image/png,image/jpeg,image/jpg,image/gif,image/webp,video/mp4,video/webm';
 const MAX_INSTANCE_PRESETS = 12;
@@ -528,6 +529,8 @@ export default function AdminThemesPage() {
           </div>
         </div>
       )}
+
+      <CatalogRequestsSection />
     </div>
   );
 }
