@@ -14,6 +14,7 @@
 - 新包 `internal/themecatalog` 与已有的 `internal/catalog`(站点导航目录/发现页)是两个不相关的领域,包名故意都含"catalog"是因为都在复用 `themes.scope='catalog'` 这个既有词汇,设计与实现中需注意不要互相引用。
 - 不引入"退回私有"(`approved → revoked`)——已确认下架用现有的 kill switch(`enabled` 开关 + B2b 版本级 status)即可覆盖,scope 晋升是单向操作,状态机更简单。
 - catalog slug 全站唯一、private slug 按 owner 唯一(`idx_themes_catalog_slug`/`idx_themes_private_slug`),这是晋升流程里唯一真正棘手的冲突面,贯穿提交、审批两个时间点分别校验。
+- **运营风险(遗留)**:catalog slug 是全站永久(晋升无回退)、由用户提交内容决定的命名空间,且没有保留字校验。未来新增内置主题前,必须先确认其目标 slug 尚未被某个用户晋升的主题占用,否则启动期的内置主题同步迁移会撞上 `idx_themes_catalog_slug` 唯一索引而失败。
 
 ## 2. 数据模型与状态机
 
@@ -98,7 +99,7 @@ SELECT 1 FROM theme_catalog_requests WHERE theme_id = ? AND status = 'pending'
 
 **Admin 端**(新 section,结构参照 `web/src/pages/admin/operations/components/SubdomainsSection.tsx` 的审核队列 UI,放进 `web/src/pages/admin/themes/`):
 - pending 队列:主题名/owner/slug/提交时间,可展开预览(复用既有主题预览能力)。
-- 通过/拒绝两个操作,拒绝要求填 `reason`(必填,对齐 subdomain 审核交互)。
+- 通过/拒绝两个操作,`reason` 均为可选审核说明(对齐 `SubdomainsSection.tsx` 既有交互,不强制填写)。
 
 **API 层**:`web/src/api/themes.ts` 加 `submitCatalogRequest`/`cancelCatalogRequest`;新增 admin 侧 list/review 调用(并入 `web/src/api/admin.ts` 或独立文件均可,实现阶段定)。`web/src/api/mock-handlers.ts` 同步实现,过 `make test-mock`。
 
