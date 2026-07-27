@@ -27,7 +27,7 @@ import { useSaveStatus } from '@/hooks/useSaveStatus';
 import { cn } from '@/lib/utils';
 import { draftSaveToastMessage } from '@/lib/publish-state';
 import { themePackagesFromApi, type ThemePackage } from '@/themes/types';
-import { useMyPage, useThemes, useUpdatePageSettings } from '@/hooks/useQueries';
+import { useMyPage, useThemes, useUpdatePageSettings, useSubmitCatalogRequest, useCancelCatalogRequest } from '@/hooks/useQueries';
 import { ErrorState, LoadingSkeleton, ConfirmDialog } from '@/components/base/SharedUI';
 import { ThemeImportDialog } from '@/components/base/ThemeImportDialog';
 import { getPublicConfig } from '@/api/assets';
@@ -79,6 +79,34 @@ export default function ThemesPage() {
   const [checkingUpdateId, setCheckingUpdateId] = useState<string | null>(null);
   // themeId → 最近一次「检查更新」的结果，只用来高亮既有升级入口，不做轮询。
   const [updateAvailableMap, setUpdateAvailableMap] = useState<Record<string, boolean>>({});
+
+  const submitCatalogRequest = useSubmitCatalogRequest();
+  const cancelCatalogRequest = useCancelCatalogRequest();
+  const [catalogActionId, setCatalogActionId] = useState<string | null>(null);
+
+  const handleSubmitCatalogRequest = useCallback(async (pkg: ThemePackage) => {
+    setCatalogActionId(pkg.id);
+    try {
+      await submitCatalogRequest.mutateAsync(pkg.id);
+      toast('success', '已提交官方目录审核');
+    } catch (cause) {
+      toast('error', cause instanceof ApiError ? (cause.detail || cause.message) : '提交失败');
+    } finally {
+      setCatalogActionId(null);
+    }
+  }, [submitCatalogRequest, toast]);
+
+  const handleCancelCatalogRequest = useCallback(async (pkg: ThemePackage) => {
+    setCatalogActionId(pkg.id);
+    try {
+      await cancelCatalogRequest.mutateAsync(pkg.id);
+      toast('info', '已撤回目录审核申请');
+    } catch (cause) {
+      toast('error', cause instanceof ApiError ? (cause.detail || cause.message) : '撤回失败');
+    } finally {
+      setCatalogActionId(null);
+    }
+  }, [cancelCatalogRequest, toast]);
 
   const [bgConfig, setBgConfig] = useState<BgConfig>(emptyBg());
   const bgConfigRef = useRef(bgConfig);
@@ -530,11 +558,19 @@ export default function ThemesPage() {
   const renderMyThemeCard = (pkg: ThemePackage) => {
     const isUpgrading = upgradingId === pkg.id;
     const isCheckingUpdate = checkingUpdateId === pkg.id;
-    const canUpgradeGithub = pkg.meta.sourceType === 'github' && Boolean(pkg.meta.sourceUrl);
-    const canUpgradeUpload = pkg.meta.sourceType === 'upload';
+    const catalogStatus = pkg.meta.catalogRequestStatus;
+    const isCatalogBusy = catalogActionId === pkg.id;
+    // 私有主题清单来自 GET /themes：其 SQL 已经用 theme_versions.status = 'active'
+    // 做了资格过滤，但该查询没有把 status 字段本身选出来（管理端列表才选），
+    // 所以这里永远拿不到 'active' 字面量——用 !== 'disabled' 而不是 === 'active'，
+    // 让「未知即可提交」而不是「未知即锁死」，同时给将来补上该字段留出兼容性。
+    const canSubmitToCatalog = pkg.meta.status !== 'disabled' && !catalogStatus;
+    // 审核中的主题被服务端锁定升级/更新检查，前端同步禁用对应按钮。
+    const canUpgradeGithub = pkg.meta.sourceType === 'github' && Boolean(pkg.meta.sourceUrl) && catalogStatus !== 'pending';
+    const canUpgradeUpload = pkg.meta.sourceType === 'upload' && catalogStatus !== 'pending';
     // upload 主题没有上游可比对，不提供「检查更新」——只有 github 主题的
     // sourceRef 能对上游 HEAD 做比对。
-    const canCheckUpdate = pkg.meta.sourceType === 'github';
+    const canCheckUpdate = pkg.meta.sourceType === 'github' && catalogStatus !== 'pending';
     const hasUpdate = updateAvailableMap[pkg.id] === true;
 
     return (
@@ -601,6 +637,44 @@ export default function ThemesPage() {
             <Trash2 className="w-3.5 h-3.5" />
           </button>
         </div>
+        {catalogStatus === 'pending' && (
+          <div className="mt-1 flex items-center gap-1.5 text-[10px]">
+            <span className="px-1.5 py-0.5 rounded-full bg-primary-50 text-primary-700">审核中</span>
+            <button
+              type="button"
+              disabled={isCatalogBusy}
+              onClick={() => void handleCancelCatalogRequest(pkg)}
+              className="underline text-foreground-400 hover:text-foreground-600 disabled:opacity-40"
+            >
+              撤回
+            </button>
+          </div>
+        )}
+        {catalogStatus === 'rejected' && (
+          <div className="mt-1 flex items-center gap-1.5 text-[10px]">
+            <span className="px-1.5 py-0.5 rounded-full bg-red-50 text-red-600" title={pkg.meta.catalogRequestReason || ''}>
+              已拒绝{pkg.meta.catalogRequestReason ? `：${pkg.meta.catalogRequestReason}` : ''}
+            </span>
+            <button
+              type="button"
+              disabled={isCatalogBusy}
+              onClick={() => void handleSubmitCatalogRequest(pkg)}
+              className="underline text-foreground-400 hover:text-foreground-600 disabled:opacity-40"
+            >
+              重新提交
+            </button>
+          </div>
+        )}
+        {canSubmitToCatalog && (
+          <button
+            type="button"
+            disabled={isCatalogBusy}
+            onClick={() => void handleSubmitCatalogRequest(pkg)}
+            className="mt-1 text-[10px] underline text-foreground-400 hover:text-foreground-600 disabled:opacity-40"
+          >
+            提交官方目录
+          </button>
+        )}
       </div>
     );
   };
