@@ -35,6 +35,7 @@ import (
 	"github.com/yixian-huang/navax/internal/security"
 	seopkg "github.com/yixian-huang/navax/internal/seo"
 	"github.com/yixian-huang/navax/internal/subdomains"
+	"github.com/yixian-huang/navax/internal/themecatalog"
 	"github.com/yixian-huang/navax/internal/themeimport"
 	"github.com/yixian-huang/navax/internal/themes"
 	"github.com/yixian-huang/navax/internal/webui"
@@ -210,6 +211,8 @@ func Run(ctx context.Context, cfg config.Config, build BuildInfo) error {
 	backgroundHandler := httpapi.NewBackgroundHandler(backgroundService)
 	subdomainService := subdomains.NewService(subdomains.NewSQLStore(db))
 	subdomainHandler := httpapi.NewSubdomainHandler(authService, subdomainService)
+	themeCatalogService := themecatalog.NewService(themecatalog.NewSQLStore(db))
+	themeCatalogHandler := httpapi.NewThemeCatalogHandler(authService, themeCatalogService)
 	seoMeta := seopkg.Config{InstanceName: cfg.InstanceName, PublicBaseURL: cfg.PublicBaseURL}
 	webHandler, err := webui.New(webui.Options{ResolveSEO: func(r *http.Request) (webui.SEO, error) {
 		path := r.URL.Path
@@ -279,6 +282,7 @@ func Run(ctx context.Context, cfg config.Config, build BuildInfo) error {
 				backgroundHandler.MountProtected(protected)
 				subdomainHandler.MountUserRoutes(protected)
 				themeImportHandler.MountProtected(protected)
+				themeCatalogHandler.MountUserRoutes(protected)
 				protected.Route("/admin", func(admin chi.Router) {
 					admin.Use(httpapi.RequireAdmin)
 					adminHandler.MountRoutes(admin)
@@ -287,6 +291,7 @@ func Run(ctx context.Context, cfg config.Config, build BuildInfo) error {
 					backupHandler.Mount(admin)
 					updateHandler.Mount(admin)
 					subdomainHandler.MountAdminRoutes(admin)
+					themeCatalogHandler.MountAdminRoutes(admin)
 				})
 			})
 		},
