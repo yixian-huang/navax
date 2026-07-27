@@ -369,6 +369,31 @@ func TestThemeListingIncludesCatalogRequestStatus(t *testing.T) {
 	if got.CatalogRequestStatus != "rejected" || got.CatalogRequestReason != "内容不合规" {
 		t.Fatalf("theme = %+v", got)
 	}
+
+	// 回归:reject→resubmit→approve 之后,子查询必须取"最新一条,如果它是
+	// pending/rejected"而不是"pending/rejected 里最新的一条"——否则这条
+	// 更新的 approved 记录会被过滤条件挡在子查询外,过时的 rejected 行继续
+	// 冒充当前状态。插入一条更晚 applied_at 的 approved 记录,
+	// CatalogRequestStatus 必须变回空。
+	later := time.Now().UTC().Add(time.Minute).Format(time.RFC3339Nano)
+	if _, err := db.Exec(`INSERT INTO theme_catalog_requests(id, theme_id, owner_id, status, reason, version_id, applied_at, reviewed_at)
+		VALUES ('tcr_bob_dto_2', 'thm_bob_tcr_dto', 'usr_bob_tcr_dto', 'approved', '', 'vbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', ?, ?)`,
+		later, later); err != nil {
+		t.Fatal(err)
+	}
+	items, err = store.ListThemes(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var afterApprove Theme
+	for _, item := range items {
+		if item.ID == "thm_bob_tcr_dto" {
+			afterApprove = item
+		}
+	}
+	if afterApprove.CatalogRequestStatus != "" || afterApprove.CatalogRequestReason != "" {
+		t.Fatalf("theme after newer approved request = %+v, want empty catalog request fields", afterApprove)
+	}
 }
 
 func TestUpdateThemeDisablesCurrentVersion(t *testing.T) {
