@@ -489,6 +489,32 @@ func TestAPIContract(t *testing.T) {
 		conflictThemeID := stringField(t, afterApproval.data(), "id", "冲突主题 ID")
 		conflict := user.call(t, http.MethodPost, "/api/v1/me/themes/"+conflictThemeID+"/catalog-request", nil)
 		mustStatus(t, conflict, http.StatusUnprocessableEntity, "slug 冲突 422")
+
+		// 卸载 conflictThemeID 腾出配额(测试环境配额=2,此刻 lilac + conflictThemeID
+		// 已占满)。它从未拿到过 pending 目录申请(上面的提交在 slug 冲突检查处
+		// 就 422 提前返回了),卸载走的是普通的无引用物理删除分支。
+		conflictRemoved := user.call(t, http.MethodDelete, "/api/v1/me/themes/"+conflictThemeID, nil)
+		mustStatus(t, conflictRemoved, http.StatusNoContent, "卸载 slug 冲突的私有副本腾出配额")
+
+		// 撤回 + 卸载回合：一个独立 slug 的新主题,走「提交 → 撤回(DELETE
+		// catalog-request,契约里此前从未被驱动过的 204 路径)→ 卸载」。撤回
+		// 把请求转成 revoked 但保留该行(theme_catalog_requests 只在批准时被
+		// 主题的 CASCADE 顺带清掉,撤回/拒绝的记录会一直留着),卸载走物理
+		// 删除分支(deleteThemeTx 先删 theme_versions 再删 themes)——这正是
+		// migrations/0016 补上 version_id ON DELETE CASCADE 之前会以
+		// FOREIGN KEY constraint failed 500 的路径,端到端钉住这个修复。
+		revocable := user.uploadMultipart(t, "/api/v1/me/themes/import", nil, "file", "catalogcand4.zip", buildThemeZip(t, "catalogcand4"))
+		mustStatus(t, revocable, http.StatusCreated, "导入用于撤回+卸载回归的主题")
+		revocableThemeID := stringField(t, revocable.data(), "id", "撤回+卸载主题 ID")
+
+		revocableSubmitted := user.call(t, http.MethodPost, "/api/v1/me/themes/"+revocableThemeID+"/catalog-request", nil)
+		mustStatus(t, revocableSubmitted, http.StatusCreated, "提交撤回+卸载回归申请")
+
+		cancelled := user.call(t, http.MethodDelete, "/api/v1/me/themes/"+revocableThemeID+"/catalog-request", nil)
+		mustStatus(t, cancelled, http.StatusNoContent, "撤回目录申请")
+
+		uninstalledAfterRevoke := user.call(t, http.MethodDelete, "/api/v1/me/themes/"+revocableThemeID, nil)
+		mustStatus(t, uninstalledAfterRevoke, http.StatusNoContent, "卸载曾有撤回申请的主题")
 	})
 
 	t.Run("公开目录与发现", func(t *testing.T) {
