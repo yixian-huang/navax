@@ -85,6 +85,47 @@ func TestInstallPrivateSameSlugUpgrades(t *testing.T) {
 	}
 }
 
+// TestInstallPrivateUpgradeBlockedByPendingCatalogRequest 确认审核期间
+// (theme_catalog_requests 有一条 pending 记录)重新导入同 slug 会被拒绝——
+// 保证管理员审核的内容就是最终晋升的内容,不会被中途替换。
+func TestInstallPrivateUpgradeBlockedByPendingCatalogRequest(t *testing.T) {
+	db := newTestDB(t)
+	store := NewStore(db)
+	seedUser(t, store, "usr_inst_pending")
+
+	first := installSample(t, store, "usr_inst_pending", "lilac", 10)
+	stamp := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := db.Exec(`
+		INSERT INTO theme_catalog_requests(id, theme_id, owner_id, status, reason, version_id, applied_at)
+		VALUES ('tcr_pending_0001', ?, 'usr_inst_pending', 'pending', '', ?, ?)`,
+		first.ThemeID, first.VersionID, stamp); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := store.InstallPrivate(t.Context(), "usr_inst_pending", "lilac", "upload", "", "digest-2", "", 10,
+		func(themeID string) (Compiled, error) {
+			pkg := samplePackage(t)
+			pkg.CSS = append(pkg.CSS, []byte("\n[data-nx=\"clock\"] { opacity: 0.7; }")...)
+			return Compile(pkg, themeID)
+		}, time.Now().UTC())
+	if !errors.Is(err, ErrCatalogRequestPending) {
+		t.Fatalf("upgrade during pending review error = %v, want ErrCatalogRequestPending", err)
+	}
+
+	// 请求被拒绝后,升级恢复可用。
+	if _, err := db.Exec(`UPDATE theme_catalog_requests SET status = 'rejected' WHERE id = 'tcr_pending_0001'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.InstallPrivate(t.Context(), "usr_inst_pending", "lilac", "upload", "", "digest-3", "", 10,
+		func(themeID string) (Compiled, error) {
+			pkg := samplePackage(t)
+			pkg.CSS = append(pkg.CSS, []byte("\n[data-nx=\"clock\"] { opacity: 0.6; }")...)
+			return Compile(pkg, themeID)
+		}, time.Now().UTC()); err != nil {
+		t.Fatalf("upgrade after rejection error = %v", err)
+	}
+}
+
 func TestInstallPrivateEnforcesQuota(t *testing.T) {
 	db := newTestDB(t)
 	store := NewStore(db)
