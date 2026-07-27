@@ -27,7 +27,8 @@ const requestSelect = `
 func (s *SQLStore) Create(ctx context.Context, params CreateParams) (Request, error) {
 	var requestID string
 	err := database.WithinTx(ctx, s.db, nil, func(tx *sql.Tx) error {
-		var slug, scope, ownerID string
+		var slug, scope string
+		var ownerID sql.NullString
 		var enabled int
 		var currentVersionID sql.NullString
 		err := tx.QueryRowContext(ctx, `
@@ -40,7 +41,7 @@ func (s *SQLStore) Create(ctx context.Context, params CreateParams) (Request, er
 			return err
 		}
 		// 非本人/非私有统一 404,不暴露主题是否存在或归属于谁。
-		if scope != "private" || ownerID != params.OwnerID {
+		if scope != "private" || !ownerID.Valid || ownerID.String != params.OwnerID {
 			return ErrNotFound
 		}
 		if enabled == 0 || !currentVersionID.Valid || currentVersionID.String == "" {
