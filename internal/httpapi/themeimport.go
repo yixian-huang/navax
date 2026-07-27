@@ -124,6 +124,8 @@ func (h *ThemeImportHandler) writeImportError(w http.ResponseWriter, r *http.Req
 	switch {
 	case errors.Is(err, themes.ErrQuotaExceeded):
 		WriteError(w, r, http.StatusConflict, "QUOTA_EXCEEDED", "私有主题数量已达上限(含已卸载但仍被历史发布引用的主题)", nil)
+	case errors.Is(err, themes.ErrCatalogRequestPending):
+		WriteError(w, r, http.StatusConflict, "CONFLICT", "该主题正在目录审核中，暂不可升级", nil)
 	case errors.Is(err, themes.ErrInvalidArchive), errors.Is(err, themes.ErrInvalidManifest),
 		errors.Is(err, themes.ErrInvalidCSS), errors.Is(err, themes.ErrInvalidAsset):
 		WriteError(w, r, http.StatusUnprocessableEntity, "THEME_INVALID", "主题包未通过校验", err)

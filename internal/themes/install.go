@@ -16,6 +16,10 @@ import (
 // ErrQuotaExceeded 表示该用户的私有主题数已达实例配额。
 var ErrQuotaExceeded = errors.New("private theme quota exceeded")
 
+// ErrCatalogRequestPending 表示该主题有一条待审核的目录晋升申请,审核结果
+// 出来前不允许升级——保证管理员审核的内容就是最终晋升的内容。
+var ErrCatalogRequestPending = errors.New("theme has a pending catalog request")
+
 // InstalledTheme 是一次导入(新装或升级)的结果。
 type InstalledTheme struct {
 	ThemeID   string
@@ -86,6 +90,13 @@ func (s *Store) InstallPrivate(ctx context.Context, ownerID, slug, sourceType, s
 		case err != nil:
 			return err
 		default:
+			var pending int
+			if err := tx.QueryRowContext(ctx, `
+				SELECT 1 FROM theme_catalog_requests WHERE theme_id = ? AND status = 'pending'`, themeID).Scan(&pending); err == nil {
+				return ErrCatalogRequestPending
+			} else if !errors.Is(err, sql.ErrNoRows) {
+				return err
+			}
 			// 升级:同一行换版本。source_url 跟随本次来源(github 重新拉取会刷新)。
 			compiled, err := compile(themeID)
 			if err != nil {
