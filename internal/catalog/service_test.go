@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	adminpkg "github.com/yixian-huang/navax/internal/admin"
 	"github.com/yixian-huang/navax/internal/database"
 	"github.com/yixian-huang/navax/internal/navigation"
 	"github.com/yixian-huang/navax/internal/security"
@@ -88,6 +89,60 @@ func TestThemesReturnsEnabledSeeded(t *testing.T) {
 		if theme.ID == "noir" {
 			t.Fatal("已停用的 noir 不应出现")
 		}
+	}
+}
+
+// TestThemesOmitsStaleCatalogRequestStatus 回归 Minor 4:owner 视角的主题
+// 列表同样要取"最新一条,如果它是 pending/rejected",而不是"pending/
+// rejected 里最新的一条"——否则 reject→resubmit→approve 之后,owner 会在
+// 自己的主题卡片上继续看到一条早已过时的拒绝理由。
+func TestThemesOmitsStaleCatalogRequestStatus(t *testing.T) {
+	service, db := newTestService(t)
+	ctx := context.Background()
+	stamp := dbTime(time.Now().UTC())
+	if _, err := db.Exec(`INSERT INTO users (id, username, email, password_hash, role, status, created_at, updated_at)
+		VALUES ('usr_stale_tcr', 'stale', 'stale@example.com', 'x', 'user', 'active', ?, ?)`, stamp, stamp); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO themes (id, name, version, author, description, mode, preview, enabled, is_default,
+			created_at, updated_at, slug, scope, owner_id, source_type)
+		VALUES ('thm_stale_tcr', 'Stale Theme', '1.0.0', 'stale', '', 'light', '', 1, 0, ?, ?, 'stale-theme', 'private', 'usr_stale_tcr', 'upload')`,
+		stamp, stamp); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO theme_versions (id, theme_id, version, source_ref, manifest_json, compiled_css, content_hash, status, created_at)
+		VALUES ('vstalestalestalestalestalestalest', 'thm_stale_tcr', '1.0.0', 'digest', '{}', 'x', 'hashstaletheme01', 'active', ?)`, stamp); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`UPDATE themes SET current_version_id = 'vstalestalestalestalestalestalest' WHERE id = 'thm_stale_tcr'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO theme_catalog_requests(id, theme_id, owner_id, status, reason, version_id, applied_at)
+		VALUES ('tcr_stale_1', 'thm_stale_tcr', 'usr_stale_tcr', 'rejected', '内容不合规', 'vstalestalestalestalestalestalest', ?)`, stamp); err != nil {
+		t.Fatal(err)
+	}
+	later := dbTime(time.Now().UTC().Add(time.Minute))
+	if _, err := db.Exec(`INSERT INTO theme_catalog_requests(id, theme_id, owner_id, status, reason, version_id, applied_at, reviewed_at)
+		VALUES ('tcr_stale_2', 'thm_stale_tcr', 'usr_stale_tcr', 'approved', '', 'vstalestalestalestalestalestalest', ?, ?)`,
+		later, later); err != nil {
+		t.Fatal(err)
+	}
+
+	list, err := service.Themes(ctx, "usr_stale_tcr")
+	if err != nil {
+		t.Fatalf("Themes() error = %v", err)
+	}
+	var got *adminpkg.Theme
+	for i := range list {
+		if list[i].ID == "thm_stale_tcr" {
+			got = &list[i]
+		}
+	}
+	if got == nil {
+		t.Fatal("owner 应能看到自己的私有主题")
+	}
+	if got.CatalogRequestStatus != "" || got.CatalogRequestReason != "" {
+		t.Fatalf("theme after newer approved request = %+v, want empty catalog request fields", *got)
 	}
 }
 

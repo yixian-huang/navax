@@ -209,6 +209,15 @@ func (s *SQLStore) invitation(ctx context.Context, invitationID string) (Invitat
 // 管理后台是全量只读视图:停用的、尚无编译版本的主题也要出现,因此这里
 // 是 LEFT JOIN 而不是 catalog 侧的 eligibility 谓词(设计文档 §8.1:
 // 管理员目录不复用 eligible)。
+//
+// tcr 子查询先不带 status 过滤地取"最新一条"目录申请(id 作为 applied_at
+// 相同时的确定性 tiebreaker),pending/rejected 的过滤放在外层 ON 里——
+// 「最新一条,如果它是 pending/rejected」而不是「pending/rejected 里最新
+// 的一条」。二者在 reject→resubmit→approve 之后不等价:过滤挪进子查询会
+// 让已经过时的 rejected 行继续在 approved 主题上冒充当前状态(与 openapi
+// 里 catalogRequestStatus 字段的语义矛盾);reject→resubmit→revoke 之后,
+// 子查询内过滤还会让 owner 端卡片显示上一轮的拒绝理由而不是空(revoked
+// 不在过滤名单里)。
 const themeSelect = `
 	SELECT themes.id, themes.name, themes.version, themes.author, themes.description,
 	       themes.mode, themes.preview, themes.enabled, themes.is_default,
@@ -220,9 +229,9 @@ const themeSelect = `
 	LEFT JOIN users ON users.id = themes.owner_id
 	LEFT JOIN theme_catalog_requests tcr ON tcr.id = (
 		SELECT id FROM theme_catalog_requests
-		WHERE theme_id = themes.id AND status IN ('pending', 'rejected')
-		ORDER BY applied_at DESC LIMIT 1
-	)`
+		WHERE theme_id = themes.id
+		ORDER BY applied_at DESC, id DESC LIMIT 1
+	) AND tcr.status IN ('pending', 'rejected')`
 
 func (s *SQLStore) ListThemes(ctx context.Context) ([]Theme, error) {
 	rows, err := s.db.QueryContext(ctx, themeSelect+`

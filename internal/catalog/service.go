@@ -111,6 +111,11 @@ func (s *Service) Config(ctx context.Context) (Config, error) {
 // 发布时却静默回落」这种不一致。
 //
 // actorID 为空表示匿名调用：私有主题的 owner_id 非空，因此永不匹配。
+//
+// tcr 子查询语义同 internal/admin/sqlstore.go 的 themeSelect:先不过滤
+// status 地取该 owner 名下"最新一条"目录申请(id 作为 tiebreaker),
+// pending/rejected 过滤放外层 ON——否则 reject→resubmit→revoke 之后,
+// owner 会在自己的主题卡片上看到上一轮已经过时的拒绝理由。
 func (s *Service) Themes(ctx context.Context, actorID string) ([]adminpkg.Theme, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT themes.id, themes.name, themes.version, themes.author, themes.description,
@@ -120,9 +125,9 @@ func (s *Service) Themes(ctx context.Context, actorID string) ([]adminpkg.Theme,
 		FROM themes `+themes.EligibilityJoin+`
 		LEFT JOIN theme_catalog_requests tcr ON tcr.id = (
 			SELECT id FROM theme_catalog_requests
-			WHERE theme_id = themes.id AND owner_id = ? AND status IN ('pending', 'rejected')
-			ORDER BY applied_at DESC LIMIT 1
-		)
+			WHERE theme_id = themes.id AND owner_id = ?
+			ORDER BY applied_at DESC, id DESC LIMIT 1
+		) AND tcr.status IN ('pending', 'rejected')
 		WHERE `+themes.EligibilityWhere+`
 		ORDER BY themes.is_default DESC, themes.name, themes.id`, actorID, actorID)
 	if err != nil {
