@@ -508,6 +508,11 @@ func TestAPIContract(t *testing.T) {
 			map[string]any{"status": "active"})
 		mustStatus(t, restored, http.StatusOK, "恢复 sakura 版本")
 
+		// 非法 status 值 → 422。
+		invalidStatus := admin.call(t, http.MethodPatch, "/api/v1/admin/theme-versions/"+versionID,
+			map[string]any{"status": "bogus"}, withoutRequestValidation())
+		mustStatus(t, invalidStatus, http.StatusUnprocessableEntity, "非法版本状态 422")
+
 		// 未知版本 → 404。
 		missing := admin.call(t, http.MethodPatch, "/api/v1/admin/theme-versions/v00000000000000000000000000000000",
 			map[string]any{"status": "disabled"})
