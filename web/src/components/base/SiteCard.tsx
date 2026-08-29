@@ -215,7 +215,8 @@ export default function SiteCard({ site, density, onOpen, onEdit, onDelete, sear
     );
   }
 
-  // Comfortable: icon + title only; domain/desc live in CardWrapper title tooltip.
+  // Comfortable: icon + title; description mounts site-card-desc when present.
+  // Domain stays in the tooltip so compact rows don't grow a third line.
   return (
     <CardWrapper
       {...shared}
@@ -224,11 +225,18 @@ export default function SiteCard({ site, density, onOpen, onEdit, onDelete, sear
       <span data-nx="site-card-icon" className="site-card-favicon flex h-7 w-7 flex-shrink-0 items-center justify-center">
         <SiteIcon site={site} size={28} />
       </span>
-      <div className="min-w-0 flex-1 flex items-center gap-1.5">
-        <h3 data-nx="site-card-title" className="site-card-title min-w-0 flex-1 text-[13px] font-semibold text-foreground-900 line-clamp-1 group-hover:text-accent-500 transition-colors duration-200">
-          <HighlightText text={site.title} query={q} />
-        </h3>
-        <i className="ri-arrow-right-up-line text-sm text-foreground-300 opacity-0 -translate-x-0.5 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300 flex-shrink-0" />
+      <div className="min-w-0 flex-1 flex flex-col justify-center gap-0.5">
+        <div className="flex items-center gap-1.5">
+          <h3 data-nx="site-card-title" className="site-card-title min-w-0 flex-1 text-[13px] font-semibold text-foreground-900 line-clamp-1 group-hover:text-accent-500 transition-colors duration-200">
+            <HighlightText text={site.title} query={q} />
+          </h3>
+          <i className="ri-arrow-right-up-line text-sm text-foreground-300 opacity-0 -translate-x-0.5 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300 flex-shrink-0" />
+        </div>
+        {desc ? (
+          <span data-nx="site-card-desc" className="site-card-desc block text-[11px] text-foreground-400 truncate leading-tight">
+            <HighlightText text={desc} query={q} />
+          </span>
+        ) : null}
       </div>
     </CardWrapper>
   );

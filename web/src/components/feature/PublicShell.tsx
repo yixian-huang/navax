@@ -200,14 +200,25 @@ export default function PublicShell({
           // Readable logo/links without a permanent glass slab over the photo.
           hasBackground && !scrolled && 'wallpaper-type wallpaper-ink-scope',
         )}>
-          <Link
-            to="/"
-            data-nx="nav-brand"
-            className="group flex items-center rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-400/50"
-            aria-label="nav.ax 首页"
-          >
-            <NavaxLogo size="md" />
-          </Link>
+          <div className="flex items-center min-w-0 gap-3">
+            <Link
+              to="/"
+              data-nx="nav-brand"
+              className="group flex items-center rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-400/50"
+              aria-label="nav.ax 首页"
+            >
+              <NavaxLogo size="md" />
+            </Link>
+            <span
+              data-nx="nav-tagline"
+              className={cn(
+                'hidden sm:inline text-[11px] tracking-[0.18em] uppercase truncate',
+                hasBackground && !scrolled ? 'wallpaper-ink-muted' : 'text-foreground-400',
+              )}
+            >
+              开源导航站
+            </span>
+          </div>
 
           <div className="flex items-center gap-1.5">
             <Link
@@ -241,6 +252,13 @@ export default function PublicShell({
       <main className={cn('flex-1 relative z-10', hasBackground && 'wallpaper-ink-scope')}>
         {children}
       </main>
+      {/* 主题可选取的细分隔线必须在主题根内；页脚是受保护区域，主题选不到。 */}
+      <div className="mx-auto w-full max-w-4xl px-6 md:px-8 mt-8">
+        <div
+          data-nx="divider"
+          className={hasBackground ? 'h-px bg-[color:var(--wp-edge)]' : 'hairline'}
+        />
+      </div>
         </div>
       </div>
 
@@ -257,7 +275,7 @@ export default function PublicShell({
             Quiet type only — legal chrome should not compete with the photo.
           */}
           {hasBackground ? (
-            <div className="flex items-center justify-between gap-4 flex-wrap border-t border-[color:var(--wp-edge)] pt-6">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
               <span className="text-[11px] tracking-wide wallpaper-ink-muted">
                 nav.ax
               </span>
@@ -276,9 +294,7 @@ export default function PublicShell({
               </nav>
             </div>
           ) : (
-            <>
-              <div className="hairline mb-6" />
-              <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
                 <span className="text-[11px] text-foreground-300 tracking-wide">
                   nav.ax · 开源导航站
                 </span>
@@ -295,8 +311,7 @@ export default function PublicShell({
                     源码
                   </a>
                 </nav>
-              </div>
-            </>
+            </div>
           )}
         </div>
       </footer>

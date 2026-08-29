@@ -9,6 +9,10 @@ import { FormField, FormInput } from '@/components/base/FormField';
 import { useToast } from '@/components/base/Toast';
 import { themesApi } from '@/api/themes';
 import { ApiError } from '@/api/client';
+import type { ThemeValidationResult } from '@/api/types';
+
+const THEME_API_URL = 'https://github.com/yixian-huang/navax/blob/main/docs/theme-api.md';
+const STARTER_URL = 'https://github.com/yixian-huang/navax/tree/main/examples/theme-starter';
 
 interface ThemeImportDialogProps {
   open: boolean;
@@ -24,14 +28,20 @@ export function ThemeImportDialog({ open, onClose, onImported }: ThemeImportDial
   const [githubRef, setGithubRef] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [validating, setValidating] = useState(false);
+  const [validation, setValidation] = useState<ThemeValidationResult | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const validateAbortRef = useRef<AbortController | null>(null);
   const { toast } = useToast();
 
   const reset = useCallback(() => {
+    validateAbortRef.current?.abort();
     setTab('github');
     setGithubUrl('');
     setGithubRef('');
     setFile(null);
+    setValidating(false);
+    setValidation(null);
   }, []);
 
   const handleClose = useCallback(() => {
@@ -50,7 +60,41 @@ export function ThemeImportDialog({ open, onClose, onImported }: ThemeImportDial
     return () => document.removeEventListener('keydown', handleEsc, true);
   }, [open, handleClose]);
 
-  const canSubmit = tab === 'github' ? githubUrl.trim().length > 0 : file !== null;
+  useEffect(() => () => {
+    validateAbortRef.current?.abort();
+  }, []);
+
+  const runValidate = useCallback(async (zip: File) => {
+    validateAbortRef.current?.abort();
+    const controller = new AbortController();
+    validateAbortRef.current = controller;
+    setValidating(true);
+    setValidation(null);
+    try {
+      const response = await themesApi.validate(zip, controller.signal);
+      if (controller.signal.aborted) return;
+      setValidation(response.data);
+    } catch (cause) {
+      if (controller.signal.aborted) return;
+      if (cause instanceof DOMException && cause.name === 'AbortError') return;
+      const message = cause instanceof ApiError
+        ? (cause.detail || cause.message)
+        : '校验失败';
+      setValidation({ valid: false, errors: [{ stage: 'archive', path: '', message }] });
+    } finally {
+      if (!controller.signal.aborted) setValidating(false);
+    }
+  }, []);
+
+  const handleZipChosen = useCallback((next: File | null) => {
+    setFile(next);
+    setValidation(null);
+    if (next) void runValidate(next);
+  }, [runValidate]);
+
+  const canSubmit = tab === 'github'
+    ? githubUrl.trim().length > 0
+    : file !== null && validation?.valid === true && !validating;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -89,12 +133,21 @@ export function ThemeImportDialog({ open, onClose, onImported }: ThemeImportDial
         aria-labelledby="theme-import-dialog-title"
         className="relative bg-background-50 rounded-xl p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto"
       >
-        <div className="flex items-center justify-between mb-5">
+        <div className="flex items-center justify-between mb-2">
           <h3 id="theme-import-dialog-title" className="text-lg font-semibold text-foreground-900">导入主题</h3>
           <button onClick={handleClose} className="w-8 h-8 flex items-center justify-center rounded-lg text-foreground-400 hover:bg-background-100 transition-colors duration-150">
             <X className="w-5 h-5" />
           </button>
         </div>
+        <p className="text-[11px] text-foreground-400 mb-4 leading-relaxed">
+          仓库根目录或 zip 根目录需要有 theme.json。示例包见
+          {' '}
+          <a href={STARTER_URL} target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:text-primary-500">theme-starter</a>
+          ，规范见
+          {' '}
+          <a href={THEME_API_URL} target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:text-primary-500">主题 API</a>
+          。GitHub 导入不能指向本应用仓库。
+        </p>
 
         <div className="flex items-center bg-background-100 rounded-lg p-0.5 mb-4">
           {([
@@ -145,7 +198,7 @@ export function ThemeImportDialog({ open, onClose, onImported }: ThemeImportDial
                 type="file"
                 accept=".zip"
                 data-testid="theme-zip-input"
-                onChange={e => setFile(e.target.files?.[0] ?? null)}
+                onChange={e => handleZipChosen(e.target.files?.[0] ?? null)}
                 className="hidden"
               />
               <button
@@ -158,6 +211,26 @@ export function ThemeImportDialog({ open, onClose, onImported }: ThemeImportDial
               </button>
               {file && (
                 <p className="mt-1.5 text-[11px] text-foreground-400 truncate">已选择：{file.name}</p>
+              )}
+              {validating && (
+                <p className="mt-1.5 text-[11px] text-foreground-400 flex items-center gap-1.5">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  正在校验主题包…
+                </p>
+              )}
+              {validation?.valid && (
+                <p data-testid="theme-validate-ok" className="mt-1.5 text-[11px] text-accent-700">包可通过校验，可以导入</p>
+              )}
+              {validation && !validation.valid && (
+                <ul data-testid="theme-validate-errors" className="mt-2 space-y-1 rounded-lg border border-red-200/80 bg-red-50/70 px-3 py-2">
+                  {validation.errors.map((issue, index) => (
+                    <li key={`${issue.stage}-${index}`} className="text-[11px] text-red-700 leading-relaxed">
+                      <span className="font-medium">{issue.stage}</span>
+                      {issue.path ? ` · ${issue.path}` : ''}
+                      {issue.message ? `：${issue.message}` : ''}
+                    </li>
+                  ))}
+                </ul>
               )}
             </FormField>
           )}
@@ -176,8 +249,8 @@ export function ThemeImportDialog({ open, onClose, onImported }: ThemeImportDial
               disabled={!canSubmit || submitting}
               className="h-9 px-4 rounded-lg bg-primary-500 text-background-50 dark:text-foreground-950 text-sm font-medium hover:bg-primary-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-150 flex items-center gap-1.5 whitespace-nowrap"
             >
-              {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Import className="w-4 h-4" />}
-              导入
+              {submitting || (tab === 'zip' && validating) ? <Loader2 className="w-4 h-4 animate-spin" /> : <Import className="w-4 h-4" />}
+              {tab === 'zip' && validating ? '校验中' : '导入'}
             </button>
           </div>
         </form>

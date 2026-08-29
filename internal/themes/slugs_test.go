@@ -20,7 +20,7 @@ func TestReservedCatalogSlugCoversBuiltinsAndOfficialNames(t *testing.T) {
 		}
 	}
 
-	for _, id := range []string{"default", "official", "builtin", "navax", "system", "catalog", "theme"} {
+	for _, id := range []string{"default", "official", "builtin", "navax", "system", "catalog", "theme", "starter", "example"} {
 		if !ReservedCatalogSlug(id) {
 			t.Errorf("official namespace slug %q must be reserved", id)
 		}

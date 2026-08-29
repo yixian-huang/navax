@@ -59,6 +59,14 @@ go run ./cmd/navax   # 本地运行(环境变量见 .env.example)
   `useXxx`;`@/` 别名指向 `web/src/`。React hooks、react-router 与
   `useTranslation` 由 auto-import 提供,不要手动 import。
 
+## 主题作者
+
+写第三方主题不需要改本仓库。请先读 [docs/theme-api.md](docs/theme-api.md)，
+再从 [examples/theme-starter](examples/theme-starter) 复制一份能通过校验的最小包。
+登录后在「主题设置」里 zip 上传或从自己的 GitHub 仓库导入。
+
+本仓库的代码贡献仍按下面的门槛走；主题包本身走导入与官方目录审核。
+
 ## 提交与 PR
 
 - Conventional Commits,英文主题,例如 `feat: add signed instance backups`。

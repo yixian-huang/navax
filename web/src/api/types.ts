@@ -342,6 +342,19 @@ export interface ThemeUpdateStatus {
   latestSha: string;
 }
 
+export type ThemeValidationStage = 'archive' | 'manifest' | 'css' | 'asset';
+
+export interface ThemeValidationIssue {
+  stage: ThemeValidationStage;
+  path: string;
+  message: string;
+}
+
+export interface ThemeValidationResult {
+  valid: boolean;
+  errors: ThemeValidationIssue[];
+}
+
 export type AssetKind = 'avatar' | 'background' | 'site-icon';
 
 export type BackgroundMediaScope = 'instance' | 'user';

@@ -13,6 +13,7 @@ import "strings"
 var reservedCatalogSlugs = map[string]struct{}{
 	"kyoto": {}, "terracotta": {}, "mochi": {}, "pastelsky": {}, "mono": {}, "cyber": {},
 	"default": {}, "official": {}, "builtin": {}, "navax": {}, "system": {}, "catalog": {}, "theme": {},
+	"starter": {}, "example": {},
 }
 
 // ReservedCatalogSlug reports whether slug is kept for official / builtin

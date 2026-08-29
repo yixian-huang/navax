@@ -9,6 +9,8 @@
 | [deployment.md](deployment.md) | 自托管部署（DNS、TLS、反代、环境变量） |
 | [design-background-media-library.md](design-background-media-library.md) | 背景媒体库设计决策 |
 | [../deploy/README.md](../deploy/README.md) | 原生二进制安装与官方生产 CD |
+| [theme-api.md](theme-api.md) | 主题作者契约（钩子、校验、导入） |
+| [../examples/theme-starter](../examples/theme-starter) | 最小可导入主题示例 |
 | [../CONTRIBUTING.md](../CONTRIBUTING.md) | 贡献流程与合并门槛 |
 
 快速开始见仓库根 [README.md](../README.md)。

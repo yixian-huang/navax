@@ -2,6 +2,8 @@
 
 本文件是**主题作者面向的契约**：主题 CSS 能选什么、不能选什么，以及这些钩子在页面上对应哪块内容。
 
+从 [`examples/theme-starter`](../examples/theme-starter) 复制一份能通过校验器的最小包，改 `theme.json` 的 `id` / `name` 再导入。本应用仓库不能直接作为 GitHub 导入源——把示例放到你自己的仓库根目录，或打成 zip。
+
 设计依据：`docs/superpowers/specs/2026-07-23-theme-spec-v1-design.md`。
 钩子清单的权威实现在 `internal/themes/hooks.go`，两者必须一致（有测试保证）。
 
@@ -31,7 +33,7 @@
 | `nav-brand` | 导航栏品牌链接 | stable |
 | `nav-link` | 导航栏普通链接（发现等） | stable |
 | `nav-cta` | 导航栏主行动按钮（登录） | stable |
-| `nav-tagline` | 导航栏标语文字 | experimental ⚠️ |
+| `nav-tagline` | 导航栏品牌旁的标语文字 | experimental |
 | `search-box` | 搜索表单容器 | stable |
 | `search-input` | 搜索输入框 | stable |
 | `category-tablist` | 分类标签栏容器 | stable |
@@ -40,10 +42,10 @@
 | `site-grid` | 站点卡片网格容器（错峰入场动画的父级） | stable |
 | `site-card` | 站点卡片 | stable |
 | `site-card-title` | 卡片标题 | stable |
-| `site-card-desc` | 卡片描述 | experimental ⚠️ |
+| `site-card-desc` | 卡片描述（舒展密度；无描述时不渲染） | experimental |
 | `site-card-icon` | 卡片图标容器 | stable |
 | `section-title` | 区块标题 | stable |
-| `divider` | 细分隔线 | experimental ⚠️ |
+| `divider` | 主题根底部的细分隔线（不是受保护页脚） | experimental |
 | `divider-gradient` | 渐变分隔线 | experimental |
 | `clock` | 时钟 | stable |
 | `greeting` | 问候语 | stable |
@@ -51,10 +53,7 @@
 
 标 `experimental` 的钩子可能在小版本中变更或移除，变更会记录在本文件。
 
-**⚠️ 标记的钩子当前在公开页没有挂载点**（`nav-tagline`、`site-card-desc`、`divider`）。
-它们是已登记的契约，校验器会放行，但页面上暂时不存在对应元素，因此针对它们的
-规则不会有任何视觉效果。这不是 bug，是如实告知——不写明的话你会得到一条编译
-通过却永远不生效的规则，而且没有任何报错。
+`site-card-desc` 只在舒展密度且站点有描述时出现；列表/紧凑密度把描述放在 tooltip，不挂这个钩子。
 
 ### 2.1 主题根上的状态属性
 
@@ -144,6 +143,12 @@
 
 本节面向想把自己的主题包装到 nav.ax 实例上的作者。实现见 `internal/themes`
 （解包/校验/编译）与 `internal/themeimport`（GitHub 拉取与导入编排）。
+
+### 6.0 从 starter 开始
+
+仓库里的 [`examples/theme-starter`](../examples/theme-starter) 是一份能通过校验器的最小主题。复制后改 `id`，打 zip 或把文件放到你自己的 GitHub 仓库根目录再导入。
+
+`id` 取值 `starter` / `example` 以及内置主题名属于官方保留字：私有安装可以，提交官方目录会被拒绝。请换成你自己的 slug。
 
 ### 6.1 包布局
 

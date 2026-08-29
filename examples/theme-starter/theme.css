@@ -1,0 +1,32 @@
+/* nav.ax starter — 最小可导入主题。
+ *
+ * 规范：docs/theme-api.md
+ * 规则：只能选 data-nx 钩子，不要写类名或 html/body。
+ * 编译器会自动给每条选择器加上 [data-theme="starter"] 前缀。
+ */
+
+/* 站点卡片：1px 描边，无阴影 */
+[data-nx="site-card"] {
+  background: oklch(var(--background-50));
+  box-shadow: none;
+  border: 1px solid oklch(var(--background-200) / 0.55);
+}
+
+[data-nx="site-card"]:hover {
+  border-color: oklch(var(--background-300) / 0.85);
+}
+
+/* 导航栏标语 */
+[data-nx="nav-tagline"] {
+  letter-spacing: 0.18em;
+}
+
+/* 卡片描述（舒展密度下可见） */
+[data-nx="site-card-desc"] {
+  color: oklch(var(--foreground-200));
+}
+
+/* 页脚细分隔线 */
+[data-nx="divider"] {
+  background: oklch(var(--secondary-100) / 0.35);
+}

@@ -642,6 +642,21 @@ handlers.push(async (url, init) => {
     return new Response(null, { status: 204 });
   }
   if (url === `${API_BASE}/themes/validate` && method === 'POST') {
+    let fileName = '';
+    const payload: unknown = init?.body ?? null;
+    if (payload !== null && typeof payload === 'object' && 'get' in payload) {
+      const uploaded = (payload as { get: (name: string) => unknown }).get('file');
+      if (uploaded && typeof uploaded === 'object' && 'name' in uploaded) {
+        fileName = String((uploaded as { name: unknown }).name);
+      }
+    }
+    if (/invalid|bad/i.test(fileName)) {
+      return jsonResponse({
+        code: 'OK',
+        data: { valid: false, errors: [{ stage: 'archive', path: '', message: '无法解析 zip' }] },
+        meta: { message: '', detail: '' },
+      });
+    }
     return jsonResponse({ code: 'OK', data: { valid: true, errors: [] }, meta: { message: '', detail: '' } });
   }
   if (url.endsWith('/check-update') && url.startsWith(`${API_BASE}/me/themes/`) && method === 'POST') {

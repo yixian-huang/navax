@@ -144,6 +144,20 @@ Preconditions:
   verification fails, the manifest signature does not match, or the offered
   version is not newer than the running one.
 
+## Writing themes
+
+A theme is a server-validated data package (design tokens, restricted CSS, and
+in-package assets), not executable code. The host always renders public pages
+with its own React components.
+
+- Author contract: [docs/theme-api.md](docs/theme-api.md) (Chinese)
+- Minimal importable example: [examples/theme-starter](examples/theme-starter)
+
+Zip the example, or copy it to the **root** of your own GitHub repository, then
+import it from Theme settings while signed in. Choosing a zip runs a dry-run
+validation first. This application repository is not itself a GitHub import
+source.
+
 ## Project structure
 
 - `cmd/navax/` — entry point and build info
@@ -151,7 +165,8 @@ Preconditions:
 - `migrations/` — SQLite migrations applied automatically at startup
 - `web/` — React/Vite frontend
 - `api/openapi.yaml` — the HTTP API contract (single source of truth for endpoints)
-- `docs/` — requirements, architecture, and deployment notes (Chinese; see below)
+- `examples/theme-starter/` — minimal third-party theme example
+- `docs/` — requirements, architecture, deployment, and the [theme author contract](docs/theme-api.md) (Chinese; see below)
 - `deploy/` — native binary install and official production CD notes
 
 ## Documentation
@@ -162,6 +177,7 @@ Preconditions:
 | [docs/architecture.md](docs/architecture.md) | Module boundaries, data, and security invariants |
 | [docs/deployment.md](docs/deployment.md) | Self-hosting: DNS, TLS, reverse proxy, env vars |
 | [deploy/README.md](deploy/README.md) | systemd install, upgrades, official CI→NoPanel CD |
+| [docs/theme-api.md](docs/theme-api.md) | Theme author contract: hooks, validation, import (Chinese) |
 | [docs/design-background-media-library.md](docs/design-background-media-library.md) | Background media library design note |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Dev commands, merge gates, architecture boundaries (Chinese) |
 

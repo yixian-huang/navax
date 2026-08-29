@@ -103,6 +103,15 @@ NAVAX_UPDATE_PUBLIC_KEY=P0yCGX0jV+TAx/BfmY7tvGKFeRQmtjq/y9/pMl8ciDA=
 - 更新后进程**优雅退出但不自拉起**，必须使用 `Restart=always` 的 systemd 单元（见 [docs/deployment.md](docs/deployment.md) §7）。
 - 校验失败、版本不高于当前版本，或清单签名不匹配时，更新会被拒绝并保留旧版本。
 
+## 编写主题
+
+主题是服务端校验入库的数据包（设计令牌、受限 CSS、包内资产），不是可执行代码。公开页始终由宿主自己的 React 组件渲染。
+
+- 作者契约：[docs/theme-api.md](docs/theme-api.md)
+- 最小可导入示例：[examples/theme-starter](examples/theme-starter)
+
+把示例打成 zip，或把该目录内容放到你自己的 GitHub 仓库根目录后，在登录态「主题设置」里导入。选 zip 时会先做 dry-run 校验。本仓库不能直接作为 GitHub 导入源。
+
 ## 项目结构
 
 - `cmd/navax/`：程序入口与构建信息
@@ -110,7 +119,8 @@ NAVAX_UPDATE_PUBLIC_KEY=P0yCGX0jV+TAx/BfmY7tvGKFeRQmtjq/y9/pMl8ciDA=
 - `migrations/`：启动时自动执行的 SQLite 迁移
 - `web/`：React/Vite 前端
 - `api/openapi.yaml`：HTTP API 契约（接口唯一契约来源）
-- `docs/`：需求、架构与部署（中文，见下）
+- `examples/theme-starter/`：第三方主题最小示例
+- `docs/`：需求、架构、部署与[主题作者契约](docs/theme-api.md)（中文，见下）
 - `deploy/`：原生二进制安装与官方生产 CD 说明
 
 ## 文档
@@ -121,6 +131,7 @@ NAVAX_UPDATE_PUBLIC_KEY=P0yCGX0jV+TAx/BfmY7tvGKFeRQmtjq/y9/pMl8ciDA=
 | [docs/architecture.md](docs/architecture.md) | 模块边界、数据与安全不变量 |
 | [docs/deployment.md](docs/deployment.md) | 自托管：DNS、TLS、反代、环境变量 |
 | [deploy/README.md](deploy/README.md) | systemd 安装、升级、官方 CI→NoPanel CD |
+| [docs/theme-api.md](docs/theme-api.md) | 主题作者契约：钩子、校验规则、导入 |
 | [docs/design-background-media-library.md](docs/design-background-media-library.md) | 背景媒体库专项设计 |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | 开发命令、合并门槛、架构边界 |
 

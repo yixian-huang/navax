@@ -1,11 +1,16 @@
 import { request } from './client';
-import type { AdminThemeCatalogRequest, ApiResponse, Theme, ThemeUpdateStatus } from './types';
+import type { AdminThemeCatalogRequest, ApiResponse, Theme, ThemeUpdateStatus, ThemeValidationResult } from './types';
 
 export const themesApi = {
   importZip: (file: File) => {
     const body = new FormData();
     body.set('file', file);
     return request<ApiResponse<Theme>>('/me/themes/import', { method: 'POST', body });
+  },
+  validate: (file: File, signal?: AbortSignal) => {
+    const body = new FormData();
+    body.set('file', file);
+    return request<ApiResponse<ThemeValidationResult>>('/themes/validate', { method: 'POST', body, signal });
   },
   importGitHub: (githubUrl: string, ref?: string) =>
     request<ApiResponse<Theme>>('/me/themes/import', {

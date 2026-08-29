@@ -34,7 +34,7 @@ setup('初始化实例并准备账号', async ({ request: adminAPI, baseURL }) =
 
   const site = await adminAPI.post(`/api/v1/pages/${systemPageId}/sites`, {
     headers: origin,
-    data: { categoryId, title: 'Example 官网', url: 'https://example.com' },
+    data: { categoryId, title: 'Example 官网', url: 'https://example.com', description: '示例站点' },
   });
   expect(site.status(), await site.text()).toBe(201);
 
