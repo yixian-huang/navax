@@ -21,6 +21,7 @@ check: web/node_modules/.install-stamp
 	@files="$$(gofmt -l $$(find cmd internal migrations tests -type f -name '*.go'))"; \
 		test -z "$$files" || { printf '以下 Go 文件需要 gofmt：\n%s\n' "$$files"; exit 1; }
 	go vet ./...
+	bash deploy/test-classify-nopanel-status.sh
 
 test:
 	go test ./...
