@@ -2492,6 +2492,10 @@ components:
         categories: { type: array, items: { $ref: '#/components/schemas/PublicCategory' } }
         subdomain: { type: [string, 'null'] }
         themeVersionId: { $ref: '#/components/schemas/ThemeVersionId' }
+        layoutSections:
+          type: array
+          items: { type: string, enum: [greeting, search, sites] }
+          description: tier 2 主题声明的 full 模板区块顺序；缺省为宿主默认 greeting → search → sites。
         publishedAt: { $ref: '#/components/schemas/Timestamp' }
         etag: { type: string }
     Theme:
@@ -2532,6 +2536,10 @@ components:
         status: { type: string, enum: [active, disabled] }
         catalogRequestStatus: { type: string, enum: [pending, rejected], description: 私有主题当前是否有未终结的目录审核申请;已批准的直接体现为 scope=catalog,不在此字段保留。 }
         catalogRequestReason: { type: string, maxLength: 300 }
+        layout:
+          allOf:
+            - $ref: '#/components/schemas/ThemeLayout'
+          description: tier 2 主题的声明式布局；tier 1 省略。
     ThemeVersionId:
       type: string
       description: 主题版本 ID，由编译产物的内容哈希派生，因此不可变。
@@ -2599,7 +2607,9 @@ components:
           type: integer
           minimum: 1
           maximum: 3
-          description: 能力级别。当前宿主只接受 1；2 随声明式布局发布，3 语义未定。
+          description: 能力级别。当前宿主接受 1 与 2；3 语义未定。
+        layout:
+          $ref: '#/components/schemas/ThemeLayout'
         tokens:
           type: object
           required: [font, color]
@@ -2623,6 +2633,34 @@ components:
                   type: string
                   description: OKLCH 三通道，L∈[0,1] C∈[0,0.5] H∈[0,360)。
                   pattern: '^\d+(\.\d+)? \d+(\.\d+)? \d+(\.\d+)?$'
+    ThemeLayoutEnumKnob:
+      type: object
+      required: [default, allowed, locked]
+      properties:
+        default: { type: string }
+        allowed: { type: array, minItems: 1, items: { type: string } }
+        locked: { type: boolean }
+    ThemeLayoutRangeKnob:
+      type: object
+      required: [default, min, max, locked]
+      properties:
+        default: { type: integer, minimum: 1, maximum: 8 }
+        min: { type: integer, minimum: 1, maximum: 8 }
+        max: { type: integer, minimum: 1, maximum: 8 }
+        locked: { type: boolean }
+    ThemeLayout:
+      type: object
+      required: [template, density, columns, categoryStyle]
+      properties:
+        template: { $ref: '#/components/schemas/ThemeLayoutEnumKnob' }
+        density: { $ref: '#/components/schemas/ThemeLayoutEnumKnob' }
+        columns: { $ref: '#/components/schemas/ThemeLayoutRangeKnob' }
+        categoryStyle: { $ref: '#/components/schemas/ThemeLayoutEnumKnob' }
+        sections:
+          type: array
+          minItems: 2
+          maxItems: 3
+          items: { type: string, enum: [greeting, search, sites] }
     ThemeImportRequest:
       type: object
       required: [githubUrl]

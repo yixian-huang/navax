@@ -632,6 +632,7 @@ func scanTheme(row rowScanner) (Theme, error) {
 		item.Tier = manifest.Tier
 		item.Vibe = manifest.Vibe
 		item.Swatches = manifest.Swatches
+		item.Layout = manifest.Layout
 	}
 	return item, nil
 }

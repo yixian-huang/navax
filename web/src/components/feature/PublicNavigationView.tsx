@@ -215,6 +215,7 @@ export default function PublicNavigationView({
             showClock={settings?.display.showClock ?? true}
             showSeconds={showSeconds}
             subtitle={subtitle}
+            sections={page?.layoutSections}
           />
         );
     }

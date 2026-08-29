@@ -47,7 +47,8 @@ func TestParseManifestRejects(t *testing.T) {
 		{"非法 id", func(s string) string { return strings.Replace(s, `"id": "sample"`, `"id": "Sample_1"`, 1) }, "id"},
 		{"非法 mode", func(s string) string { return strings.Replace(s, `"mode": "light"`, `"mode": "neon"`, 1) }, "mode"},
 		{"tier 越界", func(s string) string { return strings.Replace(s, `"tier": 1`, `"tier": 4`, 1) }, "tier"},
-		{"tier 2 暂不支持", func(s string) string { return strings.Replace(s, `"tier": 1`, `"tier": 2`, 1) }, "tier"},
+		{"tier 2 缺 layout", func(s string) string { return strings.Replace(s, `"tier": 1`, `"tier": 2`, 1) }, "layout"},
+		{"tier 3 仍拒绝", func(s string) string { return strings.Replace(s, `"tier": 1`, `"tier": 3`, 1) }, "tier"},
 		{"色值非 OKLCH 三通道", func(s string) string {
 			return strings.Replace(s, `"50": "0.99 0.003 12"`, `"50": "#ffffff"`, 1)
 		}, "color"},

@@ -19,9 +19,9 @@ var ErrInvalidManifest = errors.New("invalid theme manifest")
 // SpecVersion 是本实现支持的规范版本。
 const SpecVersion = 1
 
-// MaxTier 是当前宿主接受的最高能力级别。tier 2（声明式布局）随子项目 C
-// 发布，tier 3（JS）语义未定，两者一律拒绝。
-const MaxTier = 1
+// MaxTier 是当前宿主接受的最高能力级别。tier 2 是声明式布局；tier 3（JS）
+// 语义未定，一律拒绝。
+const MaxTier = 2
 
 const maxManifestBytes = 64 * 1024
 
@@ -66,6 +66,7 @@ type Manifest struct {
 	Swatches    [3]string `json:"swatches"`
 	Tier        int       `json:"tier"`
 	Tokens      Tokens    `json:"tokens"`
+	Layout      *Layout   `json:"layout,omitempty"`
 }
 
 // FontFamilies 返回令牌中引用的全部字体族名，供 @font-face 交叉检查。
@@ -135,6 +136,9 @@ func ParseManifest(data []byte) (Manifest, error) {
 	}
 	if m.Tier > MaxTier {
 		return Manifest{}, invalidManifest("宿主暂不支持 tier %d，当前只接受 tier %d", m.Tier, MaxTier)
+	}
+	if err := validateLayout(m); err != nil {
+		return Manifest{}, err
 	}
 	for _, swatch := range m.Swatches {
 		if !hexPattern.MatchString(swatch) {

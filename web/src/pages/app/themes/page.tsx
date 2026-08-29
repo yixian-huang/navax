@@ -26,6 +26,7 @@ import { useToast } from '@/components/base/Toast';
 import { useSaveStatus } from '@/hooks/useSaveStatus';
 import { cn } from '@/lib/utils';
 import { draftSaveToastMessage } from '@/lib/publish-state';
+import { applyThemeLayout } from '@/lib/themeLayout';
 import { themePackagesFromApi, type ThemePackage } from '@/themes/types';
 import { useMyPage, useThemes, useUpdatePageSettings, useSubmitCatalogRequest, useCancelCatalogRequest } from '@/hooks/useQueries';
 import { ErrorState, LoadingSkeleton, ConfirmDialog } from '@/components/base/SharedUI';
@@ -219,6 +220,7 @@ export default function ThemesPage() {
     try {
       await updateSettings.mutateAsync({
         ...page.settings,
+        layout: applyThemeLayout(page.settings.layout, themeById.get(id)?.meta.layout),
         appearance: { ...page.settings.appearance, themeId: id },
       });
       setActiveId(id);

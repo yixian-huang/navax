@@ -162,6 +162,7 @@ func (s *Service) Themes(ctx context.Context, actorID string) ([]adminpkg.Theme,
 		theme.Tier = manifest.Tier
 		theme.Vibe = manifest.Vibe
 		theme.Swatches = manifest.Swatches
+		theme.Layout = manifest.Layout
 		list = append(list, theme)
 	}
 	return list, rows.Err()

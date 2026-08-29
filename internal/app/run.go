@@ -166,6 +166,24 @@ func Run(ctx context.Context, cfg config.Config, build BuildInfo) error {
 	navigationStore.SetThemeVersionResolver(func(ctx context.Context, q navigation.ThemeQueryer, themeID, actorID string) (string, error) {
 		return themes.ResolveEligibleVersion(ctx, q, themeID, actorID)
 	})
+	navigationStore.SetLayoutClamper(func(ctx context.Context, q navigation.ThemeQueryer, themeID, actorID string, layout navigation.LayoutSettings) (navigation.LayoutSettings, []string, error) {
+		spec, err := themes.LoadEligibleLayout(ctx, q, themeID, actorID)
+		if err != nil {
+			return layout, nil, err
+		}
+		next := themes.ApplyLayout(spec, themes.PageLayoutValues{
+			Template: layout.Template, Density: layout.Density, Columns: layout.Columns, CategoryStyle: layout.CategoryStyle,
+		})
+		layout.Template = next.Template
+		layout.Density = next.Density
+		layout.Columns = next.Columns
+		layout.CategoryStyle = next.CategoryStyle
+		var sections []string
+		if spec != nil {
+			sections = spec.Sections
+		}
+		return layout, sections, nil
+	})
 	navigationService := navigation.NewService(navigationStore)
 	navigationHandler := httpapi.NewNavigationHandler(navigationService, cfg.PublicBaseURL, httpapi.NavigationHandlerOptions{
 		Idempotency: idempotencyService,

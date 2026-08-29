@@ -10,6 +10,8 @@ import type { Density } from '@/api/types';
 interface DensitySwitcherProps {
   density: Density;
   onChange: (d: Density) => void;
+  allowed?: Density[];
+  locked?: boolean;
 }
 
 const options: { key: Density; icon: string; title: string }[] = [
@@ -18,27 +20,30 @@ const options: { key: Density; icon: string; title: string }[] = [
   { key: 'comfortable', icon: 'ri-layout-grid-line', title: '舒适' },
 ];
 
-export default function DensitySwitcher({ density, onChange }: DensitySwitcherProps) {
+export default function DensitySwitcher({ density, onChange, allowed, locked = false }: DensitySwitcherProps) {
+  const visible = allowed && allowed.length > 0 ? options.filter(opt => allowed.includes(opt.key)) : options;
   return (
     <div
       className="density-switcher flex items-center wallpaper-type rounded-lg p-0.5"
       role="radiogroup"
       aria-label="显示密度"
     >
-      {options.map(opt => (
+      {visible.map(opt => (
         <button
           key={opt.key}
           type="button"
           role="radio"
           aria-checked={density === opt.key}
           aria-label={opt.title}
-          title={opt.title}
-          onClick={() => onChange(opt.key)}
+          title={locked ? `${opt.title}（主题已锁定）` : opt.title}
+          disabled={locked}
+          onClick={() => { if (!locked) onChange(opt.key); }}
           className={cn(
             'density-switcher-btn w-8 h-8 flex items-center justify-center rounded-lg transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary-400/50',
             density === opt.key
               ? 'density-switcher-btn-active text-primary-500'
               : 'text-foreground-400 hover:text-foreground-700 hover:bg-background-50/30',
+            locked && 'opacity-50 cursor-not-allowed',
           )}
         >
           <i className={cn(opt.icon, 'text-base')} aria-hidden />
