@@ -54,6 +54,20 @@ test.describe('游客', () => {
     }
   });
 
+  test('公开页挂载主题钩子', async ({ page }) => {
+    await page.goto('/');
+    const root = page.locator('[data-nx="page-root"]');
+    await expect(root.locator('[data-nx="nav-tagline"]')).toBeVisible();
+    await expect(root.locator('[data-nx="divider"]')).toHaveCount(1);
+    await expect(root.locator('[data-nx="site-card-desc"]').first()).toBeVisible();
+    const dividerInsideRoot = await root.locator('[data-nx="divider"]').evaluate(
+      el => Boolean(el.closest('[data-nx="page-root"]')),
+    );
+    expect(dividerInsideRoot).toBe(true);
+    const protectedHasDivider = await page.locator('[data-nx-protected] [data-nx="divider"]').count();
+    expect(protectedHasDivider).toBe(0);
+  });
+
   test('主题作用域封闭在宿主 frame 内', async ({ page }) => {
     await page.goto('/');
 

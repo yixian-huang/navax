@@ -1055,7 +1055,10 @@ export default function ThemesPage() {
             className="bg-background-100 p-4 flex flex-col gap-3 min-h-[13rem]"
           >
             <header data-nx="navbar" className="flex items-center justify-between">
-              <span data-nx="nav-brand" className="text-sm font-semibold text-foreground-900">nav.ax</span>
+              <span className="flex items-center gap-2 min-w-0">
+                <span data-nx="nav-brand" className="text-sm font-semibold text-foreground-900">nav.ax</span>
+                <span data-nx="nav-tagline" className="text-[10px] tracking-[0.18em] uppercase text-foreground-400">开源导航站</span>
+              </span>
               <span data-nx="nav-cta" className="text-xs text-foreground-500">登录</span>
             </header>
             <form data-nx="search-box" onSubmit={event => event.preventDefault()}>
@@ -1085,19 +1088,25 @@ export default function ThemesPage() {
               ))}
             </div>
             <div data-nx="site-grid" className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {['GitHub', 'Figma', 'Notion'].map(title => (
+              {[{ title: 'GitHub', desc: '代码托管' }, { title: 'Figma', desc: '设计协作' }, { title: 'Notion', desc: '知识库' }].map(card => (
                 <div
-                  key={title}
+                  key={card.title}
                   data-nx="site-card"
                   className="flex items-center gap-2 p-2 rounded-lg bg-background-50 border border-background-200/70"
                 >
                   <span data-nx="site-card-icon" className="w-7 h-7 rounded-md bg-background-200 flex-shrink-0" />
-                  <span data-nx="site-card-title" className="text-[11px] text-foreground-800 truncate">
-                    {title}
+                  <span className="min-w-0 flex-1">
+                    <span data-nx="site-card-title" className="text-[11px] text-foreground-800 truncate block">
+                      {card.title}
+                    </span>
+                    <span data-nx="site-card-desc" className="text-[10px] text-foreground-400 truncate block">
+                      {card.desc}
+                    </span>
                   </span>
                 </div>
               ))}
             </div>
+            <div data-nx="divider" className="hairline" />
           </div>
         </div>
       </div>

@@ -5,6 +5,7 @@ import { USER } from './accounts';
 const BACKGROUND_PNG = fileURLToPath(new URL('../fixtures/background.png', import.meta.url));
 const BOOKMARKS_HTML = fileURLToPath(new URL('../fixtures/bookmarks.html', import.meta.url));
 const THEME_ZIP = fileURLToPath(new URL('../fixtures/theme-lilac.zip', import.meta.url));
+const THEME_INVALID_ZIP = fileURLToPath(new URL('../fixtures/theme-invalid.zip', import.meta.url));
 
 // 用户关键路径：登录、编辑导航、发布、查看公开页、切换主题。
 test.describe('用户登录', () => {
@@ -132,11 +133,21 @@ test.describe('用户工作台', () => {
     await expect(page.locator('link[data-theme-style]')).toHaveCount(1);
   });
 
+  test('无效 zip 在导入前展示校验错误', async ({ page }) => {
+    await page.goto('/app/themes');
+    await page.getByRole('button', { name: /导入主题/ }).click();
+    await page.getByRole('button', { name: /上传 zip|zip/i }).click();
+    await page.locator('[data-testid="theme-zip-input"]').setInputFiles(THEME_INVALID_ZIP);
+    await expect(page.getByTestId('theme-validate-errors')).toBeVisible({ timeout: 15000 });
+    await expect(page.getByRole('button', { name: /导入/ }).last()).toBeDisabled();
+  });
+
   test('导入 zip 主题并应用', async ({ page }) => {
     await page.goto('/app/themes');
     await page.getByRole('button', { name: /导入主题/ }).click();
     await page.getByRole('button', { name: /上传 zip|zip/i }).click();
     await page.locator('[data-testid="theme-zip-input"]').setInputFiles(THEME_ZIP);
+    await expect(page.getByTestId('theme-validate-ok')).toBeVisible({ timeout: 15000 });
     await page.getByRole('button', { name: /导入/ }).last().click();
     await expect(page.getByText(/已导入主题/)).toBeVisible({ timeout: 15000 });
     // 我的主题分组出现，卡片可选用。

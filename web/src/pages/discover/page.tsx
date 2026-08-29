@@ -200,7 +200,7 @@ export default function DiscoverPage() {
         )}
 
         <div className="mt-20 text-center rise-in" style={{ animationDelay: '200ms' }}>
-          <div className="hairline-gradient mb-8" />
+          <div data-nx="divider-gradient" className="hairline-gradient mb-8" />
           <p className="text-[13px] text-foreground-400 mb-4">也想分享你的导航页？发布后即可出现在发现广场。</p>
           <Link to="/app/publish" className="inline-flex items-center gap-2 h-10 px-5 rounded-lg bg-primary-500 text-background-50 text-[13px] font-medium hover:bg-primary-600 transition-colors duration-150 whitespace-nowrap cursor-pointer">
             <i className="ri-rocket-line text-sm" />立即发布我的导航页
