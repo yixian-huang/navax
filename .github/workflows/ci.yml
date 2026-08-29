@@ -145,14 +145,9 @@ jobs:
             body="$(curl -fsS "https://ops.nopanel.dev/api/v1/deployments/${DEPLOYMENT_ID}" \
               -H "X-API-Key: ${NPC_API_KEY}" \
               -H "Accept: application/json")"
-            eval "$(printf '%s' "$body" | python3 -c '
-import json, sys, shlex
-d = json.load(sys.stdin)
-d = d.get("data", d) if isinstance(d, dict) else {}
-print("status=" + shlex.quote(str(d.get("status") or "")))
-print("step=" + shlex.quote(str(d.get("currentStep") or d.get("currentPhase") or "")))
-print("errmsg=" + shlex.quote(str(d.get("errorMessage") or d.get("error") or "")))
-')"
+            status="$(printf '%s' "$body" | python3 -c 'import json,sys; d=json.load(sys.stdin); d=d.get("data",d) if isinstance(d,dict) else {}; print(d.get("status") or "")')"
+            step="$(printf '%s' "$body" | python3 -c 'import json,sys; d=json.load(sys.stdin); d=d.get("data",d) if isinstance(d,dict) else {}; print(d.get("currentStep") or d.get("currentPhase") or "")')"
+            errmsg="$(printf '%s' "$body" | python3 -c 'import json,sys; d=json.load(sys.stdin); d=d.get("data",d) if isinstance(d,dict) else {}; print((d.get("errorMessage") or d.get("error") or "").replace(chr(10), " | "))')"
             class="$(bash deploy/classify-nopanel-status.sh "$status")"
             echo "status=${status} class=${class} step=${step}"
             case "$class" in
