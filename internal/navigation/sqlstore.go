@@ -21,6 +21,7 @@ type SQLStore struct {
 	// 用函数类型注入而不是直接依赖 themes 包，是为了让本包保持对主题实现
 	// 的无知；run.go 负责接线。
 	resolveThemeVersion ThemeVersionResolver
+	clampLayout         LayoutClamper
 }
 
 // ThemeQueryer 是主题解析所需的最小查询能力，*sql.DB 与 *sql.Tx 都满足。
@@ -39,6 +40,26 @@ func NewSQLStore(db *sql.DB) *SQLStore { return &SQLStore{db: db} }
 // 悄悄写出一条没有主题版本的快照。
 func (s *SQLStore) SetThemeVersionResolver(resolve ThemeVersionResolver) {
 	s.resolveThemeVersion = resolve
+}
+
+// LayoutClamper 按当前主题夹取页面布局旋钮，并返回 full 模板可用的区块顺序。
+// 未设置时不夹取（单测默认）。
+type LayoutClamper func(ctx context.Context, q ThemeQueryer, themeID, actorID string, layout LayoutSettings) (LayoutSettings, []string, error)
+
+func (s *SQLStore) SetLayoutClamper(clamp LayoutClamper) {
+	s.clampLayout = clamp
+}
+
+func (s *SQLStore) applyLayoutClamp(ctx context.Context, q ThemeQueryer, actorID string, settings *PageSettings) ([]string, error) {
+	if s.clampLayout == nil || settings == nil {
+		return nil, nil
+	}
+	next, sections, err := s.clampLayout(ctx, q, settings.Appearance.ThemeID, actorID, settings.Layout)
+	if err != nil {
+		return nil, err
+	}
+	settings.Layout = next
+	return sections, nil
 }
 
 type queryer interface {
@@ -490,6 +511,9 @@ func (s *SQLStore) Settings(ctx context.Context, actor Actor, pageID string) (Pa
 }
 
 func (s *SQLStore) ReplaceSettings(ctx context.Context, actor Actor, pageID string, expectedRevision int, settings PageSettings, now time.Time) (PageSettings, error) {
+	if _, err := s.applyLayoutClamp(ctx, s.db, actor.UserID, &settings); err != nil {
+		return PageSettings{}, err
+	}
 	payload, err := json.Marshal(settings)
 	if err != nil {
 		return PageSettings{}, fmt.Errorf("encode page settings: %w", err)
@@ -568,6 +592,11 @@ func (s *SQLStore) Preview(ctx context.Context, actor Actor, pageID, _ string, n
 	if err != nil {
 		return PublishedPage{}, err
 	}
+	sections, err := s.applyLayoutClamp(ctx, s.db, actor.UserID, &published.Settings)
+	if err != nil {
+		return PublishedPage{}, err
+	}
+	published.LayoutSections = sections
 	published.ThemeVersionID = themeVersionID
 	published.ETag = makeETag(published)
 	return published, nil
@@ -605,6 +634,11 @@ func (s *SQLStore) Publish(ctx context.Context, actor Actor, pageID string, expe
 		if err != nil {
 			return err
 		}
+		sections, err := s.applyLayoutClamp(ctx, tx, actor.UserID, &published.Settings)
+		if err != nil {
+			return err
+		}
+		published.LayoutSections = sections
 		published.ThemeVersionID = themeVersionID
 		published.ETag = makeETag(published)
 		payload, err := json.Marshal(published)

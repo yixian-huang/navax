@@ -216,7 +216,9 @@ type PublishedPage struct {
 	Subdomain      *string          `json:"subdomain,omitempty"`
 	// ThemeVersionID 是发布时锁定的主题版本。公开页据此取样式，因此主题
 	// 后续更新或下架都不会改变已发布页面。
-	ThemeVersionID string    `json:"themeVersionId,omitempty"`
+	ThemeVersionID string `json:"themeVersionId,omitempty"`
+	// LayoutSections 是 tier 2 主题声明的 full 模板区块顺序；缺省为宿主默认。
+	LayoutSections []string  `json:"layoutSections,omitempty"`
 	PublishedAt    time.Time `json:"publishedAt"`
 	ETag           string    `json:"etag"`
 }

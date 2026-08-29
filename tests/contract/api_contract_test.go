@@ -517,6 +517,54 @@ func TestAPIContract(t *testing.T) {
 		mustStatus(t, uninstalledAfterRevoke, http.StatusNoContent, "卸载曾有撤回申请的主题")
 	})
 
+	t.Run("tier2 布局夹取", func(t *testing.T) {
+		imported := user.uploadMultipart(t, "/api/v1/me/themes/import", nil, "file", "gridlock.zip", buildThemeZipTier2(t, "gridlock"))
+		mustStatus(t, imported, http.StatusCreated, "导入 tier2 主题")
+		importedID := stringField(t, imported.data(), "id", "tier2 主题 ID")
+		if imported.data()["layout"] == nil {
+			t.Fatal("tier2 主题响应应含 layout")
+		}
+
+		page := user.call(t, http.MethodGet, "/api/v1/pages/current?scope=personal", nil)
+		mustStatus(t, page, http.StatusOK, "用户页面(夹取前)")
+		settings, ok := page.data()["settings"].(map[string]any)
+		if !ok {
+			t.Fatalf("用户页面缺少 settings: %v", page.data())
+		}
+		layout, ok := settings["layout"].(map[string]any)
+		if !ok {
+			t.Fatalf("用户页面缺少 layout: %v", settings)
+		}
+		appearance, ok := settings["appearance"].(map[string]any)
+		if !ok {
+			t.Fatalf("用户页面缺少 appearance: %v", settings)
+		}
+		layout["template"] = "sidebar"
+		layout["density"] = "list"
+		layout["columns"] = 8
+		layout["categoryStyle"] = "grid"
+		appearance["themeId"] = importedID
+		settings["expectedRevision"] = numberField(t, page.data(), "draftRevision", "夹取前修订号")
+		updated := user.call(t, http.MethodPut, fmt.Sprintf("/api/v1/pages/%s/settings", userPageID), settings)
+		mustStatus(t, updated, http.StatusOK, "应用 tier2 主题并夹取")
+		got, ok := updated.data()["layout"].(map[string]any)
+		if !ok {
+			t.Fatalf("夹取响应缺少 layout: %v", updated.data())
+		}
+		if got["template"] != "full" {
+			t.Fatalf("越界 template = %v, want full", got["template"])
+		}
+		if got["density"] != "comfortable" {
+			t.Fatalf("越界 density = %v, want comfortable", got["density"])
+		}
+		if numberField(t, got, "columns", "夹取后列数") != 6 {
+			t.Fatalf("越界 columns = %v, want 6", got["columns"])
+		}
+		if got["categoryStyle"] != "tabs" {
+			t.Fatalf("锁定 categoryStyle = %v, want tabs", got["categoryStyle"])
+		}
+	})
+
 	t.Run("公开目录与发现", func(t *testing.T) {
 		directory := guest.call(t, http.MethodGet, "/api/v1/public/directory", nil)
 		mustStatus(t, directory, http.StatusOK, "公开目录")
@@ -738,6 +786,44 @@ func buildThemeZip(t *testing.T, slug string) []byte {
 		if _, err := entry.Write(data); err != nil {
 			t.Fatalf("写入 zip 条目 %s: %v", name, err)
 		}
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("关闭 zip writer: %v", err)
+	}
+	return buffer.Bytes()
+}
+
+func buildThemeZipTier2(t *testing.T, slug string) []byte {
+	t.Helper()
+	manifest := fmt.Sprintf(`{
+  "specVersion": 1, "id": %q, "name": "Grid Lock", "version": "1.0.0",
+  "author": "e2e", "license": "MIT", "mode": "light", "vibe": "serious",
+  "swatches": ["#f5f3ff", "#8b5cf6", "#1e1b4b"], "tier": 2,
+  "layout": {
+    "template": { "default": "full", "allowed": ["full", "search-focus"], "locked": false },
+    "density": { "default": "comfortable", "allowed": ["comfortable", "compact"], "locked": false },
+    "columns": { "default": 4, "min": 2, "max": 6, "locked": false },
+    "categoryStyle": { "default": "tabs", "allowed": ["tabs", "folders"], "locked": true },
+    "sections": ["search", "sites", "greeting"]
+  },
+  "tokens": {
+    "font": { "heading": "system-ui", "body": "system-ui", "label": "system-ui", "mono": "monospace" },
+    "color": {
+      "background": { "50": "0.985 0.010 300" },
+      "foreground": { "900": "0.210 0.040 300" },
+      "primary":    { "500": "0.585 0.200 300" },
+      "accent":     { "500": "0.700 0.150 160" }
+    }
+  }
+}`, slug)
+	var buffer bytes.Buffer
+	writer := zip.NewWriter(&buffer)
+	entry, err := writer.Create("theme.json")
+	if err != nil {
+		t.Fatalf("创建 theme.json: %v", err)
+	}
+	if _, err := entry.Write([]byte(manifest)); err != nil {
+		t.Fatalf("写入 theme.json: %v", err)
 	}
 	if err := writer.Close(); err != nil {
 		t.Fatalf("关闭 zip writer: %v", err)

@@ -33,6 +33,7 @@ import { SortableSiteCard, SortableCategoryBlock, WidgetPreview } from '@/compon
 import CategoryFolderWall from '@/components/base/CategoryFolderWall';
 import {
   useMyPage,
+  useThemes,
   useCreateCategory,
   useUpdateCategory,
   useDeleteCategory,
@@ -99,6 +100,7 @@ const CATEGORY_STYLES = [
 
 export default function LinksPage() {
   const { data: pageData, isLoading, isError, error, refetch } = useMyPage();
+  const themesQuery = useThemes();
   const createCategory = useCreateCategory();
   const updateCategory = useUpdateCategory();
   const deleteCategory = useDeleteCategory();
@@ -153,6 +155,7 @@ export default function LinksPage() {
 
   const page = useMemo(() => localPage || pageData, [localPage, pageData]);
   const homeLayout = page?.settings?.layout.template ?? 'full';
+  const themeLayout = themesQuery.data?.find(theme => theme.id === page?.settings?.appearance.themeId)?.layout;
   const pageRef = useRef(page);
   pageRef.current = page;
   const layoutSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1291,13 +1294,15 @@ export default function LinksPage() {
           <div className="space-y-1.5">
             <span className="text-[10px] text-foreground-400">导航页布局</span>
             <div className="grid grid-cols-2 gap-1">
-              {HOME_LAYOUTS.map(l => {
+              {HOME_LAYOUTS.filter(l => !themeLayout || themeLayout.template.allowed.includes(l)).map(l => {
                 const meta = HOME_LAYOUT_META[l];
                 const isActive = homeLayout === l;
+                const locked = Boolean(themeLayout?.template.locked);
                 return (
                   <button
                     key={l}
-                    onClick={() => setHomeLayout(l)}
+                    disabled={locked}
+                    onClick={() => { if (!locked) setHomeLayout(l); }}
                     title={meta.description}
                     className={cn(
                       'flex items-center gap-1.5 px-2 py-1.5 rounded-md text-[10px] font-medium transition-all duration-150 whitespace-nowrap cursor-pointer',
@@ -1317,11 +1322,12 @@ export default function LinksPage() {
           <div className="space-y-1.5">
             <span className="text-[10px] text-foreground-400">密度</span>
             <div className="flex items-center bg-background-100 rounded-md p-0.5">
-              {(['list', 'compact', 'comfortable'] as const).map(d => (
+              {(['list', 'compact', 'comfortable'] as const).filter(d => !themeLayout || themeLayout.density.allowed.includes(d)).map(d => (
                 <button
                   key={d}
                   type="button"
-                  onClick={() => setDensity(d)}
+                  disabled={Boolean(themeLayout?.density.locked)}
+                  onClick={() => { if (!themeLayout?.density.locked) setDensity(d); }}
                   className={cn(
                     'flex-1 py-1 rounded text-[10px] font-medium transition-colors duration-150 whitespace-nowrap',
                     page.settings.layout.density === d
@@ -1338,13 +1344,15 @@ export default function LinksPage() {
           <div className="space-y-1.5">
             <span className="text-[10px] text-foreground-400">分类样式</span>
             <div className="grid grid-cols-2 gap-1">
-              {CATEGORY_STYLES.map(s => {
+              {CATEGORY_STYLES.filter(s => !themeLayout || themeLayout.categoryStyle.allowed.includes(s.id)).map(s => {
                 const isActive = (page.settings.layout.categoryStyle ?? 'tabs') === s.id;
+                const locked = Boolean(themeLayout?.categoryStyle.locked);
                 return (
                   <button
                     key={s.id}
                     type="button"
-                    onClick={() => setCategoryStyle(s.id)}
+                    disabled={locked}
+                    onClick={() => { if (!locked) setCategoryStyle(s.id); }}
                     className={cn(
                       'px-2 py-1.5 rounded-md text-[10px] font-medium transition-all duration-150 whitespace-nowrap cursor-pointer',
                       isActive
@@ -1368,9 +1376,10 @@ export default function LinksPage() {
             </div>
             <input
               type="range"
-              min={1}
-              max={8}
-              value={Math.min(8, Math.max(1, page.settings.layout.columns || 4))}
+              min={themeLayout?.columns.min ?? 1}
+              max={themeLayout?.columns.max ?? 8}
+              disabled={Boolean(themeLayout?.columns.locked)}
+              value={Math.min(themeLayout?.columns.max ?? 8, Math.max(themeLayout?.columns.min ?? 1, page.settings.layout.columns || 4))}
               onChange={e => setColumns(Number(e.target.value))}
               className="w-full accent-primary-500 h-1"
             />

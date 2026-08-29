@@ -321,6 +321,26 @@ func (s *Store) ResolveEligibleVersion(ctx context.Context, themeID, actorID str
 	return ResolveEligibleVersion(ctx, s.db, themeID, actorID)
 }
 
+// LoadEligibleLayout 读取当前可用主题版本的声明式布局。tier 1 返回 nil。
+func LoadEligibleLayout(ctx context.Context, q Queryer, themeID, actorID string) (*Layout, error) {
+	versionID, err := ResolveEligibleVersion(ctx, q, themeID, actorID)
+	if err != nil {
+		return nil, err
+	}
+	var raw string
+	if err := q.QueryRowContext(ctx, `SELECT manifest_json FROM theme_versions WHERE id = ?`, versionID).Scan(&raw); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	var manifest Manifest
+	if err := json.Unmarshal([]byte(raw), &manifest); err != nil {
+		return nil, fmt.Errorf("decode theme manifest: %w", err)
+	}
+	return manifest.Layout, nil
+}
+
 // PrivateThemeSource 返回某 owner 私有主题的来源类型、仓库 URL、当前版本
 // source_ref(已解析 commit sha)与导入时使用的 git ref(分支/tag 名,空串
 // 代表默认分支)。非本人或不存在统一 ErrNotFound(防枚举)。

@@ -16,6 +16,7 @@ import (
 	"github.com/yixian-huang/navax/internal/auth"
 	"github.com/yixian-huang/navax/internal/identity"
 	"github.com/yixian-huang/navax/internal/security"
+	"github.com/yixian-huang/navax/internal/themes"
 )
 
 var (
@@ -128,6 +129,7 @@ type Theme struct {
 	// 目录审核申请状态;已批准的不在这里体现(scope 已经是 catalog)。
 	CatalogRequestStatus string
 	CatalogRequestReason string
+	Layout               *themes.Layout
 }
 
 type ThemePatch struct {

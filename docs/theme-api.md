@@ -150,6 +150,12 @@
 
 `id` 取值 `starter` / `example` 以及内置主题名属于官方保留字：私有安装可以，提交官方目录会被拒绝。请换成你自己的 slug。
 
+### 6.0a tier 2 声明式布局
+
+`tier: 2` 的包必须带 `layout`（见 `ThemeManifestV1.layout`）。宿主会按声明夹取页面的 `template` / `density` / `columns` / `categoryStyle`；`locked` 的旋钮恒为 `default`。`sections` 只影响 `full` 模板的问候 / 搜索 / 站点顺序。
+
+`tier: 1` 不得包含 `layout`。tier 3 仍拒绝。
+
 ### 6.1 包布局
 
 一个主题包是一个 zip（或 GitHub 仓库的 tarball），解压后按白名单提取：

@@ -595,6 +595,9 @@ func themeData(item adminpkg.Theme) map[string]any {
 	if item.CatalogRequestReason != "" {
 		data["catalogRequestReason"] = item.CatalogRequestReason
 	}
+	if item.Layout != nil {
+		data["layout"] = item.Layout
+	}
 	return data
 }
 

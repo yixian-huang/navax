@@ -7,7 +7,7 @@
 // of theme CSS.
 // ============================================================
 
-import type { Theme } from '@/api/types';
+import type { Theme, ThemeLayout } from '@/api/types';
 
 export interface ThemeMeta {
   name: string;
@@ -23,6 +23,7 @@ export interface ThemeMeta {
   /** 未终结(pending/rejected)的目录审核申请状态;已批准的不体现在这里——scope 已经是 catalog。 */
   catalogRequestStatus?: 'pending' | 'rejected';
   catalogRequestReason?: string;
+  layout?: ThemeLayout;
 }
 
 export interface ThemePackage {
@@ -72,6 +73,7 @@ export function themePackageFromApi(theme: Theme): ThemePackage | null {
       sourceUrl: theme.sourceUrl,
       catalogRequestStatus: theme.catalogRequestStatus,
       catalogRequestReason: theme.catalogRequestReason,
+      layout: theme.layout,
     },
   };
 }

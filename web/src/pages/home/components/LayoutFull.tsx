@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { SearchSection, SitesSection, FooterActions, type CategoryStyle } from './SharedSections';
 import { cn } from '@/lib/utils';
 import type { Density, Site } from '@/api/types';
@@ -33,6 +34,7 @@ interface LayoutProps {
   showEngineSelector?: boolean;
   wallpaperMode?: boolean;
   categoryStyle?: CategoryStyle;
+  sections?: Array<'greeting' | 'search' | 'sites'>;
 }
 
 export default function LayoutFull({
@@ -46,16 +48,14 @@ export default function LayoutFull({
   searchSuggestions,
   wallpaperMode = false,
   categoryStyle = 'tabs',
+  sections,
 }: LayoutProps) {
   const showHeader = showGreeting || showDate || showClock;
+  const order = sections && sections.length > 0 ? sections : ['greeting', 'search', 'sites'] as const;
 
-  return (
-    <div className={cn(
-      'mx-auto max-w-4xl px-6 md:px-8 pb-24',
-      wallpaperMode ? 'pt-10 md:pt-14' : 'pt-16 md:pt-24',
-    )}>
-      {showHeader && (
+  const greetingBlock = showHeader ? (
         <header
+          key="greeting"
           className={cn(
             'rise-in',
             wallpaperMode
@@ -82,7 +82,6 @@ export default function LayoutFull({
                   <span className="italic font-medium text-primary-500">{displayName}</span>
                 </h1>
               )}
-              {/* Wallpaper: only show custom subtitle; default marketing line stays non-wallpaper. */}
               {!wallpaperMode && (
                 <p className="mt-4 text-sm text-foreground-400 max-w-md leading-relaxed">
                   {subtitle || '愿你今天专注而从容 —— 这里是你的私人导航台。'}
@@ -102,7 +101,6 @@ export default function LayoutFull({
                 )}>
                   {timeStr}
                 </span>
-                {/* Wallpaper: no seconds / site-count chrome */}
                 {!wallpaperMode && (
                   <>
                     {showSeconds && (
@@ -119,16 +117,22 @@ export default function LayoutFull({
             )}
           </div>
         </header>
-      )}
+  ) : null;
 
+  const blocks: Record<string, ReactNode> = {
+    greeting: greetingBlock,
+    search: (
       <SearchSection
+        key="search"
         query={query} onQueryChange={onQueryChange} engine={engine}
         onEngineChange={onEngineChange} onSearch={onSearch} delay={60}
         suggestions={searchSuggestions} showEngineSelector={showEngineSelector}
         wallpaperMode={wallpaperMode}
       />
-
+    ),
+    sites: (
       <SitesSection
+        key="sites"
         categories={categories} activeCategory={activeCategory}
         onCategoryChange={onCategoryChange} activeSites={activeSites}
         density={density} onDensityChange={onDensityChange}
@@ -136,7 +140,15 @@ export default function LayoutFull({
         wallpaperMode={wallpaperMode}
         categoryStyle={categoryStyle}
       />
+    ),
+  };
 
+  return (
+    <div className={cn(
+      'mx-auto max-w-4xl px-6 md:px-8 pb-24',
+      wallpaperMode ? 'pt-10 md:pt-14' : 'pt-16 md:pt-24',
+    )}>
+      {order.map(name => blocks[name])}
       <FooterActions wallpaperMode={wallpaperMode} />
     </div>
   );

@@ -68,6 +68,7 @@ function normalizePublishedPage(page: PublishedPageContract): PublishedNavigatio
     settings: page.settings,
     etag: page.etag,
     themeVersionId: page.themeVersionId,
+    layoutSections: page.layoutSections,
     ownerName: page.owner.name,
     ownerAvatar: page.owner.avatarUrl,
     title: page.title,

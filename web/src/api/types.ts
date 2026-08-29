@@ -246,6 +246,7 @@ export interface PublishedNavigationPage {
   etag?: string;
   /** 发布时锁定的主题版本；旧快照没有，此时回落基线令牌。 */
   themeVersionId?: string;
+  layoutSections?: Array<'greeting' | 'search' | 'sites'>;
   ownerName: string;
   ownerAvatar: string;
   title: string;
@@ -277,6 +278,7 @@ export interface PublishedPageContract {
    * 改变已发布页面。迁移前发布的旧快照没有这个字段，读取时回落默认主题。
    */
   themeVersionId?: string;
+  layoutSections?: Array<'greeting' | 'search' | 'sites'>;
   publishedAt: string;
   etag: string;
 }
@@ -318,6 +320,7 @@ export interface Theme {
   /** 未终结(pending/rejected)的目录审核申请状态;已批准的不体现在这里——scope 已经是 catalog。 */
   catalogRequestStatus?: 'pending' | 'rejected';
   catalogRequestReason?: string;
+  layout?: ThemeLayout;
   /** @deprecated 使用 default。 */
   isDefault?: boolean;
   /** @deprecated 使用 enabled。 */
@@ -333,6 +336,27 @@ export interface ThemeVersionRow {
   importedBy?: string;
   isCurrent: boolean;
   snapshotRefs: number;
+}
+
+export interface ThemeLayoutEnumKnob {
+  default: string;
+  allowed: string[];
+  locked: boolean;
+}
+
+export interface ThemeLayoutRangeKnob {
+  default: number;
+  min: number;
+  max: number;
+  locked: boolean;
+}
+
+export interface ThemeLayout {
+  template: ThemeLayoutEnumKnob;
+  density: ThemeLayoutEnumKnob;
+  columns: ThemeLayoutRangeKnob;
+  categoryStyle: ThemeLayoutEnumKnob;
+  sections?: Array<'greeting' | 'search' | 'sites'>;
 }
 
 export interface ThemeUpdateStatus {
