@@ -48,6 +48,9 @@ func (s *SQLStore) Create(ctx context.Context, params CreateParams) (Request, er
 		if enabled == 0 || !currentVersionID.Valid || currentVersionID.String == "" {
 			return ErrThemeNotEligible
 		}
+		if themes.ReservedCatalogSlug(slug) {
+			return ErrReservedSlug
+		}
 		var conflict int
 		if err := tx.QueryRowContext(ctx, `SELECT 1 FROM themes WHERE scope = 'catalog' AND slug = ?`, slug).Scan(&conflict); err == nil {
 			return ErrSlugConflict
@@ -185,6 +188,9 @@ func (s *SQLStore) Review(ctx context.Context, params ReviewParams) (Request, er
 				// 当前版本在审核期间被管理员 kill-switch 停用——同上,不能把一个
 				// 已停用的版本晋升成官方目录的当前版本。
 				return ErrInvalidTransition
+			}
+			if themes.ReservedCatalogSlug(slug.String) {
+				return ErrReservedSlug
 			}
 			var conflict int
 			if err := tx.QueryRowContext(ctx, `

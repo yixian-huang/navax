@@ -14,7 +14,7 @@
 - 新包 `internal/themecatalog` 与已有的 `internal/catalog`(站点导航目录/发现页)是两个不相关的领域,包名故意都含"catalog"是因为都在复用 `themes.scope='catalog'` 这个既有词汇,设计与实现中需注意不要互相引用。
 - 不引入"退回私有"(`approved → revoked`)——已确认下架用现有的 kill switch(`enabled` 开关 + B2b 版本级 status)即可覆盖,scope 晋升是单向操作,状态机更简单。
 - catalog slug 全站唯一、private slug 按 owner 唯一(`idx_themes_catalog_slug`/`idx_themes_private_slug`),这是晋升流程里唯一真正棘手的冲突面,贯穿提交、审批两个时间点分别校验。
-- **运营风险(遗留)**:catalog slug 是全站永久(晋升无回退)、由用户提交内容决定的命名空间,且没有保留字校验。未来新增内置主题前,必须先确认其目标 slug 尚未被某个用户晋升的主题占用,否则启动期的内置主题同步迁移会撞上 `idx_themes_catalog_slug` 唯一索引而失败。
+- **运营风险(已补保留字,2026-08-29)**:catalog slug 是全站永久(晋升无回退)。提交与审批均拒绝保留名:`internal/themes.ReservedCatalogSlug` 覆盖全部内置主题 id、迁移 0013 已下架的一等主题 id,以及 `default`/`official`/`navax` 等官方命名空间。新增内置主题时,`TestReservedCatalogSlugCoversBuiltinsAndOfficialNames` 会要求其 id 落在保留集内。私有安装仍可使用保留 slug,只是不能晋升。
 
 ## 2. 数据模型与状态机
 

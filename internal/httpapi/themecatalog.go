@@ -94,6 +94,8 @@ func (h *ThemeCatalogHandler) writeError(w http.ResponseWriter, r *http.Request,
 		WriteError(w, r, http.StatusForbidden, "ADMIN_REQUIRED", "需要管理员权限", nil)
 	case errors.Is(err, themecatalog.ErrSlugConflict):
 		WriteError(w, r, http.StatusUnprocessableEntity, "VALIDATION_FAILED", "该主题 slug 已在官方目录中被占用", nil)
+	case errors.Is(err, themecatalog.ErrReservedSlug):
+		WriteError(w, r, http.StatusUnprocessableEntity, "VALIDATION_FAILED", "该主题 slug 为官方保留名，不能提交到目录", nil)
 	case errors.Is(err, themecatalog.ErrThemeNotEligible):
 		WriteError(w, r, http.StatusUnprocessableEntity, "VALIDATION_FAILED", "主题必须已启用且有可用版本才能提交审核", nil)
 	case errors.Is(err, themecatalog.ErrInvalidInput):

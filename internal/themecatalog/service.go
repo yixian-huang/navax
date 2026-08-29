@@ -22,6 +22,7 @@ var (
 	ErrInvalidTransition = errors.New("invalid theme catalog request status transition")
 	ErrInvalidInput      = errors.New("invalid input")
 	ErrSlugConflict      = errors.New("theme slug already exists in the catalog")
+	ErrReservedSlug      = errors.New("theme slug is reserved for official catalog themes")
 	ErrThemeNotEligible  = errors.New("theme is not eligible for catalog submission")
 )
 
@@ -96,9 +97,9 @@ func NewService(store Store) *Service { return &Service{store: store, now: time.
 
 // Request submits themeID (must be a private theme owned by actor) for
 // catalog review. Store.Create does the DB-dependent eligibility checks
-// (ownership, enabled, has a current version, slug not already in the
-// catalog) because only a single transactional read can answer them
-// consistently.
+// (ownership, enabled, has a current version, slug not reserved and not
+// already in the catalog) because only a single transactional read can
+// answer them consistently.
 func (s *Service) Request(ctx context.Context, actor Actor, themeID, httpRequestID string) (Request, error) {
 	if actor.ID == "" || actor.Username == "" {
 		return Request{}, ErrInvalidInput

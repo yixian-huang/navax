@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -130,5 +131,67 @@ func TestThemeCatalogHandlerLifecycle(t *testing.T) {
 	}
 	if scope != "catalog" {
 		t.Fatalf("scope = %q, want catalog", scope)
+	}
+}
+
+func TestThemeCatalogHandlerRejectsReservedSlug(t *testing.T) {
+	db, authService, _, _, _ := setupHandlerServices(t)
+	themeStore := themes.NewStore(db)
+	stamp := time.Now().UTC()
+	passwordHash, err := security.HashPassword("integration-password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO users (id, username, email, password_hash, role, status, created_at, updated_at)
+		VALUES ('usr_tcr_reserved', 'reserved-owner', 'reserved@example.com', ?, 'user', 'active', ?, ?)`,
+		passwordHash, stamp.Format(time.RFC3339Nano), stamp.Format(time.RFC3339Nano)); err != nil {
+		t.Fatal(err)
+	}
+	_, requesterToken, err := authService.Login(t.Context(), "reserved-owner", "integration-password", "e2e-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	manifest := strings.Replace(auroraManifest, `"id": "aurora"`, `"id": "official"`, 1)
+	var buf bytes.Buffer
+	w := zip.NewWriter(&buf)
+	for name, data := range map[string][]byte{
+		"theme.json": []byte(manifest),
+		"theme.css":  []byte(`[data-nx="site-card"] { border-radius: var(--radius-md); }`),
+	} {
+		f, err := w.Create(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := f.Write(data); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	importService := themeimport.NewService(themeStore, nil, 10)
+	installed, err := importService.ImportZip(t.Context(), "usr_tcr_reserved", buf.Bytes())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	service := themecatalog.NewService(themecatalog.NewSQLStore(db))
+	router := chi.NewRouter()
+	router.Use(middleware.RequestID)
+	handler := NewThemeCatalogHandler(authService, service)
+	router.Group(func(protected chi.Router) {
+		protected.Use(RequireSession(authService))
+		handler.MountUserRoutes(protected)
+	})
+
+	response := performRequest(router, http.MethodPost, "/me/themes/"+installed.ThemeID+"/catalog-request", nil, requesterToken)
+	if response.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("reserved slug status = %d: %s", response.Code, response.Body.String())
+	}
+	body := response.Body.String()
+	if !strings.Contains(body, "官方保留名") {
+		t.Fatalf("reserved slug body = %s", body)
 	}
 }

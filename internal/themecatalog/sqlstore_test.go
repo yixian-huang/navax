@@ -310,3 +310,58 @@ func TestThemeCatalogReviewSlugRaceRecheck(t *testing.T) {
 		t.Fatalf("second approve slug race error = %v", err)
 	}
 }
+
+func TestThemeCatalogRequestRejectsReservedSlug(t *testing.T) {
+	ctx := context.Background()
+	db, err := database.OpenAndMigrate(ctx, database.Config{Path: ":memory:", MaxOpenConns: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	now := time.Date(2026, 8, 29, 12, 0, 0, 0, time.UTC)
+	insertUser(t, db, "usr_gina_rs", "gina", "gina@example.com", "user", now)
+	insertPrivateTheme(t, db, "thm_gina_rs", "usr_gina_rs", "official", "v_gina_rs", now)
+
+	service := NewService(NewSQLStore(db))
+	service.now = func() time.Time { return now }
+	gina := Actor{ID: "usr_gina_rs", Username: "gina", Role: "user", Status: "active"}
+
+	if _, err := service.Request(ctx, gina, "thm_gina_rs", "req-reserved"); !errors.Is(err, ErrReservedSlug) {
+		t.Fatalf("reserved slug at submission error = %v", err)
+	}
+}
+
+func TestThemeCatalogReviewRejectsReservedSlug(t *testing.T) {
+	ctx := context.Background()
+	db, err := database.OpenAndMigrate(ctx, database.Config{Path: ":memory:", MaxOpenConns: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	now := time.Date(2026, 8, 29, 12, 0, 0, 0, time.UTC)
+	insertUser(t, db, "usr_admin_rs", "owner", "admin-rs@example.com", "admin", now)
+	insertUser(t, db, "usr_hugo_rs", "hugo", "hugo@example.com", "user", now)
+	insertPrivateTheme(t, db, "thm_hugo_rs", "usr_hugo_rs", "official", "v_hugo_rs", now)
+
+	stamp := dbTime(now)
+	if _, err := db.Exec(`
+		INSERT INTO theme_catalog_requests(id, theme_id, owner_id, status, reason, version_id, applied_at)
+		VALUES ('tcr_hugo_rs', 'thm_hugo_rs', 'usr_hugo_rs', 'pending', '', 'v_hugo_rs', ?)`, stamp); err != nil {
+		t.Fatal(err)
+	}
+
+	service := NewService(NewSQLStore(db))
+	service.now = func() time.Time { return now }
+	admin := Actor{ID: "usr_admin_rs", Username: "owner", Role: "admin", Status: "active"}
+
+	if _, err := service.Review(ctx, admin, "tcr_hugo_rs", "approve", "", "req-hugo-approve"); !errors.Is(err, ErrReservedSlug) {
+		t.Fatalf("reserved slug at approval error = %v", err)
+	}
+	var scope string
+	if err := db.QueryRow(`SELECT scope FROM themes WHERE id = ?`, "thm_hugo_rs").Scan(&scope); err != nil {
+		t.Fatal(err)
+	}
+	if scope != "private" {
+		t.Fatalf("reserved slug must not be promoted, scope = %q", scope)
+	}
+}
