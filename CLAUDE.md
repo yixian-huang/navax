@@ -33,7 +33,7 @@ nav.ax is a personalized navigation-site service: a single Go 1.25 process serve
 
 ### Backend (Go modular monolith)
 
-- HTTP: stdlib `net/http` + chi. `internal/httpapi/` owns routing, DTOs, auth/permission middleware, and serialization **only** — business logic and transaction boundaries belong to the domain packages under `internal/` (auth, navigation, subdomains, analytics, catalog, linkcheck, maintenance, ...). `internal/app/` wires everything together.
+- HTTP: stdlib `net/http` + chi. `internal/httpapi/` owns routing, DTOs, auth/permission middleware, and serialization **only** — business logic and transaction boundaries belong to the domain packages under `internal/` (auth, navigation, subdomains, analytics, catalog, themes, themeimport, themecatalog, linkcheck, maintenance, ...). `internal/app/` wires everything together.
 - Database: `database/sql` + `modernc.org/sqlite` (pure Go, no CGO). WAL mode, foreign keys, short write transactions. `internal/database/` must not leak SQLite-specific types upward. Migrations in `migrations/` are embedded, sequential, append-only SQL, applied at startup under a process lock.
 - API contract: `api/openapi.yaml` is the single source of truth. Update it whenever an endpoint contract changes; Go DTOs and frontend types must conform to it. `tests/contract/` enforces this at CI time (see below), so a contract change that isn't reflected in the spec fails the build.
 - Publish model: edits produce drafts; publishing writes an immutable JSON snapshot and flips the current pointer in one transaction. Public requests never read draft tables and are served with ETag/Cache-Control.
@@ -52,7 +52,7 @@ nav.ax is a personalized navigation-site service: a single Go 1.25 process serve
 - Tailwind, Radix UI, TanStack Query, react-router v7, i18next, Recharts; two-space indentation; `@/` aliases `web/src/`; Vite outputs to `web/out/` (not `dist/`).
 - Auto-imports: React hooks, react-router-dom hooks/components, and `useTranslation`/`Trans` are auto-imported via `unplugin-auto-import` (see `auto-imports.d.ts`) — do not add manual imports for them.
 - All HTTP calls go through `web/src/api/` (shared client in `client.ts` plus per-domain typed modules). Do not bypass the OpenAPI contract.
-- Themes are TypeScript packages under `web/src/themes/packages/`, wired through `registry.ts`/`manifest.ts`.
+- Themes are server-compiled packages (`internal/themes`); the SPA lists and activates them via `web/src/themes/registry.ts`. Author-facing hooks live in `docs/theme-api.md`. Do not reintroduce CSS strings in `web/src/themes/packages/`.
 - Pages live under `web/src/pages/` grouped by surface (public home, app, admin, discover, setup, login, invite); routes are configured in `web/src/router/config.tsx` (a custom ESLint rule constrains route `element` JSX).
 
 ### Tests (`tests/`)

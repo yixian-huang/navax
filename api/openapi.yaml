@@ -1176,7 +1176,7 @@ paths:
     post:
       tags: [Themes]
       operationId: submitThemeCatalogRequest
-      description: 私有主题所有者提交官方目录审核申请。
+      description: 私有主题所有者提交官方目录审核申请。slug 已在官方目录中被占用、或属于保留名（内置主题、已下架的一等主题、以及 default/official 等官方命名空间）时返回 422。
       security: [{ sessionCookie: [] }]
       parameters:
         - $ref: '#/components/parameters/ThemeId'

@@ -32,7 +32,10 @@ internal/httpapi/      路由、DTO、响应、认证/权限中间件
 internal/auth/         用户、邀请、Session、密码
 internal/navigation/   页面、分类、站点、排序、偏好，以及发布快照/公开投影/ETag
 internal/catalog/      公开配置、主题列表、推荐目录、发现页
-internal/assets/       图片上传：默认写入 `NAVAX_DATA_DIR/assets` 本地磁盘；管理员完整配置并启用 S3 后新上传可走对象存储，配置不完整或 S3 不可用时自动回退本地
+internal/themes/       主题包解析、CSS 校验/编译、内置主题、版本与资产存储
+internal/themeimport/  zip / GitHub 导入、私有安装与手动更新检查
+internal/themecatalog/ 私有主题晋升官方目录的申请-审批
+internal/assets/       图片上传：默认写入 `NAVAX_DATA_DIR/assets` 本地磁盘；管理员启用并完整配置 S3 后新上传可走对象存储，配置不完整或 S3 不可用时自动回退本地
 internal/analytics/    匿名事件、聚合和保留策略
 internal/admin/        运营管理和审计
 internal/integrations/ SMTP、对象存储与 DNS 的配置/测试适配器（DNS 与 S3 写入为扩展预留）
@@ -47,7 +50,7 @@ HTTP 层只负责解析、校验、授权和序列化；业务模块拥有事务
 
 ## 4. 数据与一致性
 
-核心表为 `users`、`sessions`、`invitations`、`navigation_pages`、`categories`、`sites`、`published_snapshots`、`subdomain_requests`、`themes`、`theme_versions`、`theme_assets`、公共目录、统计、资源、配置、审计、更新和备份记录。
+核心表为 `users`、`sessions`、`invitations`、`navigation_pages`、`categories`、`sites`、`published_snapshots`、`subdomain_requests`、`themes`、`theme_versions`、`theme_assets`、`theme_catalog_requests`、公共目录、统计、资源、配置、审计、更新和备份记录。
 
 - 启用 `foreign_keys`、WAL、`busy_timeout` 和短写事务。
 - 分类/站点重排一次校验全部 ID 后一次提交，只增加一次草稿 revision。
