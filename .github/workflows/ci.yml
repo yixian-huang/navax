@@ -108,6 +108,7 @@ jobs:
     permissions:
       contents: read
     steps:
+      - uses: actions/checkout@v6
       - name: Trigger NoPanel production deploy
         env:
           NPC_API_KEY: ${{ secrets.NPC_API_KEY }}
@@ -144,16 +145,24 @@ jobs:
             body="$(curl -fsS "https://ops.nopanel.dev/api/v1/deployments/${DEPLOYMENT_ID}" \
               -H "X-API-Key: ${NPC_API_KEY}" \
               -H "Accept: application/json")"
-            status="$(printf '%s' "$body" | python3 -c 'import json,sys; d=json.load(sys.stdin); d=d.get("data",d) if isinstance(d,dict) else {}; print(d.get("status") or "")')"
-            step="$(printf '%s' "$body" | python3 -c 'import json,sys; d=json.load(sys.stdin); d=d.get("data",d) if isinstance(d,dict) else {}; print(d.get("currentStep") or d.get("currentPhase") or "")')"
-            echo "status=${status} step=${step}"
-            case "$status" in
-              success|succeeded|healthy|done)
+            eval "$(printf '%s' "$body" | python3 -c '
+import json, sys, shlex
+d = json.load(sys.stdin)
+d = d.get("data", d) if isinstance(d, dict) else {}
+print("status=" + shlex.quote(str(d.get("status") or "")))
+print("step=" + shlex.quote(str(d.get("currentStep") or d.get("currentPhase") or "")))
+print("errmsg=" + shlex.quote(str(d.get("errorMessage") or d.get("error") or "")))
+')"
+            class="$(bash deploy/classify-nopanel-status.sh "$status")"
+            echo "status=${status} class=${class} step=${step}"
+            case "$class" in
+              success)
                 echo "Deploy succeeded"
                 exit 0
                 ;;
-              failed|error|cancelled|canceled|rolled_back|rollback_failed|activation_failed|health_check_failed)
+              failure)
                 echo "::error::Deploy failed with status=${status}"
+                [ -n "$errmsg" ] && echo "::error::${errmsg}"
                 printf '%s\n' "$body" | python3 -m json.tool || printf '%s\n' "$body"
                 exit 1
                 ;;

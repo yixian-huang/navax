@@ -57,6 +57,8 @@ bash install-navax.sh /root/navax
 | 方式 | 何时 | 说明 |
 |------|------|------|
 | **GitHub Actions（默认）** | `main` 上 push 且 CI 三门禁（verify / e2e / container）全绿 | 见 `.github/workflows/ci.yml` 的 `deploy-production` job |
+
+`deploy-production` 的等待循环用 `deploy/classify-nopanel-status.sh` 判断终态：`success`/`done` 立刻绿；`preflight_failed`、`activation_failed` 以及任何 `*_failed` 立刻红并打印 npc 的 `errorMessage`。不要把失败状态当 in-flight 去空等满 30 分钟（2026-08-29 磁盘 preflight 曾因此空转）。本地回归：`bash deploy/test-classify-nopanel-status.sh`。
 | **手动 CLI** | 任意时刻 | `npc deploy navax production --ref main --wait` |
 | **Deploy hook** | 任意 git ref | `POST https://ops.nopanel.dev/api/v1/deploy-hooks/<project>/production` + `{"gitRef":"<sha|branch|tag>"}` |
 
