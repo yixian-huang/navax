@@ -45,7 +45,7 @@ export const SortableSiteCard = memo(function SortableSiteCard({
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: site.id,
-    data: { type: 'site', categoryId: site.categoryId },
+    data: { type: 'site', surface: 'preview', siteId: site.id, categoryId: site.categoryId },
     animateLayoutChanges: () => false,
   });
 
@@ -194,7 +194,7 @@ export const SortableCategoryBlock = memo(function SortableCategoryBlock({
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: category.id,
-    data: { type: 'category', categoryId: category.id },
+    data: { type: 'category', surface: 'preview', categoryId: category.id },
     animateLayoutChanges: () => false,
   });
   const [collapsed, setCollapsed] = useState(() => defaultCollapsed || category.sites.length > 24);
@@ -232,15 +232,14 @@ export const SortableCategoryBlock = memo(function SortableCategoryBlock({
       data-category-id={category.id}
     >
       <div className="flex items-center gap-1 mb-1.5 px-0.5 min-w-0">
-        <button
-          type="button"
+        <span
           {...attributes}
           {...listeners}
           className="cursor-grab active:cursor-grabbing text-foreground-300 hover:text-foreground-500 touch-none flex-shrink-0 p-0.5 rounded hover:bg-background-100"
           aria-label={`拖拽分类 ${category.name}`}
         >
           <GripVertical className="w-4 h-4" />
-        </button>
+        </span>
         <button
           type="button"
           onClick={() => setCollapsed(c => !c)}

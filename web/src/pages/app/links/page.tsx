@@ -7,29 +7,29 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Plus, Trash2, Search, Save,
   Monitor, Tablet, Smartphone,
-  PanelLeftClose, PanelLeft, Layout, List, Grid3X3, X, Link2, Loader2, Check,
+  PanelLeftClose, PanelLeft, Layout, List, Grid3X3, Link2, Loader2, Check,
   Eye, EyeOff,
 } from 'lucide-react';
 import { navigationApi } from '@/api/navigation';
 import {
   DndContext,
+  DragOverlay,
   closestCenter,
   pointerWithin,
   KeyboardSensor,
-  PointerSensor,
   useSensor,
   useSensors,
   type CollisionDetection,
   type DragEndEvent,
   type DragOverEvent,
+  type DragStartEvent,
 } from '@dnd-kit/core';
 import {
   SortableContext,
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
-  arrayMove,
 } from '@dnd-kit/sortable';
-import { SortableSiteCard, SortableCategoryBlock, WidgetPreview } from '@/components/feature/DnDPreview';
+import { SortableCategoryBlock, WidgetPreview } from '@/components/feature/DnDPreview';
 import CategoryFolderWall from '@/components/base/CategoryFolderWall';
 import {
   useMyPage,
@@ -61,14 +61,30 @@ import SiteTable, { type FlatSite } from '@/pages/app/links/components/SiteTable
 import BatchLinkChecker from '@/pages/app/links/components/BatchLinkChecker';
 import LayoutSettingsDialog, { layoutSummary } from '@/pages/app/links/components/LayoutSettingsDialog';
 import GroupedCategoryList from '@/pages/app/links/components/GroupedCategoryList';
+import { EditorPointerSensor } from '@/pages/app/links/dndSensor';
+import {
+  applyCategoryReorder,
+  applySiteDrop,
+  overFromEvent,
+  parseDndId,
+  type DndItemData,
+} from '@/pages/app/links/dndIds';
 import type { NavigationPage, Category, Site, Density, LayoutTemplate, PageSettings } from '@/api/types';
 
-/** Resolve which category an over/active id belongs to (category id or site id). */
-function findCategoryId(page: NavigationPage, itemId: string | number): string | null {
-  const id = String(itemId);
-  if (page.categories.some(c => c.id === id)) return id;
-  const cat = page.categories.find(c => c.sites.some(s => s.id === id));
-  return cat?.id ?? null;
+function siteIdFromActive(id: string | number, data: DndItemData | undefined): string | null {
+  if (data?.siteId) return data.siteId;
+  const parsed = parseDndId(id);
+  if (parsed.kind === 'preview') return parsed.id;
+  if (parsed.kind === 'manage-site') return parsed.siteId;
+  return null;
+}
+
+function categoryIdFromDnd(id: string | number, data: DndItemData | undefined): string | null {
+  if (data?.categoryId) return data.categoryId;
+  const parsed = parseDndId(id);
+  if (parsed.kind === 'manage-cat' || parsed.kind === 'manage-drop') return parsed.categoryId;
+  if (parsed.kind === 'preview') return parsed.id;
+  return null;
 }
 
 type Viewport = 'desktop' | 'tablet' | 'mobile';
@@ -135,6 +151,8 @@ export default function LinksPage() {
   const [hasLayoutChanges, setHasLayoutChanges] = useState(false);
   const [layoutSaveState, setLayoutSaveState] = useState<'idle' | 'dirty' | 'saving' | 'saved' | 'error'>('idle');
   const [overCategoryId, setOverCategoryId] = useState<string | null>(null);
+  const [overlaySite, setOverlaySite] = useState<Site | null>(null);
+  const [overlayCategory, setOverlayCategory] = useState<Category | null>(null);
   /** Category focused from the left panel — preview expands + scrolls to it. */
   const [previewFocusCatId, setPreviewFocusCatId] = useState<string | null>(null);
   const previewScrollRef = useRef<HTMLDivElement>(null);
@@ -259,10 +277,15 @@ export default function LinksPage() {
 
   // Sensors
   const sensors = useSensors(
-    // Slightly longer distance avoids accidental drags when clicking action icons.
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(EditorPointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
+
+  const clearDragChrome = useCallback(() => {
+    setOverCategoryId(null);
+    setOverlaySite(null);
+    setOverlayCategory(null);
+  }, []);
 
   // ---- Handlers ----
   const handleCreateCategory = (name: string, icon: string) => {
@@ -589,137 +612,127 @@ export default function LinksPage() {
     return closestCenter(args);
   }, []);
 
-  // ---- DnD (multi-container: categories + sites across categories) ----
+  // ---- DnD (one context: manage list + preview) ----
+  const visibleCategoryIds = useMemo(
+    () => (filter ? new Set(filtered.map(c => c.id)) : undefined),
+    [filter, filtered],
+  );
+
+  const commitCategories = useCallback((snapshot: NavigationPage, categories: Category[]) => {
+    const next = { ...snapshot, categories };
+    pageRef.current = next;
+    setLocalPage(next);
+  }, []);
+
+  const handleDragStart = useCallback((event: DragStartEvent) => {
+    const data = event.active.data.current as DndItemData | undefined;
+    const current = pageRef.current;
+    if (!current || !data) return;
+    if (data.type === 'site') {
+      const id = siteIdFromActive(event.active.id, data);
+      const site = id
+        ? current.categories.flatMap(cat => cat.sites).find(item => item.id === id)
+        : undefined;
+      setOverlaySite(site ?? null);
+      setOverlayCategory(null);
+      return;
+    }
+    if (data.type === 'category') {
+      setOverlayCategory(current.categories.find(cat => cat.id === data.categoryId) ?? null);
+      setOverlaySite(null);
+    }
+  }, []);
+
   const handleDragOver = useCallback(
     (event: DragOverEvent) => {
       const { active, over } = event;
-      if (!over || !page) {
+      if (!over) {
         setOverCategoryId(null);
         return;
       }
 
-      // Only sites cross containers; categories reorder on drag end.
-      if (active.data.current?.type === 'category') {
+      const activeData = active.data.current as DndItemData | undefined;
+      if (!activeData || activeData.type !== 'site') {
         setOverCategoryId(null);
         return;
       }
 
-      const activeCatId =
-        (active.data.current?.categoryId as string | undefined)
-        ?? findCategoryId(page, active.id);
-      const overCatId = findCategoryId(page, over.id);
-
-      if (!activeCatId || !overCatId) {
+      const snapshot = pageRef.current;
+      if (!snapshot) {
         setOverCategoryId(null);
         return;
       }
 
-      setOverCategoryId(overCatId);
+      const activeSiteId = siteIdFromActive(active.id, activeData);
+      const liveCategoryId = activeSiteId
+        ? snapshot.categories.find(cat => cat.sites.some(site => site.id === activeSiteId))?.id
+        : undefined;
+      const activeCategoryId = liveCategoryId ?? activeData.categoryId;
+      const dropOver = overFromEvent(over.id, over.data.current as DndItemData | undefined, expandedCat);
+      if (!activeSiteId || !activeCategoryId || !dropOver) {
+        setOverCategoryId(null);
+        return;
+      }
 
-      // Same category: sortable handles order on drag end.
-      if (activeCatId === overCatId) return;
+      setOverCategoryId(dropOver.categoryId);
+      // Same group: sortable order settles on drag end.
+      if (activeCategoryId === dropOver.categoryId) return;
 
-      // Cross-category: move site into target list while dragging (dnd-kit multi-container).
-      setLocalPage(prev => {
-        const p = prev || page;
-        const sourceCat = p.categories.find(c => c.sites.some(s => s.id === active.id));
-        const targetCat = p.categories.find(c => c.id === overCatId);
-        if (!sourceCat || !targetCat || sourceCat.id === targetCat.id) return p;
-
-        const site = sourceCat.sites.find(s => s.id === active.id);
-        if (!site) return p;
-
-        const overIsSiteInTarget = targetCat.sites.some(s => s.id === over.id);
-        const overIndex = overIsSiteInTarget
-          ? targetCat.sites.findIndex(s => s.id === over.id)
-          : targetCat.sites.length;
-
-        const moved: Site = { ...site, categoryId: targetCat.id };
-        return {
-          ...p,
-          categories: p.categories.map(c => {
-            if (c.id === sourceCat.id) {
-              return { ...c, sites: c.sites.filter(s => s.id !== active.id) };
-            }
-            if (c.id === targetCat.id) {
-              const sites = c.sites.filter(s => s.id !== active.id);
-              const next = [...sites];
-              next.splice(Math.max(0, overIndex), 0, moved);
-              return { ...c, sites: next };
-            }
-            return c;
-          }),
-        };
+      const result = applySiteDrop({
+        categories: snapshot.categories,
+        activeSiteId,
+        activeCategoryId,
+        over: dropOver,
+        visibleCategoryIds,
       });
+      if (!result.changed) return;
+      commitCategories(snapshot, result.categories);
       markLayoutDirty();
+      if (result.expandCategoryId) setExpandedCat(result.expandCategoryId);
     },
-    [page, markLayoutDirty],
+    [expandedCat, visibleCategoryIds, commitCategories, markLayoutDirty],
   );
 
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
       const { active, over } = event;
-      setOverCategoryId(null);
+      clearDragChrome();
       let changed = layoutDirtyRef.current;
+      const snapshot = pageRef.current;
 
-      if (over && page) {
-        const activeData = active.data.current;
+      if (over && snapshot) {
+        const activeData = active.data.current as DndItemData | undefined;
+        const overData = over.data.current as DndItemData | undefined;
 
-        // Category reorder
         if (activeData?.type === 'category') {
-          const overCatId = findCategoryId(page, over.id);
-          if (overCatId && active.id !== overCatId) {
-            const catIdx = page.categories.findIndex(c => c.id === active.id);
-            const overIdx = page.categories.findIndex(c => c.id === overCatId);
-            if (catIdx !== -1 && overIdx !== -1 && catIdx !== overIdx) {
-              setLocalPage(prev => {
-                const p = prev || page;
-                return { ...p, categories: arrayMove(p.categories, catIdx, overIdx) };
-              });
+          const activeCatId = categoryIdFromDnd(active.id, activeData);
+          const overCatId = categoryIdFromDnd(over.id, overData);
+          if (activeCatId && overCatId) {
+            const next = applyCategoryReorder(snapshot.categories, activeCatId, overCatId);
+            if (next !== snapshot.categories) {
+              commitCategories(snapshot, next);
               changed = true;
             }
           }
-        } else {
-          // Site: cross-category already applied in dragOver; finalize same-category reorder.
-          const sourceCat = page.categories.find(c => c.sites.some(s => s.id === active.id));
-          if (sourceCat) {
-            const overCatId = findCategoryId(page, over.id);
-            if (overCatId && overCatId !== sourceCat.id) {
-              setLocalPage(prev => {
-                const p = prev || page;
-                const from = p.categories.find(c => c.sites.some(s => s.id === active.id));
-                if (!from || from.id === overCatId) return p;
-                const site = from.sites.find(s => s.id === active.id);
-                if (!site) return p;
-                return {
-                  ...p,
-                  categories: p.categories.map(c => {
-                    if (c.id === from.id) return { ...c, sites: c.sites.filter(s => s.id !== active.id) };
-                    if (c.id === overCatId) {
-                      if (c.sites.some(s => s.id === active.id)) return c;
-                      return { ...c, sites: [...c.sites, { ...site, categoryId: c.id }] };
-                    }
-                    return c;
-                  }),
-                };
-              });
+        } else if (activeData?.type === 'site') {
+          const activeSiteId = siteIdFromActive(active.id, activeData);
+          const liveCategoryId = activeSiteId
+            ? snapshot.categories.find(cat => cat.sites.some(site => site.id === activeSiteId))?.id
+            : undefined;
+          const activeCategoryId = liveCategoryId ?? activeData.categoryId;
+          const dropOver = overFromEvent(over.id, overData, expandedCat);
+          if (activeSiteId && activeCategoryId) {
+            const result = applySiteDrop({
+              categories: snapshot.categories,
+              activeSiteId,
+              activeCategoryId,
+              over: dropOver,
+              visibleCategoryIds,
+            });
+            if (result.changed) {
+              commitCategories(snapshot, result.categories);
               changed = true;
-            } else if (overCatId === sourceCat.id && active.id !== over.id) {
-              const oldIndex = sourceCat.sites.findIndex(s => s.id === active.id);
-              const newIndex = sourceCat.sites.findIndex(s => s.id === over.id);
-              if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
-                setLocalPage(prev => {
-                  const p = prev || page;
-                  return {
-                    ...p,
-                    categories: p.categories.map(c => {
-                      if (c.id !== sourceCat.id) return c;
-                      return { ...c, sites: arrayMove(c.sites, oldIndex, newIndex) };
-                    }),
-                  };
-                });
-                changed = true;
-              }
+              if (result.expandCategoryId) setExpandedCat(result.expandCategoryId);
             }
           }
         }
@@ -735,7 +748,7 @@ export default function LinksPage() {
         }, 80);
       }
     },
-    [page, markLayoutDirty, persistLayout],
+    [clearDragChrome, commitCategories, expandedCat, visibleCategoryIds, markLayoutDirty, persistLayout],
   );
 
   // ---- Layout settings ----
@@ -870,6 +883,14 @@ export default function LinksPage() {
           站点多时建议用「链接管理」+ 表格视图
         </span>
       </div>
+      <DndContext
+        sensors={showLayoutDialog ? [] : sensors}
+        collisionDetection={collisionDetection}
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragEnd={handleDragEnd}
+        onDragCancel={clearDragChrome}
+      >
       <div className="flex flex-1 min-h-0 overflow-hidden">
       {/* ---- Left Panel ---- */}
       <div
@@ -1164,12 +1185,6 @@ export default function LinksPage() {
 
         {/* Preview content — only this region scrolls */}
         <div ref={previewScrollRef} className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 md:p-6">
-          <DndContext
-            sensors={sensors}
-            collisionDetection={collisionDetection}
-            onDragEnd={handleDragEnd}
-            onDragOver={handleDragOver}
-          >
             <div
               className={cn(
                 'mx-auto border border-background-200/70 rounded-xl bg-white overflow-hidden transition-all duration-300',
@@ -1236,7 +1251,6 @@ export default function LinksPage() {
                 )}
               </div>
             </div>
-          </DndContext>
 
           <p className="text-[11px] text-foreground-300 mt-3 text-center">
             {page.settings.layout.categoryStyle === 'folders'
@@ -1245,6 +1259,19 @@ export default function LinksPage() {
           </p>
         </div>
       </div>
+      </div>
+      <DragOverlay dropAnimation={null}>
+        {overlaySite ? (
+          <div className="px-3 py-2 rounded-md bg-white shadow-overlay border border-background-200 text-xs font-medium text-foreground-800">
+            {overlaySite.title}
+          </div>
+        ) : overlayCategory ? (
+          <div className="px-3 py-2 rounded-md bg-white shadow-overlay border border-background-200 text-xs font-medium">
+            {overlayCategory.name}
+          </div>
+        ) : null}
+      </DragOverlay>
+      </DndContext>
 
       {/* Dialogs */}
       <LayoutSettingsDialog
@@ -1307,7 +1334,6 @@ export default function LinksPage() {
         onDelete={handleDeletePanel}
         deleteLabel={panelMode === 'category' ? '删除分类' : '删除站点'}
       />
-      </div>
     </div>
   );
 }
