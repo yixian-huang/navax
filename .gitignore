@@ -12,6 +12,8 @@
 /internal/webui/dist/*
 !/internal/webui/dist/placeholder.txt
 /.playwright-cli/
+.playwright-mcp/
+.specstory/
 
 /tests/e2e/node_modules/
 /tests/e2e/.auth/

@@ -1,57 +1,32 @@
 # Repository Guidelines
 
-## Project Structure & Module Organization
+Architecture and security invariants: `docs/architecture.md`. Product scope: `docs/requirements.md`.
 
-nav.ax is a Go service with an embedded React SPA. `cmd/navax/` contains the executable entry point. Backend features are grouped by domain under `internal/`; HTTP handlers live in `internal/httpapi/`, database migrations in `migrations/`, and the API contract in `api/openapi.yaml`. Frontend routes, components, hooks, and API adapters live under `web/src/`. Vite outputs to `web/out/`; `make embed` copies that bundle into `internal/webui/dist/` for Go embedding. Product decisions are documented in `docs/requirements.md` and `docs/architecture.md`.
+nav.ax is a Go service with an embedded React SPA. `internal/httpapi/` owns routing, DTOs, middleware, and serialization only — business logic stays in domain packages. `api/openapi.yaml` is the contract. Vite writes `web/out/`; `make embed` copies it to `internal/webui/dist/`. Do not introduce ORM, DI, event bus, Redis, queues, or PostgreSQL.
 
-## Build, Test, and Development Commands
+## Commands
 
-Run from the repository root:
+Merge gates: `make check`, `go test -race ./...`, `make build`. Also run `make test-contract` and `make test-mock` for contract or mock changes, and `make e2e` plus a browser smoke test (loading, empty, error, mobile, keyboard, dark theme) for UI. Local binary: `go run ./cmd/navax`.
 
-- `make check` runs TypeScript checks, ESLint, `gofmt` verification, and `go vet`.
-- `make test` runs all Go tests.
-- `make frontend` creates the production SPA bundle.
-- `make build` builds the frontend, embeds it, and writes `bin/navax`.
-- `go run ./cmd/navax` starts the service with local environment settings.
-- `docker compose up --build` starts the production-style container.
+Frontend-only: `cd web && npm run dev` with `VITE_ENABLE_API_MOCKS=true` (no Go proxy). Production code must never depend on `web/src/mocks/`.
 
-For frontend-only work, use `cd web && npm run dev`.
+## Style
 
-## Coding Style & Naming Conventions
+Go: `gofmt`; table-driven `*_test.go` next to source; SQLite integration tests for persistence and auth; regression tests with bug fixes. React: auto-import hooks, react-router, and `useTranslation`/`Trans` (`web/auto-imports.d.ts`) — do not add those imports by hand. API calls go through `web/src/api/`. Routes live in `web/src/router/config.tsx`. Themes are server-compiled (`internal/themes`); do not put theme CSS strings in the SPA.
 
-Format Go with `gofmt`; keep packages small and domain-focused. Exported Go names use `PascalCase`, internal names use `camelCase`, and tests use `TestFeatureCondition`. React code uses TypeScript, functional components, two-space indentation, `PascalCase` component files, `useXxx` hooks, and the `@/` import alias. Keep API calls in `web/src/api/`; do not bypass the OpenAPI contract or add production dependencies on `web/src/mocks/`.
+## Shipping
 
-## Testing Guidelines
+Do not invent commits or PRs. If the user only asked to implement or fix, leave the work uncommitted. When they ask to 提交 / 合并 / 上线 / 发布 / 部署生产 / ship / merge / deploy, complete the path without reconfirming each step:
 
-Place Go tests beside source as `*_test.go`; prefer table-driven unit tests and SQLite integration tests for persistence or authorization behavior. Every change must pass `make check`, `go test -race ./...`, and `make build`. Endpoint contract changes must also pass `make test-contract` (boots the real binary and validates against `api/openapi.yaml`), and UI/flow changes `make e2e` (Playwright over the embedded-frontend binary; see `tests/e2e/`). UI changes also require a browser smoke test of loading, empty, error, mobile, keyboard, and dark-theme states. Add regression tests for bug fixes.
+1. Branch (`fix/…`, `feat/…`) — never commit on `main`.
+2. Verify the gates that apply; fix failures first.
+3. Commit related files only. Conventional Commit subject in English.
+4. `git push -u origin HEAD`, `gh pr create`, `gh pr merge --auto --rebase`. Wait for `verify` / `e2e` / `container`. Do not force-push `main`.
+5. Official `nav.ax` CD runs after `main` is green (`deploy/README.md`). Use `npc deploy navax production --ref main --wait` only if CD failed or the user asked for an out-of-band release.
+6. Report the PR URL, merge status, and whether production CD ran.
 
-## Commit & Pull Request Guidelines
+Need an explicit ask before: force-push or history rewrite; deleting remotes beyond normal PR head cleanup; changing GitHub secrets, branch rules, or production env vars; out-of-band production deploy; committing secrets or `.env` files.
 
-Use focused Conventional Commit subjects, for example `feat: add signed instance backups` or `fix: reject private link-check targets`. Pull requests must describe user-visible behavior, linked issues, migrations or configuration changes, and verification performed. Include screenshots for UI changes and update `api/openapi.yaml` when an endpoint contract changes.
+## Language and security
 
-`main` is protected: direct pushes are rejected for everyone, admins included. Push your work to a branch, open a PR (`gh pr create`), and enable auto-merge (`gh pr merge --auto --rebase`); it merges once the `verify`, `e2e`, and `container` checks pass with the branch up to date. Run the merge gates locally before pushing.
-
-## Agent shipping workflow (commit / PR / production)
-
-Agents **should not** invent commits or open PRs for unfinished work. Once the requested change is complete, verified, and the user asks to ship (or uses phrases like 提交、合并、上线、发布、部署生产、ship、merge、deploy), do the full path without asking again for each step:
-
-1. **Branch** — If on `main` with local changes, create a focused branch (`fix/…`, `feat/…`). Never commit directly on `main`.
-2. **Verify** — Run the merge gates that apply (`make check`, `go test -race ./...`; contract/e2e/build when the change touches those surfaces). Fix failures before committing.
-3. **Commit** — Stage only related files; Conventional Commit subject in English; body in complete sentences when useful. Do not amend published commits unless explicitly asked.
-4. **PR + auto-merge** — `git push -u origin HEAD`, `gh pr create` (summary + test plan), then `gh pr merge --auto --rebase`. Wait for CI green and merge; do not force-push `main`.
-5. **Production deploy** — Official `nav.ax` CD is automatic: after merge to `main`, the `deploy-production` job runs when `verify` / `e2e` / `container` are green (see `deploy/README.md`). No separate manual deploy step unless CI/CD failed or the user asks for an out-of-band release (`npc deploy navax production --ref main --wait`).
-6. **Report** — Reply with the PR URL, merge status, and whether production CD was triggered or needs attention.
-
-Still require an **explicit user request** before:
-
-- Force-push, hard reset, or rewriting shared history
-- Deleting branches/tags or destructive remote ops beyond the normal PR head cleanup
-- Changing GitHub secrets, protected-branch rules, or production env vars
-- Manual production deploy when auto-CD was not requested and the user only asked for a local fix
-- Committing secrets or `.env` files
-
-If the user only asks to implement/fix something and does **not** mention shipping, leave changes uncommitted (or commit only if they later ask). Prefer one ship path end-to-end over stopping after “code done” when they already said 提交合并/部署.
-
-## Security & Agent Instructions
-
-Keep secrets out of source and browser storage; sessions use HttpOnly cookies. Validate authorization server-side and preserve SSRF, upload, origin, and rate-limit protections. All user-facing agent responses must be written in Chinese.
+User-facing replies in Chinese. Identifiers and commit subjects in English. Keep secrets out of source and browser storage. Preserve SSRF, upload, origin, and rate-limit protections.
