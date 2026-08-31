@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
-  Plus, Edit2, Trash2, ChevronRight, Search, Save,
+  Plus, Trash2, Search, Save,
   Monitor, Tablet, Smartphone,
   PanelLeftClose, PanelLeft, Layout, List, Grid3X3, X, Link2, Loader2, Check,
   Eye, EyeOff,
@@ -46,7 +46,6 @@ import {
   ConfirmDialog,
   EmptyState,
   ErrorState,
-  Badge,
   LoadingSkeleton,
 } from '@/components/base/SharedUI';
 import { AddCategoryDialog, AddSiteDialog } from '@/components/base/AddDialogs';
@@ -61,7 +60,7 @@ import { draftSaveToastMessage } from '@/lib/publish-state';
 import SiteTable, { type FlatSite } from '@/pages/app/links/components/SiteTable';
 import BatchLinkChecker from '@/pages/app/links/components/BatchLinkChecker';
 import LayoutSettingsDialog, { layoutSummary } from '@/pages/app/links/components/LayoutSettingsDialog';
-import IconRenderer from '@/components/base/IconRenderer';
+import GroupedCategoryList from '@/pages/app/links/components/GroupedCategoryList';
 import type { NavigationPage, Category, Site, Density, LayoutTemplate, PageSettings } from '@/api/types';
 
 /** Resolve which category an over/active id belongs to (category id or site id). */
@@ -1050,208 +1049,37 @@ export default function LinksPage() {
           />
         ) : (
           <div className="h-full overflow-y-auto">
-          {filtered.map(cat => (
-            <div key={cat.id} className="border-b border-background-100 last:border-b-0">
-              <button
-                onClick={() => {
-                  const next = expandedCat === cat.id ? null : cat.id;
-                  setExpandedCat(next);
-                  if (next) focusCategoryFromManage(next);
-                  else setPreviewFocusCatId(null);
-                }}
-                className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-background-50 transition-colors duration-150 text-left"
-              >
-                {/* Category select all checkbox */}
-                {cat.sites.length > 0 && (() => {
-                  const allInCatSelected = cat.sites.every(s => selectedSiteIds.has(s.id));
-                  const someInCatSelected = cat.sites.some(s => selectedSiteIds.has(s.id));
-                  return (
-                    <button
-                      onClick={e => { e.stopPropagation(); handleToggleSelectAllInCategory(cat.id); }}
-                      className={cn(
-                        'w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition-all duration-150',
-                        allInCatSelected
-                          ? 'bg-primary-500 border-primary-500'
-                          : someInCatSelected
-                            ? 'border-primary-400 bg-primary-50'
-                            : 'border-background-300 hover:border-primary-400',
-                      )}
-                    >
-                      {allInCatSelected ? (
-                        <i className="ri-check-line text-[10px] text-background-50" />
-                      ) : someInCatSelected ? (
-                        <div className="w-2 h-0.5 bg-primary-400 rounded-full" />
-                      ) : null}
-                    </button>
-                  );
-                })()}
-                <div className="w-6 h-6 rounded-md bg-background-100 flex items-center justify-center flex-shrink-0">
-                  <IconRenderer icon={cat.icon} className="text-xs text-primary-500" />
-                </div>
-                <span className={cn(
-                  'flex-1 text-xs font-medium truncate',
-                  cat.enabled === false ? 'text-foreground-400' : 'text-foreground-900',
-                )}>
-                  {cat.name}
-                </span>
-                {cat.enabled === false && (
-                  <EyeOff className="w-3.5 h-3.5 text-foreground-400 flex-shrink-0" aria-label="分类已隐藏" />
-                )}
-                <Badge>{cat.sites.length}</Badge>
-                <ChevronRight
-                  className={cn(
-                    'w-3.5 h-3.5 text-foreground-300 transition-transform duration-150',
-                    expandedCat === cat.id && 'rotate-90',
-                  )}
-                />
-                <button
-                  onClick={e => {
-                    e.stopPropagation();
-                    void handleToggleCategoryEnabled(cat);
-                  }}
-                  className="w-6 h-6 flex items-center justify-center rounded text-foreground-300 hover:text-primary-500 hover:bg-primary-50 transition-colors duration-150"
-                  aria-label={cat.enabled === false ? `显示分类 ${cat.name}` : `隐藏分类 ${cat.name}`}
-                  title={cat.enabled === false ? '显示分类（需发布后生效）' : '隐藏分类（需发布后生效）'}
-                >
-                  {cat.enabled === false ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-                </button>
-                <button
-                  onClick={e => {
-                    e.stopPropagation();
-                    setPanelMode('category');
-                    setPanelTitle('编辑分类');
-                    setEditingItem({ id: cat.id, type: 'category' });
-                    setPanelOpen(true);
-                  }}
-                  className="w-6 h-6 flex items-center justify-center rounded text-foreground-300 hover:text-primary-500 hover:bg-primary-50 transition-colors duration-150"
-                  aria-label={`编辑 ${cat.name}`}
-                >
-                  <Edit2 className="w-3 h-3" />
-                </button>
-                <button
-                  onClick={e => {
-                    e.stopPropagation();
-                    setDeleteTarget({ type: 'category', id: cat.id, name: cat.name });
-                  }}
-                  className="w-6 h-6 flex items-center justify-center rounded text-foreground-300 hover:text-red-500 hover:bg-red-50 transition-colors duration-150"
-                  aria-label={`删除 ${cat.name}`}
-                >
-                  <Trash2 className="w-3 h-3" />
-                </button>
-              </button>
-
-              {expandedCat === cat.id && (
-                <div className="bg-background-50/50">
-                  {cat.sites.length === 0 ? (
-                    <div className="px-4 py-3 text-center">
-                      <p className="text-[11px] text-foreground-400">暂无站点</p>
-                    </div>
-                  ) : (
-                    cat.sites.map(site => {
-                      const isSiteSelected = selectedSiteIds.has(site.id);
-                      return (
-                      <div
-                        key={site.id}
-                        className={cn(
-                          'flex items-center gap-2 px-4 py-2 hover:bg-background-100/50 transition-colors duration-150 group',
-                          isSiteSelected && 'bg-primary-50/40',
-                        )}
-                      >
-                        <button
-                          onClick={() => handleToggleSelect(site.id)}
-                          className={cn(
-                            'w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition-all duration-150',
-                            isSiteSelected
-                              ? 'bg-primary-500 border-primary-500'
-                              : 'border-background-300 hover:border-primary-400',
-                          )}
-                        >
-                          {isSiteSelected && <i className="ri-check-line text-[10px] text-background-50" />}
-                        </button>
-                        <div className={cn(
-                          'w-6 h-6 rounded flex items-center justify-center flex-shrink-0',
-                          site.enabled === false ? 'bg-background-100 opacity-70' : 'bg-background-100',
-                        )}>
-                          <IconRenderer icon={site.icon} url={site.url} size={14} alt={site.title} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className={cn(
-                            'text-xs font-medium break-words leading-snug',
-                            site.enabled === false ? 'text-foreground-500' : 'text-foreground-800',
-                          )}>
-                            {site.title}
-                          </div>
-                          {site.description ? (
-                            <div className="text-[10px] text-foreground-400 line-clamp-1 break-words">
-                              {site.description}
-                            </div>
-                          ) : null}
-                          <a
-                            href={site.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-[10px] text-primary-600 hover:underline font-mono truncate block"
-                            title={site.url}
-                            onClick={e => e.stopPropagation()}
-                          >
-                            {site.url.replace(/^https?:\/\//, '').replace(/^www\./, '')}
-                          </a>
-                        </div>
-                        {site.enabled === false && (
-                          <span
-                            className="flex-shrink-0 text-foreground-400"
-                            title="隐藏：发布后访客不可见"
-                            aria-label="已隐藏"
-                          >
-                            <EyeOff className="w-3.5 h-3.5" />
-                          </span>
-                        )}
-                        <button
-                          onClick={() => void handleToggleSiteEnabled(site)}
-                          className="w-6 h-6 flex items-center justify-center rounded opacity-0 group-hover:opacity-100 transition-all duration-150 flex-shrink-0 text-foreground-300 hover:text-foreground-600 hover:bg-background-100"
-                          aria-label={site.enabled === false ? `上架 ${site.title}` : `隐藏 ${site.title}`}
-                          title={site.enabled === false ? '上架（需发布后生效）' : '隐藏（需发布后生效）'}
-                        >
-                          {site.enabled === false ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
-                        </button>
-                        <button
-                          onClick={() => {
-                            setPanelMode('site');
-                            setPanelTitle('编辑站点');
-                            setEditingItem({ id: site.id, type: 'site' });
-                            setPanelOpen(true);
-                          }}
-                          className="w-6 h-6 flex items-center justify-center rounded text-foreground-300 opacity-0 group-hover:opacity-100 hover:text-primary-500 hover:bg-primary-50 transition-all duration-150 flex-shrink-0"
-                          aria-label={`编辑 ${site.title}`}
-                        >
-                          <Edit2 className="w-3 h-3" />
-                        </button>
-                        <button
-                          onClick={() =>
-                            setDeleteTarget({ type: 'site', id: site.id, name: site.title })
-                          }
-                          className="w-6 h-6 flex items-center justify-center rounded text-foreground-300 opacity-0 group-hover:opacity-100 hover:text-red-500 hover:bg-red-50 transition-all duration-150 flex-shrink-0"
-                          aria-label={`删除 ${site.title}`}
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      </div>
-                      );
-                    })
-                  )}
-                  <button
-                    onClick={() => {
-                      setAddSiteCatId(cat.id);
-                      setShowAddSite(true);
-                    }}
-                    className="w-full px-4 py-2 text-[10px] text-primary-600 hover:text-primary-700 font-medium hover:bg-primary-50/30 transition-colors duration-150 text-left"
-                  >
-                    + 添加站点到此分类
-                  </button>
-                </div>
-              )}
-            </div>
-          ))}
+          <GroupedCategoryList
+            categories={filtered}
+            expandedCat={expandedCat}
+            selectedSiteIds={selectedSiteIds}
+            overCategoryId={overCategoryId}
+            onToggleCategory={id => {
+              const next = expandedCat === id ? null : id;
+              setExpandedCat(next);
+              if (next) focusCategoryFromManage(next);
+              else setPreviewFocusCatId(null);
+            }}
+            onToggleSelectAllInCategory={handleToggleSelectAllInCategory}
+            onToggleSelect={handleToggleSelect}
+            onToggleCategoryEnabled={cat => void handleToggleCategoryEnabled(cat)}
+            onEditCategory={cat => {
+              setPanelMode('category');
+              setPanelTitle('编辑分类');
+              setEditingItem({ id: cat.id, type: 'category' });
+              setPanelOpen(true);
+            }}
+            onDeleteCategory={cat => setDeleteTarget({ type: 'category', id: cat.id, name: cat.name })}
+            onAddSite={id => { setAddSiteCatId(id); setShowAddSite(true); }}
+            onToggleSiteEnabled={site => void handleToggleSiteEnabled(site)}
+            onEditSite={site => {
+              setPanelMode('site');
+              setPanelTitle('编辑站点');
+              setEditingItem({ id: site.id, type: 'site' });
+              setPanelOpen(true);
+            }}
+            onDeleteSite={site => setDeleteTarget({ type: 'site', id: site.id, name: site.title })}
+          />
 
           {filtered.length === 0 && filter && (
             <div className="py-8 text-center text-xs text-foreground-400">

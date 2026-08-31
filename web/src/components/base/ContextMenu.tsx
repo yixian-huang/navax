@@ -4,7 +4,7 @@
 // ============================================================
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { ExternalLink, Copy, Pencil, Trash2 } from 'lucide-react';
+import { ExternalLink, Copy, Pencil, Trash2, Eye, EyeOff, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export interface ContextMenuAction {
@@ -123,11 +123,12 @@ export function useContextMenu(): ContextMenuResponse {
 }
 
 export function createSiteContextActions(
-  site: { id: string; title: string; url: string },
+  site: { id: string; title: string; url: string; enabled?: boolean },
   callbacks: {
     onOpen?: () => void;
     onCopyLink?: () => void;
     onEdit?: () => void;
+    onToggleEnabled?: () => void;
     onDelete?: () => void;
   },
 ): ContextMenuAction[] {
@@ -141,8 +142,47 @@ export function createSiteContextActions(
   if (callbacks.onEdit) {
     actions.push({ id: 'edit', label: '编辑站点', icon: Pencil, onClick: callbacks.onEdit });
   }
+  if (callbacks.onToggleEnabled) {
+    actions.push({
+      id: 'toggle-enabled',
+      label: site.enabled === false ? '上架站点' : '隐藏站点',
+      icon: site.enabled === false ? Eye : EyeOff,
+      onClick: callbacks.onToggleEnabled,
+    });
+  }
   if (callbacks.onDelete) {
     actions.push({ id: 'delete', label: '删除站点', icon: Trash2, onClick: callbacks.onDelete, destructive: true });
+  }
+  return actions;
+}
+
+export function createCategoryContextActions(
+  category: { id: string; name: string; enabled?: boolean },
+  callbacks: {
+    onEdit?: () => void;
+    onAddSite?: () => void;
+    onToggleEnabled?: () => void;
+    onDelete?: () => void;
+  },
+): ContextMenuAction[] {
+  const actions: ContextMenuAction[] = [];
+  if (callbacks.onEdit) {
+    actions.push({ id: 'edit', label: '编辑分类', icon: Pencil, onClick: callbacks.onEdit });
+  }
+  if (callbacks.onAddSite) {
+    actions.push({ id: 'add-site', label: '添加站点', icon: Plus, onClick: callbacks.onAddSite });
+  }
+  if (callbacks.onToggleEnabled) {
+    const hidden = category.enabled === false;
+    actions.push({
+      id: 'toggle-enabled',
+      label: hidden ? '显示分类' : '隐藏分类',
+      icon: hidden ? Eye : EyeOff,
+      onClick: callbacks.onToggleEnabled,
+    });
+  }
+  if (callbacks.onDelete) {
+    actions.push({ id: 'delete', label: '删除分类', icon: Trash2, onClick: callbacks.onDelete, destructive: true });
   }
   return actions;
 }
