@@ -130,21 +130,32 @@ export function overFromEvent(
   overId: string | number,
   overData: DndItemData | undefined,
   expandedCat: string | null,
+  activeType?: DndItemType,
 ): ApplySiteDropOver | null {
+  const asDrop = (categoryId: string): ApplySiteDropOver => ({
+    type: 'drop',
+    categoryId,
+    collapsed: expandedCat !== categoryId,
+  });
+
   if (overData?.type === 'drop') {
-    return { type: 'drop', categoryId: overData.categoryId, collapsed: expandedCat !== overData.categoryId };
+    return asDrop(overData.categoryId);
   }
   if (overData?.type === 'site' && overData.siteId) {
     return { type: 'site', categoryId: overData.categoryId, siteId: overData.siteId };
   }
   if (overData?.type === 'category') {
+    // pointerWithin prefers the first-registered manage-cat-* over manage-drop-*.
+    // A site over a category header is an append/expand, not a category reorder.
+    if (activeType === 'site') return asDrop(overData.categoryId);
     return { type: 'category', categoryId: overData.categoryId };
   }
   const parsed = parseDndId(overId);
   if (parsed.kind === 'manage-drop') {
-    return { type: 'drop', categoryId: parsed.categoryId, collapsed: expandedCat !== parsed.categoryId };
+    return asDrop(parsed.categoryId);
   }
   if (parsed.kind === 'manage-cat') {
+    if (activeType === 'site') return asDrop(parsed.categoryId);
     return { type: 'category', categoryId: parsed.categoryId };
   }
   return null;

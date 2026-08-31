@@ -668,7 +668,7 @@ export default function LinksPage() {
         ? snapshot.categories.find(cat => cat.sites.some(site => site.id === activeSiteId))?.id
         : undefined;
       const activeCategoryId = liveCategoryId ?? activeData.categoryId;
-      const dropOver = overFromEvent(over.id, over.data.current as DndItemData | undefined, expandedCat);
+      const dropOver = overFromEvent(over.id, over.data.current as DndItemData | undefined, expandedCat, activeData.type);
       if (!activeSiteId || !activeCategoryId || !dropOver) {
         setOverCategoryId(null);
         return;
@@ -720,7 +720,7 @@ export default function LinksPage() {
             ? snapshot.categories.find(cat => cat.sites.some(site => site.id === activeSiteId))?.id
             : undefined;
           const activeCategoryId = liveCategoryId ?? activeData.categoryId;
-          const dropOver = overFromEvent(over.id, overData, expandedCat);
+          const dropOver = overFromEvent(over.id, overData, expandedCat, activeData.type);
           if (activeSiteId && activeCategoryId) {
             const result = applySiteDrop({
               categories: snapshot.categories,

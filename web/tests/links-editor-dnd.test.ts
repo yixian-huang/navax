@@ -158,6 +158,15 @@ describe('overFromEvent', () => {
     )).toEqual({ type: 'drop', categoryId: 'c2', collapsed: true });
   });
 
+  it('treats a site over a category header as a collapsed drop when that group is not expanded', () => {
+    expect(overFromEvent(
+      manageCatId('c2'),
+      { type: 'category', surface: 'manage', categoryId: 'c2' },
+      'c1',
+      'site',
+    )).toEqual({ type: 'drop', categoryId: 'c2', collapsed: true });
+  });
+
   it('returns null when over has no data and is not a manage id', () => {
     expect(overFromEvent('x', undefined, null)).toBeNull();
   });
