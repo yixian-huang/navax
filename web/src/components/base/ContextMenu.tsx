@@ -49,12 +49,16 @@ export function useContextMenu(): ContextMenuResponse {
   useEffect(() => {
     if (!menuState) return;
 
-    const handleClick = () => setMenuState(null);
+    const handlePointerDown = (event: PointerEvent) => {
+      if (menuRef.current?.contains(event.target as Node)) return;
+      setMenuState(null);
+    };
     const handleEsc = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setMenuState(null);
     };
 
-    document.addEventListener('click', handleClick, true);
+    // Ignore presses inside the menu so item onClick can run; capture would unmount first.
+    document.addEventListener('pointerdown', handlePointerDown, true);
     document.addEventListener('keydown', handleEsc, true);
 
     const raf = requestAnimationFrame(() => {
@@ -74,7 +78,7 @@ export function useContextMenu(): ContextMenuResponse {
     });
 
     return () => {
-      document.removeEventListener('click', handleClick, true);
+      document.removeEventListener('pointerdown', handlePointerDown, true);
       document.removeEventListener('keydown', handleEsc, true);
       cancelAnimationFrame(raf);
     };

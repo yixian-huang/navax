@@ -31,8 +31,10 @@ test.describe('用户工作台', () => {
     await page.getByRole('button', { name: '新建分类' }).click();
     await page.getByPlaceholder('例如：开发工具').fill('我的书签');
     await page.getByRole('button', { name: '创建' }).click();
-    // Table view exposes categories as visible filter chips (not only <option> text).
+    // Grouped list (default card view) only shows sites in the expanded group.
     await expect(page.getByRole('button', { name: /我的书签/ }).first()).toBeVisible();
+    const bookmarkRow = page.getByRole('button', { name: /我的书签/ }).first();
+    await bookmarkRow.click();
 
     // 快速添加：填 URL，在「更多选项」里手动命名，避免依赖线上抓取结果。
     await page.getByRole('button', { name: '添加站点' }).first().click();
@@ -42,8 +44,12 @@ test.describe('用户工作台', () => {
     // Links table also has filter <select>s; scope to the add-site form.
     await page.locator('form').getByRole('combobox').selectOption({ label: '我的书签' });
     await page.getByRole('button', { name: '添加', exact: true }).click();
-    await expect(page.getByRole('link', { name: /ietf\.org/i }).first()).toBeVisible();
+    // Wait for create before testing expand; a premature click would collapse the group.
     await expect(page.getByText('IETF', { exact: true }).first()).toBeVisible();
+    if (await page.getByRole('link', { name: /ietf\.org/i }).count() === 0) {
+      await bookmarkRow.click();
+    }
+    await expect(page.getByRole('link', { name: /ietf\.org/i }).first()).toBeVisible();
   });
 
   test('发布导航页并公开可见', async ({ page }) => {
@@ -197,5 +203,69 @@ test.describe('用户工作台', () => {
     await expect(page.getByText(/背景已写入草稿/)).toBeVisible();
     // 上传后返回真实 asset URL，预览图片指向 /api/v1/assets/…
     await expect(page.getByAltText('背景预览')).toHaveAttribute('src', /\/api\/v1\/assets\//);
+  });
+
+  test('布局对话框改密度并支持站点右键', async ({ page }) => {
+    await page.goto('/app/links');
+    await expect(page.getByRole('button', { name: '布局设置' })).toBeVisible();
+
+    let siteLabel = 'IETF';
+    let categoryPattern = /我的书签/;
+    let siteUrlRe = /ietf\.org/i;
+    if (await page.getByText('IETF', { exact: true }).count() === 0) {
+      siteLabel = 'ContextSite';
+      categoryPattern = /右键用例/;
+      siteUrlRe = /example\.net/i;
+
+      await page.getByRole('button', { name: '新建分类' }).click();
+      await page.getByPlaceholder('例如：开发工具').fill('右键用例');
+      await page.getByRole('button', { name: '创建' }).click();
+      await expect(page.getByRole('button', { name: /右键用例/ }).first()).toBeVisible();
+      const seedCat = page.getByRole('button', { name: /右键用例/ }).first();
+      await seedCat.click();
+
+      await page.getByRole('button', { name: '添加站点' }).first().click();
+      await page.getByPlaceholder(/粘贴或输入 URL/).fill('https://example.net');
+      await page.getByRole('button', { name: /更多选项/ }).click();
+      await page.getByPlaceholder('留空则用自动识别').fill('ContextSite');
+      await page.locator('form').getByRole('combobox').selectOption({ label: '右键用例' });
+      await page.getByRole('button', { name: '添加', exact: true }).click();
+      await expect(page.getByText('ContextSite', { exact: true }).first()).toBeVisible();
+      if (await page.getByRole('link', { name: siteUrlRe }).count() === 0) {
+        await seedCat.click();
+      }
+    }
+
+    await page.getByRole('button', { name: '布局设置' }).click();
+    const dialog = page.getByRole('heading', { name: '布局设置' }).locator('..');
+    await expect(dialog).toBeVisible();
+    await page.getByRole('button', { name: '紧凑', exact: true }).click();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('heading', { name: '布局设置' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: '布局设置' })).toContainText('紧凑');
+
+    const catRow = page.getByRole('button', { name: categoryPattern }).first();
+    if (await page.getByRole('link', { name: siteUrlRe }).count() === 0) {
+      await catRow.click();
+    }
+    await expect(page.getByRole('link', { name: siteUrlRe }).first()).toBeVisible();
+
+    const siteRow = page.getByRole('link', { name: siteUrlRe }).locator('xpath=ancestor::div[contains(@class,"group")][1]');
+    await siteRow.click({ button: 'right' });
+    const editSite = page.getByRole('button', { name: '编辑站点', exact: true }).or(
+      page.locator('div.fixed.z-\\[100\\]').getByText('编辑站点', { exact: true }),
+    );
+    await expect(editSite).toBeVisible();
+    await editSite.click();
+    await expect(page.getByRole('dialog', { name: '属性面板' })).toBeVisible();
+    await expect(page.getByText('编辑站点').first()).toBeVisible();
+    await page.getByRole('dialog', { name: '属性面板' }).getByRole('button', { name: '关闭面板' }).click();
+
+    // Closest smoke coverage (no headed login): hover edit remains; table still batch-selects.
+    await expect(page.getByRole('button', { name: `编辑 ${siteLabel}` }).first()).toBeVisible();
+    await page.getByRole('button', { name: '表格视图' }).click();
+    await expect(page.getByRole('button', { name: /全选当前筛选|取消全选/ })).toBeVisible();
+    await page.getByRole('button', { name: '卡片视图' }).click();
+    await expect(page.getByLabel('拖动分类').first()).toBeVisible();
   });
 });
