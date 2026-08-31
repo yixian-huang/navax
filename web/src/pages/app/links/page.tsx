@@ -14,7 +14,6 @@ import { navigationApi } from '@/api/navigation';
 import {
   DndContext,
   DragOverlay,
-  closestCenter,
   pointerWithin,
   KeyboardSensor,
   useSensor,
@@ -67,6 +66,8 @@ import {
   applySiteDrop,
   overFromEvent,
   parseDndId,
+  resolveEditorCollisions,
+  shouldFinalizeSiteOrder,
   type DndItemData,
 } from '@/pages/app/links/dndIds';
 import type { NavigationPage, Category, Site, Density, LayoutTemplate, PageSettings } from '@/api/types';
@@ -161,6 +162,7 @@ export default function LinksPage() {
   const themeLayout = themesQuery.data?.find(theme => theme.id === page?.settings?.appearance.themeId)?.layout;
   const pageRef = useRef(page);
   pageRef.current = page;
+  const dragSourceCategoryRef = useRef<string | null>(null);
   const layoutSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const layoutSavingRef = useRef(false);
   const layoutSavePendingRef = useRef(false);
@@ -282,6 +284,7 @@ export default function LinksPage() {
   );
 
   const clearDragChrome = useCallback(() => {
+    dragSourceCategoryRef.current = null;
     setOverCategoryId(null);
     setOverlaySite(null);
     setOverlayCategory(null);
@@ -605,11 +608,9 @@ export default function LinksPage() {
     return { name: cat.name, icon: cat.icon } as CategoryEditData;
   };
 
-  // Prefer pointer-within so dropping on another category's sites hits that container.
+  // Prefer pointer-within. Empty hits are not a drop — spec §6.4 (no global closestCenter).
   const collisionDetection = useCallback<CollisionDetection>((args) => {
-    const pointerHits = pointerWithin(args);
-    if (pointerHits.length > 0) return pointerHits;
-    return closestCenter(args);
+    return resolveEditorCollisions(pointerWithin(args));
   }, []);
 
   // ---- DnD (one context: manage list + preview) ----
@@ -630,6 +631,10 @@ export default function LinksPage() {
     if (!current || !data) return;
     if (data.type === 'site') {
       const id = siteIdFromActive(event.active.id, data);
+      const liveCategoryId = id
+        ? current.categories.find(cat => cat.sites.some(item => item.id === id))?.id
+        : undefined;
+      dragSourceCategoryRef.current = liveCategoryId ?? data.categoryId ?? null;
       const site = id
         ? current.categories.flatMap(cat => cat.sites).find(item => item.id === id)
         : undefined;
@@ -637,6 +642,7 @@ export default function LinksPage() {
       setOverlayCategory(null);
       return;
     }
+    dragSourceCategoryRef.current = null;
     if (data.type === 'category') {
       setOverlayCategory(current.categories.find(cat => cat.id === data.categoryId) ?? null);
       setOverlaySite(null);
@@ -696,6 +702,7 @@ export default function LinksPage() {
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
       const { active, over } = event;
+      const sourceCategoryId = dragSourceCategoryRef.current;
       clearDragChrome();
       let changed = layoutDirtyRef.current;
       const snapshot = pageRef.current;
@@ -719,13 +726,19 @@ export default function LinksPage() {
           const liveCategoryId = activeSiteId
             ? snapshot.categories.find(cat => cat.sites.some(site => site.id === activeSiteId))?.id
             : undefined;
-          const activeCategoryId = liveCategoryId ?? activeData.categoryId;
-          const dropOver = overFromEvent(over.id, overData, expandedCat, activeData.type);
-          if (activeSiteId && activeCategoryId) {
+          const startCategoryId = sourceCategoryId ?? activeData.categoryId;
+          // Cross-group already applied in dragOver; a second applySiteDrop would
+          // arrayMove past the site anchor. Same-group order still settles here.
+          if (
+            activeSiteId &&
+            liveCategoryId &&
+            shouldFinalizeSiteOrder({ sourceCategoryId: startCategoryId, liveCategoryId })
+          ) {
+            const dropOver = overFromEvent(over.id, overData, expandedCat, activeData.type);
             const result = applySiteDrop({
               categories: snapshot.categories,
               activeSiteId,
-              activeCategoryId,
+              activeCategoryId: liveCategoryId,
               over: dropOver,
               visibleCategoryIds,
             });

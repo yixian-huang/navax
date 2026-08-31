@@ -8,6 +8,8 @@ import {
   manageSiteId,
   overFromEvent,
   parseDndId,
+  resolveEditorCollisions,
+  shouldFinalizeSiteOrder,
 } from '@/pages/app/links/dndIds';
 import { shouldHandlePointerDown } from '@/pages/app/links/dndSensor';
 import { layoutSummary } from '@/pages/app/links/components/LayoutSettingsDialog';
@@ -132,6 +134,41 @@ describe('applySiteDrop', () => {
     });
     expect(hidden.changed).toBe(false);
     expect(hidden.categories).toBe(input);
+  });
+
+  it('documents double-apply: insert-before then same-group arrayMove past the anchor', () => {
+    const first = applySiteDrop({
+      categories: categories(),
+      activeSiteId: 's1',
+      activeCategoryId: 'c1',
+      over: { type: 'site', categoryId: 'c2', siteId: 's3' },
+    });
+    expect(first.categories[1].sites.map(s => s.id)).toEqual(['s1', 's3']);
+
+    const second = applySiteDrop({
+      categories: first.categories,
+      activeSiteId: 's1',
+      activeCategoryId: 'c2',
+      over: { type: 'site', categoryId: 'c2', siteId: 's3' },
+    });
+    // arrayMove(oldIndex=0, newIndex=1) lands AFTER the anchor. handleDragEnd must not do this.
+    expect(second.categories[1].sites.map(s => s.id)).toEqual(['s3', 's1']);
+  });
+});
+
+describe('shouldFinalizeSiteOrder', () => {
+  it('is true only when the site is still in the dragStart category', () => {
+    expect(shouldFinalizeSiteOrder({ sourceCategoryId: 'c1', liveCategoryId: 'c1' })).toBe(true);
+    expect(shouldFinalizeSiteOrder({ sourceCategoryId: 'c1', liveCategoryId: 'c2' })).toBe(false);
+    expect(shouldFinalizeSiteOrder({ sourceCategoryId: null, liveCategoryId: 'c1' })).toBe(false);
+    expect(shouldFinalizeSiteOrder({ sourceCategoryId: 'c1', liveCategoryId: undefined })).toBe(false);
+  });
+});
+
+describe('resolveEditorCollisions', () => {
+  it('keeps pointerWithin hits and does not invent an over when they are empty', () => {
+    expect(resolveEditorCollisions([{ id: 'manage-site-s1' }])).toEqual([{ id: 'manage-site-s1' }]);
+    expect(resolveEditorCollisions([])).toEqual([]);
   });
 });
 
