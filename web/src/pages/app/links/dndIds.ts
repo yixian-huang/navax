@@ -161,6 +161,23 @@ export function overFromEvent(
   return null;
 }
 
+/** Same-group arrayMove on dragEnd only if the site never left its dragStart group. */
+export function shouldFinalizeSiteOrder(input: {
+  sourceCategoryId: string | null | undefined;
+  liveCategoryId: string | null | undefined;
+}): boolean {
+  return Boolean(
+    input.sourceCategoryId &&
+      input.liveCategoryId &&
+      input.sourceCategoryId === input.liveCategoryId,
+  );
+}
+
+/** pointerWithin first; empty means no over (do not global closestCenter). Spec §6.4. */
+export function resolveEditorCollisions<T>(pointerHits: T[]): T[] {
+  return pointerHits.length > 0 ? pointerHits : [];
+}
+
 export function applyCategoryReorder(
   categories: Category[],
   activeCategoryId: string,
