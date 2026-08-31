@@ -91,7 +91,9 @@ test.describe('用户工作台', () => {
       await expect(page.getByText('Example', { exact: true }).first()).toBeVisible();
     }
 
+    await page.getByRole('button', { name: '布局设置' }).click();
     await page.getByRole('button', { name: '文件夹', exact: true }).click();
+    await page.keyboard.press('Escape');
     // Layout auto-save (~350ms); wait for any in-flight PATCH to settle.
     await page.waitForTimeout(800);
 
