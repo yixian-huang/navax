@@ -6,8 +6,10 @@ import {
   manageCatId,
   manageDropId,
   manageSiteId,
+  overFromEvent,
   parseDndId,
 } from '@/pages/app/links/dndIds';
+import { shouldHandlePointerDown } from '@/pages/app/links/dndSensor';
 import { layoutSummary } from '@/pages/app/links/components/LayoutSettingsDialog';
 
 function site(partial: Partial<Site> & Pick<Site, 'id' | 'categoryId'>): Site {
@@ -144,6 +146,36 @@ describe('applyCategoryReorder', () => {
     const input = [cat('c1', []), cat('c2', [])];
     expect(applyCategoryReorder(input, 'c1', 'c1')).toBe(input);
     expect(applyCategoryReorder(input, 'c1', 'missing')).toBe(input);
+  });
+});
+
+describe('overFromEvent', () => {
+  it('reads drop data and treats a different expanded group as collapsed', () => {
+    expect(overFromEvent(
+      manageDropId('c2'),
+      { type: 'drop', surface: 'manage', categoryId: 'c2' },
+      'c1',
+    )).toEqual({ type: 'drop', categoryId: 'c2', collapsed: true });
+  });
+
+  it('returns null when over has no data and is not a manage id', () => {
+    expect(overFromEvent('x', undefined, null)).toBeNull();
+  });
+});
+
+describe('shouldHandlePointerDown', () => {
+  it('ignores buttons, links, and data-no-dnd', () => {
+    document.body.innerHTML = `
+      <div id="row">
+        <button id="btn">x</button>
+        <a id="link" href="/">y</a>
+        <span id="blocked" data-no-dnd="true">z</span>
+        <span id="ok">drag</span>
+      </div>`;
+    expect(shouldHandlePointerDown({ target: document.getElementById('btn') } as unknown as PointerEvent)).toBe(false);
+    expect(shouldHandlePointerDown({ target: document.getElementById('link') } as unknown as PointerEvent)).toBe(false);
+    expect(shouldHandlePointerDown({ target: document.getElementById('blocked') } as unknown as PointerEvent)).toBe(false);
+    expect(shouldHandlePointerDown({ target: document.getElementById('ok') } as unknown as PointerEvent)).toBe(true);
   });
 });
 

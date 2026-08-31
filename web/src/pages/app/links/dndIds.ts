@@ -126,6 +126,30 @@ export function applySiteDrop(input: ApplySiteDropInput): ApplySiteDropResult {
   };
 }
 
+export function overFromEvent(
+  overId: string | number,
+  overData: DndItemData | undefined,
+  expandedCat: string | null,
+): ApplySiteDropOver | null {
+  if (overData?.type === 'drop') {
+    return { type: 'drop', categoryId: overData.categoryId, collapsed: expandedCat !== overData.categoryId };
+  }
+  if (overData?.type === 'site' && overData.siteId) {
+    return { type: 'site', categoryId: overData.categoryId, siteId: overData.siteId };
+  }
+  if (overData?.type === 'category') {
+    return { type: 'category', categoryId: overData.categoryId };
+  }
+  const parsed = parseDndId(overId);
+  if (parsed.kind === 'manage-drop') {
+    return { type: 'drop', categoryId: parsed.categoryId, collapsed: expandedCat !== parsed.categoryId };
+  }
+  if (parsed.kind === 'manage-cat') {
+    return { type: 'category', categoryId: parsed.categoryId };
+  }
+  return null;
+}
+
 export function applyCategoryReorder(
   categories: Category[],
   activeCategoryId: string,
