@@ -8,6 +8,7 @@ import {
   manageSiteId,
   parseDndId,
 } from '@/pages/app/links/dndIds';
+import { layoutSummary } from '@/pages/app/links/components/LayoutSettingsDialog';
 
 function site(partial: Partial<Site> & Pick<Site, 'id' | 'categoryId'>): Site {
   return {
@@ -143,5 +144,22 @@ describe('applyCategoryReorder', () => {
     const input = [cat('c1', []), cat('c2', [])];
     expect(applyCategoryReorder(input, 'c1', 'c1')).toBe(input);
     expect(applyCategoryReorder(input, 'c1', 'missing')).toBe(input);
+  });
+});
+
+describe('layoutSummary', () => {
+  it('joins density label and columns', () => {
+    expect(layoutSummary({
+      template: 'full',
+      density: 'comfortable',
+      columns: 4,
+      categoryStyle: 'tabs',
+    })).toBe('舒适 · 4列');
+    expect(layoutSummary({
+      template: 'full',
+      density: 'list',
+      columns: 2,
+      categoryStyle: 'folders',
+    })).toBe('列表 · 2列');
   });
 });

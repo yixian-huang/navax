@@ -42,7 +42,6 @@ import {
   useDeleteSite,
   useSavePageComposition,
 } from '@/hooks/useQueries';
-import { HOME_LAYOUTS, HOME_LAYOUT_META } from '@/types/layout';
 import {
   ConfirmDialog,
   EmptyState,
@@ -61,8 +60,9 @@ import { cn } from '@/lib/utils';
 import { draftSaveToastMessage } from '@/lib/publish-state';
 import SiteTable, { type FlatSite } from '@/pages/app/links/components/SiteTable';
 import BatchLinkChecker from '@/pages/app/links/components/BatchLinkChecker';
+import LayoutSettingsDialog, { layoutSummary } from '@/pages/app/links/components/LayoutSettingsDialog';
 import IconRenderer from '@/components/base/IconRenderer';
-import type { NavigationPage, Category, Site, Density } from '@/api/types';
+import type { NavigationPage, Category, Site, Density, LayoutTemplate, PageSettings } from '@/api/types';
 
 /** Resolve which category an over/active id belongs to (category id or site id). */
 function findCategoryId(page: NavigationPage, itemId: string | number): string | null {
@@ -79,20 +79,6 @@ const viewportWidths: Record<Viewport, string> = {
   tablet: 'max-w-[768px]',
   mobile: 'max-w-[375px]',
 };
-
-// Must match API Density enum: list | compact | comfortable (not "spacious").
-const densityLabels: Record<Density, string> = {
-  list: '列表',
-  compact: '紧凑',
-  comfortable: '舒适',
-};
-
-const CATEGORY_STYLES = [
-  { id: 'tabs' as const, label: '标签' },
-  { id: 'sidebar' as const, label: '侧栏' },
-  { id: 'grid' as const, label: '网格' },
-  { id: 'folders' as const, label: '文件夹' },
-];
 
 // ============================================================
 // Main Page — SortablePreview components imported from DnDPreview
@@ -120,7 +106,8 @@ export default function LinksPage() {
   const [expandedCat, setExpandedCat] = useState<string | null>(null);
   const [filter, setFilter] = useState('');
   const [viewport, setViewport] = useState<Viewport>('desktop');
-  const [viewMode, setViewMode] = useState<'card' | 'table'>('table');
+  const [viewMode, setViewMode] = useState<'card' | 'table'>('card');
+  const [showLayoutDialog, setShowLayoutDialog] = useState(false);
   const [showAddCat, setShowAddCat] = useState(false);
   const [showAddSite, setShowAddSite] = useState(false);
   const [addSiteCatId, setAddSiteCatId] = useState<string>('');
@@ -154,7 +141,6 @@ export default function LinksPage() {
   const previewScrollRef = useRef<HTMLDivElement>(null);
 
   const page = useMemo(() => localPage || pageData, [localPage, pageData]);
-  const homeLayout = page?.settings?.layout.template ?? 'full';
   const themeLayout = themesQuery.data?.find(theme => theme.id === page?.settings?.appearance.themeId)?.layout;
   const pageRef = useRef(page);
   pageRef.current = page;
@@ -237,7 +223,7 @@ export default function LinksPage() {
     if (layoutSaveTimerRef.current) clearTimeout(layoutSaveTimerRef.current);
   }, []);
 
-  const setHomeLayout = useCallback((template: (typeof HOME_LAYOUTS)[number]) => {
+  const setHomeLayout = useCallback((template: LayoutTemplate) => {
     if (!page?.settings) return;
     setLocalPage(previous => {
       const current = previous || page;
@@ -755,13 +741,13 @@ export default function LinksPage() {
 
   // ---- Layout settings ----
   const setDensity = useCallback(
-    (d: string) => {
+    (d: Density) => {
       if (!page?.settings) return;
       setLocalPage(prev => {
         const base = prev || page;
         return {
           ...base,
-          settings: { ...base.settings, layout: { ...base.settings.layout, density: d as Density } },
+          settings: { ...base.settings, layout: { ...base.settings.layout, density: d } },
         };
       });
       scheduleLayoutSave(350);
@@ -770,7 +756,7 @@ export default function LinksPage() {
   );
 
   const setCategoryStyle = useCallback(
-    (style: (typeof CATEGORY_STYLES)[number]['id']) => {
+    (style: PageSettings['layout']['categoryStyle']) => {
       if (!page?.settings) return;
       setLocalPage(prev => {
         const base = prev || page;
@@ -905,6 +891,18 @@ export default function LinksPage() {
             </span>
           </div>
           <div className="flex items-center gap-1">
+            <button
+              type="button"
+              aria-label="布局设置"
+              aria-haspopup="dialog"
+              aria-expanded={showLayoutDialog}
+              onClick={() => setShowLayoutDialog(true)}
+              className="h-7 px-2 rounded-md text-[11px] font-medium text-foreground-600 hover:bg-background-100 inline-flex items-center gap-1 max-w-[9rem]"
+              title="布局设置"
+            >
+              <Layout className="w-3.5 h-3.5 flex-shrink-0" />
+              <span className="truncate">{layoutSummary(page.settings.layout)}</span>
+            </button>
             {/* View mode toggle */}
             <div className="flex items-center bg-background-100 rounded-md p-0.5">
               <button
@@ -1027,6 +1025,7 @@ export default function LinksPage() {
         </div>
 
         {/* Category List / Table */}
+        <div className="flex-1 min-h-0 overflow-hidden">
         {viewMode === 'table' ? (
           <SiteTable
             sites={flatSites}
@@ -1050,7 +1049,7 @@ export default function LinksPage() {
             }}
           />
         ) : (
-          <div className="flex-1 overflow-y-auto">
+          <div className="h-full overflow-y-auto">
           {filtered.map(cat => (
             <div key={cat.id} className="border-b border-background-100 last:border-b-0">
               <button
@@ -1261,129 +1260,6 @@ export default function LinksPage() {
           )}
         </div>
         )}
-
-        {/* Layout Settings — changes auto-save to draft; status mirrors preview bar */}
-        <div className="border-t border-background-200/70 px-4 py-3 space-y-3">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-[11px] font-medium text-foreground-500">布局设置</span>
-            <span
-              className={cn(
-                'inline-flex items-center gap-1 text-[10px] font-medium whitespace-nowrap',
-                layoutSaveState === 'saving' && 'text-foreground-500',
-                layoutSaveState === 'dirty' && 'text-accent-600',
-                layoutSaveState === 'saved' && 'text-primary-600',
-                layoutSaveState === 'error' && 'text-red-600',
-                layoutSaveState === 'idle' && 'text-foreground-400',
-              )}
-            >
-              {layoutSaveState === 'saving' && <Loader2 className="w-3 h-3 animate-spin" />}
-              {layoutSaveState === 'saved' && <Check className="w-3 h-3" />}
-              {layoutSaveState === 'dirty' && '待自动保存…'}
-              {layoutSaveState === 'saving' && '保存中…'}
-              {layoutSaveState === 'saved' && '已写入草稿'}
-              {layoutSaveState === 'error' && '保存失败'}
-              {layoutSaveState === 'idle' && '拖拽/调整后自动保存'}
-            </span>
-          </div>
-          <p className="text-[10px] text-foreground-400 leading-relaxed -mt-1">
-            右侧预览拖拽与下方选项会<strong className="font-medium text-foreground-500">自动保存到草稿</strong>
-            ，发布后访客可见。
-          </p>
-
-          {/* Homepage Layout Mode */}
-          <div className="space-y-1.5">
-            <span className="text-[10px] text-foreground-400">导航页布局</span>
-            <div className="grid grid-cols-2 gap-1">
-              {HOME_LAYOUTS.filter(l => !themeLayout || themeLayout.template.allowed.includes(l)).map(l => {
-                const meta = HOME_LAYOUT_META[l];
-                const isActive = homeLayout === l;
-                const locked = Boolean(themeLayout?.template.locked);
-                return (
-                  <button
-                    key={l}
-                    disabled={locked}
-                    onClick={() => { if (!locked) setHomeLayout(l); }}
-                    title={meta.description}
-                    className={cn(
-                      'flex items-center gap-1.5 px-2 py-1.5 rounded-md text-[10px] font-medium transition-all duration-150 whitespace-nowrap cursor-pointer',
-                      isActive
-                        ? 'bg-primary-100 text-primary-700'
-                        : 'text-foreground-400 hover:bg-background-100 hover:text-foreground-600'
-                    )}
-                  >
-                    <i className={cn(meta.icon, isActive ? 'text-primary-500' : 'text-foreground-400', 'text-xs')} />
-                    {meta.name}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <span className="text-[10px] text-foreground-400">密度</span>
-            <div className="flex items-center bg-background-100 rounded-md p-0.5">
-              {(['list', 'compact', 'comfortable'] as const).filter(d => !themeLayout || themeLayout.density.allowed.includes(d)).map(d => (
-                <button
-                  key={d}
-                  type="button"
-                  disabled={Boolean(themeLayout?.density.locked)}
-                  onClick={() => { if (!themeLayout?.density.locked) setDensity(d); }}
-                  className={cn(
-                    'flex-1 py-1 rounded text-[10px] font-medium transition-colors duration-150 whitespace-nowrap',
-                    page.settings.layout.density === d
-                      ? 'bg-white text-foreground-900 shadow-sm'
-                      : 'text-foreground-400 hover:text-foreground-600',
-                  )}
-                >
-                  {densityLabels[d]}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <span className="text-[10px] text-foreground-400">分类样式</span>
-            <div className="grid grid-cols-2 gap-1">
-              {CATEGORY_STYLES.filter(s => !themeLayout || themeLayout.categoryStyle.allowed.includes(s.id)).map(s => {
-                const isActive = (page.settings.layout.categoryStyle ?? 'tabs') === s.id;
-                const locked = Boolean(themeLayout?.categoryStyle.locked);
-                return (
-                  <button
-                    key={s.id}
-                    type="button"
-                    disabled={locked}
-                    onClick={() => { if (!locked) setCategoryStyle(s.id); }}
-                    className={cn(
-                      'px-2 py-1.5 rounded-md text-[10px] font-medium transition-all duration-150 whitespace-nowrap cursor-pointer',
-                      isActive
-                        ? 'bg-primary-100 text-primary-700'
-                        : 'text-foreground-400 hover:bg-background-100 hover:text-foreground-600',
-                    )}
-                  >
-                    {s.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] text-foreground-400">列数</span>
-              <span className="text-[10px] font-mono text-foreground-600">
-                {Math.min(8, Math.max(1, page.settings.layout.columns))}
-              </span>
-            </div>
-            <input
-              type="range"
-              min={themeLayout?.columns.min ?? 1}
-              max={themeLayout?.columns.max ?? 8}
-              disabled={Boolean(themeLayout?.columns.locked)}
-              value={Math.min(themeLayout?.columns.max ?? 8, Math.max(themeLayout?.columns.min ?? 1, page.settings.layout.columns || 4))}
-              onChange={e => setColumns(Number(e.target.value))}
-              className="w-full accent-primary-500 h-1"
-            />
-          </div>
         </div>
       </div>
 
@@ -1543,6 +1419,16 @@ export default function LinksPage() {
       </div>
 
       {/* Dialogs */}
+      <LayoutSettingsDialog
+        open={showLayoutDialog}
+        onClose={() => setShowLayoutDialog(false)}
+        layout={page.settings.layout}
+        themeLayout={themeLayout}
+        onTemplateChange={setHomeLayout}
+        onDensityChange={setDensity}
+        onCategoryStyleChange={setCategoryStyle}
+        onColumnsChange={setColumns}
+      />
       <AddCategoryDialog
         open={showAddCat}
         onClose={() => setShowAddCat(false)}
