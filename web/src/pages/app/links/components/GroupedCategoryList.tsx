@@ -1,6 +1,6 @@
-import { memo, useCallback } from 'react';
+import { memo } from 'react';
 import { Edit2, Trash2, ChevronRight, Eye, EyeOff, GripVertical } from 'lucide-react';
-import { useDroppable } from '@dnd-kit/core';
+import { useDroppable, type DraggableAttributes, type DraggableSyntheticListeners } from '@dnd-kit/core';
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Badge } from '@/components/base/SharedUI';
@@ -31,11 +31,13 @@ export interface GroupedCategoryListProps {
   onDeleteSite: (site: Site) => void;
 }
 
-const SortableCategoryHeader = memo(function SortableCategoryHeader({
+const CategoryHeader = memo(function CategoryHeader({
   cat,
   expanded,
   selectedSiteIds,
   overCategoryId,
+  dragAttributes,
+  dragListeners,
   onToggleCategory,
   onToggleSelectAllInCategory,
   onToggleCategoryEnabled,
@@ -47,6 +49,8 @@ const SortableCategoryHeader = memo(function SortableCategoryHeader({
   expanded: boolean;
   selectedSiteIds: Set<string>;
   overCategoryId: string | null;
+  dragAttributes: DraggableAttributes;
+  dragListeners: DraggableSyntheticListeners;
   onToggleCategory: (id: string) => void;
   onToggleSelectAllInCategory: (id: string) => void;
   onToggleCategoryEnabled: (cat: Category) => void;
@@ -54,52 +58,26 @@ const SortableCategoryHeader = memo(function SortableCategoryHeader({
   onDeleteCategory: (cat: Category) => void;
   onContextMenu: (event: React.MouseEvent, cat: Category) => void;
 }) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef: setSortableRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({
-    id: manageCatId(cat.id),
-    data: { type: 'category', surface: 'manage', categoryId: cat.id },
-    animateLayoutChanges: () => false,
-  });
   const { setNodeRef: setDroppableRef } = useDroppable({
     id: manageDropId(cat.id),
     data: { type: 'drop', surface: 'manage', categoryId: cat.id },
   });
-
-  const setHeaderRef = useCallback((node: HTMLElement | null) => {
-    setSortableRef(node);
-    setDroppableRef(node);
-  }, [setSortableRef, setDroppableRef]);
-
-  const style = {
-    transform: CSS.Translate.toString(transform),
-    transition: isDragging ? undefined : transition,
-    opacity: isDragging ? 0.45 : undefined,
-    willChange: isDragging ? 'transform' : undefined,
-  };
 
   const allInCatSelected = cat.sites.length > 0 && cat.sites.every(s => selectedSiteIds.has(s.id));
   const someInCatSelected = cat.sites.some(s => selectedSiteIds.has(s.id));
 
   return (
     <div
-      ref={setHeaderRef}
-      style={style}
+      ref={setDroppableRef}
       className={cn(
         'w-full flex items-center gap-2 px-4 py-2.5 hover:bg-background-50 transition-colors duration-150',
-        isDragging && 'z-50',
         overCategoryId === cat.id && 'ring-2 ring-primary-300/80 bg-primary-50/20',
       )}
       onContextMenu={event => onContextMenu(event, cat)}
     >
       <span
-        {...attributes}
-        {...listeners}
+        {...dragAttributes}
+        {...dragListeners}
         aria-label="拖动分类"
         className="cursor-grab active:cursor-grabbing text-foreground-300 hover:text-foreground-500 touch-none flex-shrink-0 p-0.5 rounded hover:bg-background-100"
       >
@@ -320,6 +298,111 @@ const SortableManageSite = memo(function SortableManageSite({
   );
 });
 
+const SortableCategory = memo(function SortableCategory({
+  cat,
+  expandedCat,
+  selectedSiteIds,
+  overCategoryId,
+  onToggleCategory,
+  onToggleSelectAllInCategory,
+  onToggleSelect,
+  onToggleCategoryEnabled,
+  onEditCategory,
+  onDeleteCategory,
+  onAddSite,
+  onToggleSiteEnabled,
+  onEditSite,
+  onDeleteSite,
+  onCategoryContextMenu,
+  onSiteContextMenu,
+}: Omit<GroupedCategoryListProps, 'categories'> & {
+  cat: Category;
+  onCategoryContextMenu: (event: React.MouseEvent, cat: Category) => void;
+  onSiteContextMenu: (event: React.MouseEvent, site: Site) => void;
+}) {
+  const expanded = expandedCat === cat.id;
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: manageCatId(cat.id),
+    data: { type: 'category', surface: 'manage', categoryId: cat.id },
+    animateLayoutChanges: () => false,
+  });
+
+  const style = {
+    transform: CSS.Translate.toString(transform),
+    transition: isDragging ? undefined : transition,
+    opacity: isDragging ? 0.45 : undefined,
+    willChange: isDragging ? 'transform' : undefined,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        'border-b border-background-100 last:border-b-0',
+        isDragging && 'z-50',
+      )}
+    >
+      <CategoryHeader
+        cat={cat}
+        expanded={expanded}
+        selectedSiteIds={selectedSiteIds}
+        overCategoryId={overCategoryId}
+        dragAttributes={attributes}
+        dragListeners={listeners}
+        onToggleCategory={onToggleCategory}
+        onToggleSelectAllInCategory={onToggleSelectAllInCategory}
+        onToggleCategoryEnabled={onToggleCategoryEnabled}
+        onEditCategory={onEditCategory}
+        onDeleteCategory={onDeleteCategory}
+        onContextMenu={onCategoryContextMenu}
+      />
+
+      {expanded && (
+        <div className="bg-background-50/50">
+          {cat.sites.length === 0 ? (
+            <div className="px-4 py-3 text-center">
+              <p className="text-[11px] text-foreground-400">暂无站点</p>
+            </div>
+          ) : (
+            <SortableContext
+              items={cat.sites.map(s => manageSiteId(s.id))}
+              strategy={verticalListSortingStrategy}
+            >
+              {cat.sites.map(site => (
+                <SortableManageSite
+                  key={site.id}
+                  site={site}
+                  selected={selectedSiteIds.has(site.id)}
+                  onToggleSelect={onToggleSelect}
+                  onToggleEnabled={onToggleSiteEnabled}
+                  onEdit={onEditSite}
+                  onDelete={onDeleteSite}
+                  onContextMenu={onSiteContextMenu}
+                />
+              ))}
+            </SortableContext>
+          )}
+          <button
+            type="button"
+            onClick={() => onAddSite(cat.id)}
+            className="w-full px-4 py-2 text-[10px] text-primary-600 hover:text-primary-700 font-medium hover:bg-primary-50/30 transition-colors duration-150 text-left"
+          >
+            + 添加站点到此分类
+          </button>
+        </div>
+      )}
+    </div>
+  );
+});
+
 export default function GroupedCategoryList({
   categories,
   expandedCat,
@@ -345,77 +428,44 @@ export default function GroupedCategoryList({
         strategy={verticalListSortingStrategy}
       >
         {categories.map(cat => (
-          <div
+          <SortableCategory
             key={cat.id}
-            className="border-b border-background-100 last:border-b-0"
-          >
-            <SortableCategoryHeader
-              cat={cat}
-              expanded={expandedCat === cat.id}
-              selectedSiteIds={selectedSiteIds}
-              overCategoryId={overCategoryId}
-              onToggleCategory={onToggleCategory}
-              onToggleSelectAllInCategory={onToggleSelectAllInCategory}
-              onToggleCategoryEnabled={onToggleCategoryEnabled}
-              onEditCategory={onEditCategory}
-              onDeleteCategory={onDeleteCategory}
-              onContextMenu={(event, target) =>
-                handleContextMenu(
-                  event,
-                  createCategoryContextActions(target, {
-                    onEdit: () => onEditCategory(target),
-                    onAddSite: () => onAddSite(target.id),
-                    onToggleEnabled: () => onToggleCategoryEnabled(target),
-                    onDelete: () => onDeleteCategory(target),
-                  }),
-                )
-              }
-            />
-
-            {expandedCat === cat.id && (
-              <div className="bg-background-50/50">
-                {cat.sites.length === 0 ? (
-                  <div className="px-4 py-3 text-center">
-                    <p className="text-[11px] text-foreground-400">暂无站点</p>
-                  </div>
-                ) : (
-                  <SortableContext
-                    items={cat.sites.map(s => manageSiteId(s.id))}
-                    strategy={verticalListSortingStrategy}
-                  >
-                    {cat.sites.map(site => (
-                      <SortableManageSite
-                        key={site.id}
-                        site={site}
-                        selected={selectedSiteIds.has(site.id)}
-                        onToggleSelect={onToggleSelect}
-                        onToggleEnabled={onToggleSiteEnabled}
-                        onEdit={onEditSite}
-                        onDelete={onDeleteSite}
-                        onContextMenu={(event, target) =>
-                          handleContextMenu(
-                            event,
-                            createSiteContextActions(target, {
-                              onEdit: () => onEditSite(target),
-                              onToggleEnabled: () => onToggleSiteEnabled(target),
-                              onDelete: () => onDeleteSite(target),
-                            }),
-                          )
-                        }
-                      />
-                    ))}
-                  </SortableContext>
-                )}
-                <button
-                  type="button"
-                  onClick={() => onAddSite(cat.id)}
-                  className="w-full px-4 py-2 text-[10px] text-primary-600 hover:text-primary-700 font-medium hover:bg-primary-50/30 transition-colors duration-150 text-left"
-                >
-                  + 添加站点到此分类
-                </button>
-              </div>
-            )}
-          </div>
+            cat={cat}
+            expandedCat={expandedCat}
+            selectedSiteIds={selectedSiteIds}
+            overCategoryId={overCategoryId}
+            onToggleCategory={onToggleCategory}
+            onToggleSelectAllInCategory={onToggleSelectAllInCategory}
+            onToggleSelect={onToggleSelect}
+            onToggleCategoryEnabled={onToggleCategoryEnabled}
+            onEditCategory={onEditCategory}
+            onDeleteCategory={onDeleteCategory}
+            onAddSite={onAddSite}
+            onToggleSiteEnabled={onToggleSiteEnabled}
+            onEditSite={onEditSite}
+            onDeleteSite={onDeleteSite}
+            onCategoryContextMenu={(event, target) =>
+              handleContextMenu(
+                event,
+                createCategoryContextActions(target, {
+                  onEdit: () => onEditCategory(target),
+                  onAddSite: () => onAddSite(target.id),
+                  onToggleEnabled: () => onToggleCategoryEnabled(target),
+                  onDelete: () => onDeleteCategory(target),
+                }),
+              )
+            }
+            onSiteContextMenu={(event, target) =>
+              handleContextMenu(
+                event,
+                createSiteContextActions(target, {
+                  onEdit: () => onEditSite(target),
+                  onToggleEnabled: () => onToggleSiteEnabled(target),
+                  onDelete: () => onDeleteSite(target),
+                }),
+              )
+            }
+          />
         ))}
       </SortableContext>
       {portal}
